@@ -1,0 +1,21 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "manual",
+  "elements": [
+    {"id": "idea", "type": "rectangle", "x": 100, "y": 100, "width": 160, "height": 60,
+     "strokeColor": "#1e1e1e", "backgroundColor": "#fff9c4", "roughness": 2},
+    {"id": "idea_t", "type": "text", "x": 120, "y": 120, "width": 120, "height": 20,
+     "text": "点子: 白板草图", "containerId": "idea", "fontSize": 16},
+    {"id": "next", "type": "ellipse", "x": 380, "y": 90, "width": 170, "height": 80,
+     "strokeColor": "#1e1e1e", "backgroundColor": "#c8e6c9", "roughness": 2},
+    {"id": "next_t", "type": "text", "x": 410, "y": 120, "width": 110, "height": 20,
+     "text": "下一步计划", "containerId": "next", "fontSize": 16},
+    {"id": "link", "type": "arrow", "x": 260, "y": 130, "width": 120, "height": 0,
+     "points": [[0, 0], [120, 0]],
+     "startBinding": {"elementId": "idea", "focus": 0, "gap": 1},
+     "endBinding": {"elementId": "next", "focus": 0, "gap": 1}}
+  ],
+  "appState": {"viewBackgroundColor": "#ffffff"},
+  "files": {}
+}

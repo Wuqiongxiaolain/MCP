@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<graph type="architecture" name="Web系统架构">
+  <node id="user" label="浏览器客户端" shape="round"/>
+  <node id="lb" label="负载均衡 Nginx"/>
+  <node id="backend" label="后端集群">
+    <node id="api1" label="API 服务 1"/>
+    <node id="api2" label="API 服务 2"/>
+  </node>
+  <node id="cache" label="Redis 缓存" shape="stadium"/>
+  <node id="db" label="MySQL 数据库" shape="stadium"/>
+  <edge from="user" to="lb" label="HTTPS"/>
+  <edge from="lb" to="api1"/>
+  <edge from="lb" to="api2"/>
+  <edge from="api1" to="cache" label="读写" style="dashed"/>
+  <edge from="api2" to="cache" style="dashed"/>
+  <edge from="api1" to="db"/>
+  <edge from="api2" to="db"/>
+</graph>

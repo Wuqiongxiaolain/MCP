@@ -485,26 +485,154 @@ inline std::string toMermaidLiveUrl(const Graph& g) {
 
 // ------------------------------------------------------ png/pdf via tools --
 
-// try external converters; returns tool name used or "" on failure
-inline std::string rasterize(const std::string& svgPath, const std::string& outPath,
-                             const std::string& fmt) {
-    struct Cand { std::string cmd; };
+// absolute path (needed for browser file:// URLs)
+inline std::string absPath(const std::string& p) {
+#ifdef _WIN32
+    char buf[1024];
+    if (_fullpath(buf, p.c_str(), sizeof(buf))) return buf;
+#else
+    char buf[4096];
+    if (realpath(p.c_str(), buf)) return buf;
+#endif
+    return p;
+}
+
+// build a browser file:// URL from a filesystem path
+inline std::string fileUrl(const std::string& path) {
+    std::string abs = absPath(path);
+    for (char& c : abs) if (c == '\\') c = '/';
+    return "file:///" + abs;
+}
+
+// integer attribute value from the SVG header (width="..." / height="...")
+inline int svgDim(const std::string& svg, const std::string& attr) {
+    size_t p = svg.find(attr + "=\"");
+    if (p == std::string::npos) return 0;
+    p += attr.size() + 2;
+    int v = 0;
+    while (p < svg.size() && isdigit((unsigned char)svg[p])) v = v * 10 + (svg[p++] - '0');
+    return v;
+}
+
+// locate a Chromium-based browser (Chrome or Edge), by PATH name or install path
+inline std::string findBrowser() {
     std::vector<std::string> cands;
+#ifdef _WIN32
+    const char* pf   = getenv("ProgramFiles");
+    const char* pf86 = getenv("ProgramFiles(x86)");
+    const char* lad  = getenv("LOCALAPPDATA");
+    auto add = [&](const char* base, const char* rel) {
+        if (base) cands.push_back(std::string(base) + rel);
+    };
+    add(pf,   "\\Google\\Chrome\\Application\\chrome.exe");
+    add(pf86, "\\Google\\Chrome\\Application\\chrome.exe");
+    add(lad,  "\\Google\\Chrome\\Application\\chrome.exe");
+    add(pf,   "\\Microsoft\\Edge\\Application\\msedge.exe");
+    add(pf86, "\\Microsoft\\Edge\\Application\\msedge.exe");
+    // Hardcoded fallbacks: some shells (MSYS/Git Bash) hide env vars whose
+    // name contains parentheses, e.g. ProgramFiles(x86), so getenv fails.
+    cands.push_back("C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe");
+    cands.push_back("C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe");
+    cands.push_back("C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe");
+    cands.push_back("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe");
+#else
+    cands = {"/usr/bin/google-chrome", "/usr/bin/chromium",
+             "/usr/bin/chromium-browser", "/usr/bin/microsoft-edge"};
+#endif
+    for (auto& c : cands) {
+        std::ifstream f(c, std::ios::binary);
+        if (f.good()) return c;
+    }
+    return "";
+}
+
+// Run a command quietly. On Windows, route through a temp .bat to dodge
+// cmd.exe's quote-stripping bug when a quoted exe path is combined with
+// redirection (which silently breaks std::system on such command lines).
+inline int runQuiet(const std::string& cmd, const std::string& tmpBase) {
+#ifdef _WIN32
+    std::string bat = tmpBase + ".run.bat";
+    writeFile(bat, "@echo off\r\n" + cmd + "\r\n");
+    int rc = std::system(("\"" + bat + "\"").c_str());
+    std::remove(bat.c_str());
+    return rc;
+#else
+    (void)tmpBase;
+    return std::system(cmd.c_str());
+#endif
+}
+
+// try external converters; returns tool name used or "" on failure.
+// Order: inkscape/rsvg/magick (if on PATH) -> Chromium browser (Chrome/Edge).
+inline std::string rasterize(const std::string& svgPathIn, const std::string& outPathIn,
+                             const std::string& fmt) {
+    // Normalize to absolute paths: browsers resolve --print-to-pdf / --screenshot
+    // relative to their own working dir, so a relative outPath silently misses.
+    std::string svgPath = absPath(svgPathIn);
+    std::string outPath = absPath(outPathIn);
 #ifdef _WIN32
     std::string quiet = " >nul 2>nul";
 #else
     std::string quiet = " >/dev/null 2>/dev/null";
 #endif
-    cands.push_back("inkscape \"" + svgPath + "\" --export-filename=\"" + outPath + "\"" + quiet);
-    cands.push_back("rsvg-convert -f " + fmt + " -o \"" + outPath + "\" \"" + svgPath + "\"" + quiet);
-    cands.push_back("magick \"" + svgPath + "\" \"" + outPath + "\"" + quiet);
-    if (fmt == "pdf")
-        cands.push_back("chrome --headless --print-to-pdf=\"" + outPath + "\" \"" + svgPath + "\"" + quiet);
-    for (auto& c : cands) {
-        int rc = std::system(c.c_str());
+    auto produced = [&]() {
         std::ifstream check(outPath, std::ios::binary);
-        if (rc == 0 && check.good() && check.peek() != std::ifstream::traits_type::eof())
-            return c.substr(0, c.find(' '));
+        return check.good() && check.peek() != std::ifstream::traits_type::eof();
+    };
+
+    std::vector<std::pair<std::string, std::string>> cands; // {tool, command}
+    cands.push_back({"inkscape",
+        "inkscape \"" + svgPath + "\" --export-filename=\"" + outPath + "\"" + quiet});
+    cands.push_back({"rsvg-convert",
+        "rsvg-convert -f " + fmt + " -o \"" + outPath + "\" \"" + svgPath + "\"" + quiet});
+    cands.push_back({"magick",
+        "magick \"" + svgPath + "\" \"" + outPath + "\"" + quiet});
+    for (auto& c : cands) {
+        std::remove(outPath.c_str());
+        if (runQuiet(c.second, outPath) == 0 && produced()) return c.first;
+    }
+
+    // Chromium fallback: wrap the SVG in a tightly-sized HTML page so the
+    // rendered output matches the diagram bounds instead of a full A4 page.
+    std::string browser = findBrowser();
+    if (!browser.empty()) {
+        std::string svg = readFile(svgPath);
+        int w = svgDim(svg, "width"), h = svgDim(svg, "height");
+        if (w <= 0) w = 1200;
+        if (h <= 0) h = 800;
+        std::string html =
+            "<!doctype html><html><head><meta charset=\"utf-8\"><style>"
+            "@page{size:" + std::to_string(w) + "px " + std::to_string(h) +
+            "px;margin:0}html,body{margin:0;padding:0;background:#fff}"
+            "svg{display:block}</style></head><body>" + svg + "</body></html>";
+        std::string htmlPath = svgPath + ".wrap.html";
+        writeFile(htmlPath, html);
+        std::string url = fileUrl(htmlPath);
+        std::string cmd;
+        // Dedicated user-data-dir: without it a new headless invocation attaches
+        // to an already-running Chrome/Edge and silently skips the job.
+        const char* tmp = getenv("TEMP");
+        if (!tmp) tmp = getenv("TMP");
+        std::string profile = std::string(tmp ? tmp : ".") + "/graphmcp-chrome-profile";
+        std::string common = "\"" + browser + "\" --headless=new --disable-gpu "
+                             "--no-sandbox --user-data-dir=\"" + profile + "\" ";
+        if (fmt == "pdf")
+            cmd = common + "--no-pdf-header-footer --print-to-pdf=\"" + outPath +
+                  "\" \"" + url + "\"" + quiet;
+        else
+            cmd = common + "--force-device-scale-factor=2 --window-size=" +
+                  std::to_string(w) + "," + std::to_string(h) +
+                  " --screenshot=\"" + outPath + "\" \"" + url + "\"" + quiet;
+        std::remove(outPath.c_str());
+        runQuiet(cmd, outPath);
+        std::remove(htmlPath.c_str());
+        if (produced()) {
+#ifdef _WIN32
+            return browser.find("msedge") != std::string::npos ? "edge" : "chrome";
+#else
+            return "chromium";
+#endif
+        }
     }
     return "";
 }

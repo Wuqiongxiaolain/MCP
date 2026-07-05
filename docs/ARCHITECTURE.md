@@ -48,7 +48,7 @@ Graph {
 | json.hpp | JSON 解析/序列化 | 递归下降解析，\uXXXX 代理对 → UTF-8，对象保持插入顺序（输出确定性） |
 | parsers.hpp | 输入 → 模型 | 手写 Mermaid 词法（节点形状括号、8 种箭头、subgraph 栈）；迷你 XML 解析器；CSV 引号转义；格式自动识别 |
 | layout.hpp | 校验 + 布局 | 校验：重复 ID/悬空边/层级环/孤立点。布局：Kahn 分层（含环兜底）、递归子树宽度树布局、分组容器包围盒回填 |
-| exporters.hpp | 模型 → 输出 | drawio 子节点相对坐标；Excalidraw 绑定文本 + 箭头绑定；SVG 边裁剪到节点边界；PNG/PDF 尝试外部转换器（inkscape/rsvg/magick），失败回退 SVG |
+| exporters.hpp | 模型 → 输出 | drawio 子节点相对坐标；Excalidraw 绑定文本 + 箭头绑定；SVG 边裁剪到节点边界；PNG/PDF 自动探测转换器（inkscape/rsvg/magick，或已装的 Chrome/Edge 无头模式），均无则回退 SVG |
 | storage.hpp | 版本化存储 | `index.json` 目录 + 每图 `latest.json` + 不可变 `versions/vN.json` 快照；回滚 = 旧快照另存为新版本（非破坏） |
 | mcp.hpp | MCP 协议 | JSON-RPC 2.0，stdio 换行分隔；initialize 握手、tools/list、tools/call；通知不回包 |
 | main.cpp | CLI | 9 个子命令；Windows 下 argv 转 UTF-8（GetCommandLineW）避免中文乱码 |
@@ -89,3 +89,7 @@ graph-store/
   sequenceDiagram、gantt 等时序类图（它们不属于"图"模型范畴）。
 - ER 关系基数（||--o{ 等）统一渲染为无箭头连线，基数标注保留在 label 中。
 - PNG/PDF 依赖外部转换器，属于刻意取舍：保持零依赖、单文件可移植。
+  转换器优先级 inkscape → rsvg-convert → magick → Chrome/Edge 无头模式；
+  由于 Windows 大多预装 Edge，实际几乎总能直接出图，无需额外安装。
+  注意：无头 Chromium 会用独立 `--user-data-dir`，避免和用户正在运行的
+  浏览器实例冲突（否则新命令会附加到已有实例并跳过转换任务）。

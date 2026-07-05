@@ -68,6 +68,29 @@
 
 修复后回归：121/121 通过；重跑冒烟全绿。
 
+### 阶段五补：PNG/PDF 导出增强（接入 Cherry Studio 验证时发现）
+
+用户在 Cherry Studio 里让模型生成 PDF，收到"未安装 PDF/PNG 转换工具"提示。
+排查确认这不是客户端或模型问题，而是本机没装 inkscape/rsvg/magick 光栅化器，
+graphmcp 按设计回退成 SVG。由于用户机器已装 Microsoft Edge（Chromium 内核），
+决定让工具自动复用它，避免额外下载。为此改进 `exporters.hpp::rasterize`，
+过程中连续排掉 4 个坑：
+
+| # | 现象 | 根因 | 修复 |
+|---|---|---|---|
+| 3 | 只找 `chrome` 命令，找不到已装的 Edge | 检测名单太窄 | `findBrowser()` 探测 Chrome/Edge 的标准安装路径 + PATH |
+| 4 | `std::system` 调 Edge 无输出 | Windows `cmd /c` 对"带引号 exe 路径 + 重定向"的组合会错误剥离引号 | 把命令写入临时 `.bat` 再执行（`runQuiet`） |
+| 5 | 相对路径 outPath 时浏览器不产出文件 | 浏览器按自身工作目录解析 `--print-to-pdf`/`--screenshot` | `rasterize` 开头把 svg/out 路径统一转绝对路径（`absPath`） |
+| 6 | 系统已开着 Edge 时无头命令直接返回、跳过任务 | 新无头实例附加到已运行实例 | 加独立 `--user-data-dir`（临时 profile 目录）隔离 |
+
+外加健壮性：`getenv("ProgramFiles(x86)")` 在 MSYS/Git Bash 下取不到（括号名被屏蔽），
+补充硬编码绝对路径兜底。SVG 用 HTML `@page` 包装使 PDF/PNG 尺寸贴合图形。
+
+验证（Windows 正常环境，等同 Cherry Studio 启动环境）：
+- CLI `export --to pdf/png`：经 Edge 生成，`%PDF-` 头正确、PNG 魔数正确 ✔
+- MCP `graph_export to=pdf`：返回 "pdf written via edge"，67KB 有效 PDF ✔
+- 121/121 单元测试仍全绿 ✔
+
 ### 阶段五：验证结果实录
 ```
 create  ：6 种格式（mmd/csv/md/er.mmd/xml/excalidraw）全部入库 ✔

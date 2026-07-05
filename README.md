@@ -6,17 +6,17 @@
 
 ## 功能总览
 
-| 能力 | 说明 |
-|---|---|
-| 输入格式 | Mermaid（flowchart / mindmap / erDiagram）、Markdown 大纲、CSV（边表 / 层级表）、XML、Excalidraw JSON |
-| 图形类型 | 流程图、架构图、ER 图、组织结构图、脑图、草图风格白板图 |
-| 统一图模型 | 节点（形状/层级/ER属性/坐标）+ 连线（样式/箭头/标签）+ 白板原始元素 |
-| 校验 | 重复 ID、悬空连线、层级环、孤立节点、空标签 |
-| 布局 | 分层布局（流程/架构）、树布局（脑图横向 / 组织图纵向）、网格兜底 |
-| 导出 | `.drawio`、Mermaid、Excalidraw JSON、SVG、PNG、PDF、浏览器 URL、统一模型 JSON |
-| 编辑器调起 | mermaid.live 浏览器 URL、生成 .drawio/.excalidraw/.svg 并用系统默认程序打开 |
-| 存储 | JSON 文件存储，含版本历史、历史查询、版本回溯 |
-| MCP 接口 | 8 个工具：create / convert / export / open / validate / list / history / rollback |
+| 能力       | 说明                                                                                                  |
+| ---------- | ----------------------------------------------------------------------------------------------------- |
+| 输入格式   | Mermaid（flowchart / mindmap / erDiagram）、Markdown 大纲、CSV（边表 / 层级表）、XML、Excalidraw JSON |
+| 图形类型   | 流程图、架构图、ER 图、组织结构图、脑图、草图风格白板图                                               |
+| 统一图模型 | 节点（形状/层级/ER属性/坐标）+ 连线（样式/箭头/标签）+ 白板原始元素                                   |
+| 校验       | 重复 ID、悬空连线、层级环、孤立节点、空标签                                                           |
+| 布局       | 分层布局（流程/架构）、树布局（脑图横向 / 组织图纵向）、网格兜底                                      |
+| 导出       | `.drawio`、Mermaid、Excalidraw JSON、SVG、PNG、PDF、浏览器 URL、统一模型 JSON                       |
+| 编辑器调起 | mermaid.live 浏览器 URL、生成 .drawio/.excalidraw/.svg 并用系统默认程序打开                           |
+| 存储       | JSON 文件存储，含版本历史、历史查询、版本回溯                                                         |
+| MCP 接口   | 8 个工具：create / convert / export / open / validate / list / history / rollback                     |
 
 ## 构建
 
@@ -44,7 +44,7 @@ graphmcp convert --input examples/mindmap.md --to svg -o mind.svg
 # 3. 从版本库导出
 graphmcp export --id demo-flow --to drawio -o flow.drawio
 graphmcp export --id demo-flow --to url          # 打印 mermaid.live 链接
-graphmcp export --id demo-flow --to png -o flow.png   # 需要 inkscape/rsvg/magick，否则回退 SVG
+graphmcp export --id demo-flow --to png -o flow.png   # 自动使用 Chrome/Edge/inkscape/rsvg/magick，均无则回退 SVG
 
 # 4. 调起外部编辑器
 graphmcp open --id demo-flow --editor browser    # 浏览器打开 mermaid.live
@@ -122,10 +122,9 @@ sonar-project.properties  SonarQube 静态分析配置
 docs/           架构说明、思维导图、工作记录
 ```
 
-## DevOps 流水线
-
 `Jenkinsfile` 定义的流水线阶段：
 
+1. DevOps 流水线
 1. **Checkout** — 拉取代码
 2. **Build** — `make all`
 3. **Unit Tests** — `make test`（121 断言）

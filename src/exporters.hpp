@@ -7,6 +7,13 @@
 #include <cstdlib>
 #ifdef _WIN32
 #include <direct.h>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
 #else
 #include <sys/stat.h>
 #endif
@@ -562,6 +569,43 @@ inline int runQuiet(const std::string& cmd, const std::string& tmpBase) {
 #endif
 }
 
+#ifdef _WIN32
+inline std::wstring widen(const std::string& s) {
+    int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
+    std::wstring w((size_t)(n > 0 ? n - 1 : 0), L'\0');
+    if (n > 0) MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &w[0], n);
+    return w;
+}
+#endif
+
+// Launch a browser directly (no shell). On Windows this uses CreateProcessW
+// so it does not depend on cmd.exe / COMSPEC / PATH - important because MCP
+// clients often spawn the server with a stripped environment. bInheritHandles
+// is FALSE so the child can never write to our stdout (the JSON-RPC channel).
+// `argstr` is everything after the executable, pre-quoted as needed.
+inline int launchBrowser(const std::string& exe, const std::string& argstr) {
+#ifdef _WIN32
+    std::string cmdline = "\"" + exe + "\" " + argstr;
+    std::wstring wexe = widen(exe);
+    std::wstring wcmd = widen(cmdline);
+    std::vector<wchar_t> buf(wcmd.begin(), wcmd.end());
+    buf.push_back(L'\0');
+    STARTUPINFOW si; ZeroMemory(&si, sizeof(si)); si.cb = sizeof(si);
+    PROCESS_INFORMATION pi; ZeroMemory(&pi, sizeof(pi));
+    BOOL ok = CreateProcessW(wexe.c_str(), buf.data(), nullptr, nullptr, FALSE,
+                             CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+    if (!ok) return -1;
+    WaitForSingleObject(pi.hProcess, 60000);
+    DWORD code = 0;
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return (int)code;
+#else
+    return std::system(("\"" + exe + "\" " + argstr + " >/dev/null 2>&1").c_str());
+#endif
+}
+
 // try external converters; returns tool name used or "" on failure.
 // Order: inkscape/rsvg/magick (if on PATH) -> Chromium browser (Chrome/Edge).
 inline std::string rasterize(const std::string& svgPathIn, const std::string& outPathIn,
@@ -608,23 +652,24 @@ inline std::string rasterize(const std::string& svgPathIn, const std::string& ou
         std::string htmlPath = svgPath + ".wrap.html";
         writeFile(htmlPath, html);
         std::string url = fileUrl(htmlPath);
-        std::string cmd;
         // Dedicated user-data-dir: without it a new headless invocation attaches
-        // to an already-running Chrome/Edge and silently skips the job.
+        // to an already-running Chrome/Edge and silently skips the job. Fall back
+        // to a dir beside the output when TEMP is unset (stripped MCP env).
         const char* tmp = getenv("TEMP");
         if (!tmp) tmp = getenv("TMP");
-        std::string profile = std::string(tmp ? tmp : ".") + "/graphmcp-chrome-profile";
-        std::string common = "\"" + browser + "\" --headless=new --disable-gpu "
-                             "--no-sandbox --user-data-dir=\"" + profile + "\" ";
+        std::string profile = (tmp ? std::string(tmp) + "/graphmcp-chrome-profile"
+                                   : outPath + ".chromeprofile");
+        std::string args = "--headless=new --disable-gpu --no-sandbox "
+                           "--user-data-dir=\"" + profile + "\" ";
         if (fmt == "pdf")
-            cmd = common + "--no-pdf-header-footer --print-to-pdf=\"" + outPath +
-                  "\" \"" + url + "\"" + quiet;
+            args += "--no-pdf-header-footer --print-to-pdf=\"" + outPath +
+                    "\" \"" + url + "\"";
         else
-            cmd = common + "--force-device-scale-factor=2 --window-size=" +
-                  std::to_string(w) + "," + std::to_string(h) +
-                  " --screenshot=\"" + outPath + "\" \"" + url + "\"" + quiet;
+            args += "--force-device-scale-factor=2 --window-size=" +
+                    std::to_string(w) + "," + std::to_string(h) +
+                    " --screenshot=\"" + outPath + "\" \"" + url + "\"";
         std::remove(outPath.c_str());
-        runQuiet(cmd, outPath);
+        launchBrowser(browser, args);
         std::remove(htmlPath.c_str());
         if (produced()) {
 #ifdef _WIN32

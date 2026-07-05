@@ -13,6 +13,12 @@ endif()
 add_executable(graphmcp src/main.cpp)
 target_include_directories(graphmcp PRIVATE src)
 
+# On MinGW, static-link the runtime so the exe has no external DLL dependency
+# (MCP clients may spawn it with a stripped PATH).
+if(MINGW)
+    target_link_options(graphmcp PRIVATE -static -static-libgcc -static-libstdc++)
+endif()
+
 enable_testing()
 add_executable(graphmcp_tests tests/test_main.cpp)
 target_include_directories(graphmcp_tests PRIVATE src)

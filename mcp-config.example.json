@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "graphmcp": {
+      "command": "D:/MCP/bin/graphmcp.exe",
+      "args": ["serve"],
+      "env": {
+        "GRAPHMCP_STORE": "D:/MCP/graph-store"
+      }
+    }
+  }
+}

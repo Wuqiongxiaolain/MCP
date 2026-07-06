@@ -1,0 +1,15 @@
+bin/
+dist/
+build/
+bw-output/
+graph-store/
+ci-store/
+test-store-tmp/
+*.o
+*.obj
+*.exe
+*.tar.gz
+*.tmp.svg
+ci-smoke.*
+.vscode/
+.idea/

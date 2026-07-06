@@ -1,6 +1,6 @@
-// parsers.hpp - structured input parsers -> unified graph model
-// Supported inputs: Mermaid (flowchart / mindmap / erDiagram), Markdown
-// outline, CSV (edge list or hierarchy), simple XML, Excalidraw JSON.
+// parsers.hpp - 结构化输入解析器 -> 统一图模型
+// 支持输入：Mermaid（flowchart / mindmap / erDiagram）、Markdown 大纲、
+// CSV（边列表或层级）、简化 XML、Excalidraw JSON。
 #pragma once
 #include "model.hpp"
 #include <stdexcept>
@@ -18,19 +18,24 @@ using gm::toLower;
 using gm::startsWith;
 using gj::Json;
 
+// ParseError: 统一解析异常类型，便于上层区分“输入格式错误”与其他异常
 struct ParseError : std::runtime_error {
     explicit ParseError(const std::string& m) : std::runtime_error(m) {}
 };
 
-// ---------------------------------------------------------------- mermaid --
+// ---------------------------------------------------------------- Mermaid --
 
 namespace detail {
 
+// isIdentChar: Mermaid 标识符字符判断（支持下划线和 UTF-8 非 ASCII 字节）
 inline bool isIdentChar(char c) {
     return isalnum((unsigned char)c) || c == '_' || (unsigned char)c >= 0x80;
 }
 
-// read `A`, then optional shape bracket: [..] (..) ((..)) {..} ([..])
+// 读取节点引用 `A`，并支持可选形状括号：[..] (..) ((..)) {..} ([..])
+// readNodeRef: 从当前游标读取一个节点引用（id + 可选形状包装标签）
+// 参数命名：id=节点标识，label=展示文本，shape=图形类型
+// 关键步骤：跳空白 -> 读 id -> 识别括号语法 -> 回填 label/shape
 inline bool readNodeRef(const std::string& s, size_t& pos,
                         std::string& id, std::string& label, std::string& shape) {
     while (pos < s.size() && isspace((unsigned char)s[pos])) pos++;
@@ -48,7 +53,7 @@ inline bool readNodeRef(const std::string& s, size_t& pos,
         size_t end = s.find(closeTok, st);
         if (end == std::string::npos) return false;
         label = trim(s.substr(st, end - st));
-        // strip surrounding quotes
+        // 去掉包裹在两端的引号
         if (label.size() >= 2 && label.front() == '"' && label.back() == '"')
             label = label.substr(1, label.size() - 2);
         shape = shp;
@@ -69,7 +74,8 @@ inline bool readNodeRef(const std::string& s, size_t& pos,
     return true;
 }
 
-// read an arrow token; returns style/arrow or empty
+// 读取连线 token；成功时返回 style/arrow，失败返回空
+// readArrow: 读取 Mermaid 连线 token，并映射到统一 style/arrow 语义
 inline bool readArrow(const std::string& s, size_t& pos,
                       std::string& style, std::string& arrow) {
     while (pos < s.size() && isspace((unsigned char)s[pos])) pos++;
@@ -91,12 +97,14 @@ inline bool readArrow(const std::string& s, size_t& pos,
     return false;
 }
 
-} // namespace detail
+} // 命名空间 detail
 
+// parseMermaidFlowchart: 解析 flowchart 子语法
+// 关键步骤：处理 subgraph 层级 -> 解析节点链路 -> 生成边并绑定分组父节点
 inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines, size_t first) {
     Graph g;
     g.type = "flowchart";
-    std::vector<std::string> groupStack; // subgraph nesting
+    std::vector<std::string> groupStack; // subgraph 嵌套栈
     for (size_t li = first; li < lines.size(); li++) {
         std::string line = trim(lines[li]);
         if (line.empty() || startsWith(line, "%%")) continue;
@@ -123,7 +131,7 @@ inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines, size_t
             if (!groupStack.empty()) groupStack.pop_back();
             continue;
         }
-        // parse: node (arrow |label| node)*
+        // 解析模式：node (arrow |label| node)*
         size_t pos = 0;
         std::string id, label, shape;
         if (!detail::readNodeRef(line, pos, id, label, shape)) continue;
@@ -136,7 +144,7 @@ inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines, size_t
         while (true) {
             std::string style, arrow;
             if (!detail::readArrow(line, pos, style, arrow)) break;
-            // optional |label|
+            // 可选边标签 |label|
             while (pos < line.size() && isspace((unsigned char)line[pos])) pos++;
             std::string elabel;
             if (pos < line.size() && line[pos] == '|') {
@@ -158,10 +166,12 @@ inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines, size_t
     return g;
 }
 
+// parseMermaidMindmap: 解析 mindmap 缩进结构
+// 关键步骤：缩进决定父子关系 -> 生成树边（无箭头）-> 根节点使用 circle 形状
 inline Graph parseMermaidMindmap(const std::vector<std::string>& lines, size_t first) {
     Graph g;
     g.type = "mindmap";
-    std::vector<std::pair<int, std::string>> stack; // (indent, nodeId)
+    std::vector<std::pair<int, std::string>> stack; // (缩进, nodeId)
     int seq = 0;
     for (size_t li = first; li < lines.size(); li++) {
         const std::string& raw = lines[li];
@@ -169,7 +179,7 @@ inline Graph parseMermaidMindmap(const std::vector<std::string>& lines, size_t f
         if (t.empty() || startsWith(t, "%%")) continue;
         int indent = 0;
         for (char c : raw) { if (c == ' ') indent++; else if (c == '\t') indent += 4; else break; }
-        // strip mermaid mindmap decorations root((x)) / (x) / [x]
+        // 去掉 mermaid mindmap 的包裹标记 root((x)) / (x) / [x]
         std::string label = t;
         auto stripWrap = [&](const std::string& o, const std::string& c) {
             size_t op = label.find(o);
@@ -197,6 +207,8 @@ inline Graph parseMermaidMindmap(const std::vector<std::string>& lines, size_t f
     return g;
 }
 
+// parseMermaidER: 解析 ER 图（实体块 + 关系语句）
+// 关键步骤：读取实体属性块 -> 解析 A -- B 关系 -> 写入 attrs 与 edges
 inline Graph parseMermaidER(const std::vector<std::string>& lines, size_t first) {
     Graph g;
     g.type = "er";
@@ -209,14 +221,14 @@ inline Graph parseMermaidER(const std::vector<std::string>& lines, size_t first)
             g.ensureNode(curEntity).attrs.push_back(line);
             continue;
         }
-        // entity block start: NAME {
+        // 实体块起始：NAME {
         if (line.size() > 1 && line.back() == '{') {
             curEntity = trim(line.substr(0, line.size() - 1));
             Node& n = g.ensureNode(curEntity);
             n.shape = "rect";
             continue;
         }
-        // relationship: A ||--o{ B : label
+        // 关系语句：A ||--o{ B : label
         size_t dd = line.find("--");
         size_t colon = line.find(':');
         if (dd != std::string::npos) {
@@ -240,6 +252,7 @@ inline Graph parseMermaidER(const std::vector<std::string>& lines, size_t first)
     return g;
 }
 
+// parseMermaid: Mermaid 分发入口，根据首个有效指令选择具体子解析器
 inline Graph parseMermaid(const std::string& text) {
     auto lines = splitLines(text);
     for (size_t i = 0; i < lines.size(); i++) {
@@ -256,12 +269,14 @@ inline Graph parseMermaid(const std::string& text) {
     throw ParseError("empty mermaid input");
 }
 
-// --------------------------------------------------------- markdown outline --
+// --------------------------------------------------------- Markdown 大纲 --
 
+// parseMarkdownOutline: 将 Markdown 标题/列表解析为层级图（mindmap）
+// 关键步骤：识别层级 -> 建立 parent 关系 -> 同步补一条树边
 inline Graph parseMarkdownOutline(const std::string& text) {
     Graph g;
     g.type = "mindmap";
-    std::vector<std::pair<int, std::string>> stack; // (level, nodeId)
+    std::vector<std::pair<int, std::string>> stack; // (层级, nodeId)
     int seq = 0;
     int lastHeadingLevel = 0;
     for (auto& raw : splitLines(text)) {
@@ -281,7 +296,7 @@ inline Graph parseMarkdownOutline(const std::string& text) {
             level = lastHeadingLevel + 1 + indent / 2;
             label = trim(t.substr(1));
         } else {
-            continue; // plain paragraph text is ignored in outline mode
+            continue; // 在大纲模式下忽略普通段落文本
         }
         if (label.empty()) continue;
         std::string nid = "m" + std::to_string(++seq);
@@ -300,8 +315,9 @@ inline Graph parseMarkdownOutline(const std::string& text) {
     return g;
 }
 
-// ------------------------------------------------------------------- csv --
+// ------------------------------------------------------------------- CSV --
 
+// splitCsvLine: 解析单行 CSV，支持双引号字段及转义双引号
 inline std::vector<std::string> splitCsvLine(const std::string& line) {
     std::vector<std::string> out;
     std::string cur;
@@ -323,9 +339,11 @@ inline std::vector<std::string> splitCsvLine(const std::string& line) {
     return out;
 }
 
-// Two CSV schemas:
-//   edge list:  from,to[,label]          -> flowchart
-//   hierarchy:  id,label[,parent]        -> orgchart
+// 两种 CSV 模式：
+//   边列表：from,to[,label]        -> flowchart
+//   层级表：id,label[,parent]      -> orgchart
+// parseCSV: 解析 CSV（边列表 或 层级表两种模式）
+// 关键步骤：先读表头判模式 -> 按列映射取值 -> 逐行建点建边
 inline Graph parseCSV(const std::string& text) {
     auto lines = splitLines(text);
     if (lines.empty()) throw ParseError("empty csv input");
@@ -374,10 +392,11 @@ inline Graph parseCSV(const std::string& text) {
     return g;
 }
 
-// ------------------------------------------------------------------- xml --
+// ------------------------------------------------------------------- XML --
 
 namespace detail {
 
+// XmlNode: 轻量 XML 中间结构（tag/attrs/children/text）
 struct XmlNode {
     std::string tag;
     std::map<std::string, std::string> attrs;
@@ -385,7 +404,9 @@ struct XmlNode {
     std::string text;
 };
 
-// minimal XML parser: elements, attributes, text; skips comments/decl/cdata
+// 最小 XML 解析器：支持元素、属性、文本；跳过注释/声明/cdata
+// parseXmlDoc: 最小可用 XML 解析器（面向本项目输入子集）
+// 关键步骤：跳过声明/注释 -> 递归解析元素 -> 解码实体字符
 inline XmlNode parseXmlDoc(const std::string& src) {
     size_t pos = 0;
     auto skipMisc = [&]() {
@@ -426,7 +447,7 @@ inline XmlNode parseXmlDoc(const std::string& src) {
         while (pos < src.size() && !isspace((unsigned char)src[pos]) &&
                src[pos] != '>' && src[pos] != '/') pos++;
         node.tag = src.substr(st, pos - st);
-        // attributes
+        // 解析属性
         while (pos < src.size()) {
             while (pos < src.size() && isspace((unsigned char)src[pos])) pos++;
             if (pos < src.size() && (src[pos] == '>' || src[pos] == '/')) break;
@@ -449,13 +470,13 @@ inline XmlNode parseXmlDoc(const std::string& src) {
             }
             if (!aname.empty()) node.attrs[aname] = decodeEntities(aval);
         }
-        if (pos < src.size() && src[pos] == '/') { // self-closing
+        if (pos < src.size() && src[pos] == '/') { // 自闭合标签
             pos++;
             if (pos < src.size() && src[pos] == '>') pos++;
             return node;
         }
         if (pos < src.size() && src[pos] == '>') pos++;
-        // children / text
+        // 解析子节点/文本
         while (pos < src.size()) {
             size_t ts = pos;
             while (pos < src.size() && src[pos] != '<') pos++;
@@ -481,14 +502,16 @@ inline XmlNode parseXmlDoc(const std::string& src) {
     return parseElem();
 }
 
-} // namespace detail
+} // 命名空间 detail
 
-// XML schema:
+// XML 输入约定：
 // <graph type="flowchart" name="...">
 //   <node id="a" label="Start" shape="round"/>
 //   <node id="b" label="Group"> <node id="c" label="Child"/> </node>
 //   <edge from="a" to="b" label="ok" style="dashed"/>
 // </graph>
+// parseXML: 将约定 XML 模式映射为统一 Graph
+// 关键步骤：校验根节点 -> DFS 递归 node/edge -> 维护 parent 层级
 inline Graph parseXML(const std::string& text) {
     detail::XmlNode root = detail::parseXmlDoc(text);
     if (root.tag != "graph")
@@ -522,7 +545,7 @@ inline Graph parseXML(const std::string& text) {
                 std::string style = c.attrs.count("style") ? c.attrs.at("style") : "solid";
                 g.addEdge(from, to, label, style);
             } else if (c.tag == "attr") {
-                // ER attribute inside a <node>
+                // <node> 内部的 ER 属性（当前保留扩展位）
             }
         }
     };
@@ -530,8 +553,10 @@ inline Graph parseXML(const std::string& text) {
     return g;
 }
 
-// ------------------------------------------------------------- excalidraw --
+// ------------------------------------------------------------- Excalidraw --
 
+// parseExcalidraw: 解析 Excalidraw JSON
+// 关键步骤：保留原始 elements 以便无损回写 -> 从几何元素提取节点 -> 从箭头绑定提取边
 inline Graph parseExcalidraw(const std::string& text) {
     std::string err;
     Json j = Json::parse(text, &err);
@@ -541,12 +566,12 @@ inline Graph parseExcalidraw(const std::string& text) {
         throw ParseError("excalidraw: missing 'elements' array");
     Graph g;
     g.type = "whiteboard";
-    // keep raw elements for lossless round-trip
+    // 保留原始 elements，支持无损往返转换
     for (auto& el : *els->a) {
         if (el.boolean("isDeleted", false)) continue;
         g.elements.push_back(el);
     }
-    // derive logical nodes from shapes, labels from bound/contained text
+    // 从图形元素提取逻辑节点，标签优先取绑定/容器文本
     std::map<std::string, std::string> textByContainer;
     for (auto& el : g.elements) {
         if (el.str("type") == "text" && !el.str("containerId").empty())
@@ -572,13 +597,15 @@ inline Graph parseExcalidraw(const std::string& text) {
                 g.addEdge(from, to);
         }
     }
-    g.laidOut = true; // whiteboard scenes carry their own coordinates
+    g.laidOut = true; // 白板场景自带坐标
     return g;
 }
 
-// --------------------------------------------------------------- dispatch --
+// --------------------------------------------------------------- 分发入口 --
 
-// format: mermaid | markdown | csv | xml | excalidraw | model | auto
+// format 可选：mermaid | markdown | csv | xml | excalidraw | model | auto
+// detectFormat: 自动格式识别（命名体现“检测而非解析”）
+// 识别顺序：xml/json-mermaid-markdown-csv，尽量减少误判成本
 inline std::string detectFormat(const std::string& text) {
     std::string t = trim(text);
     if (t.empty()) return "auto";
@@ -602,7 +629,7 @@ inline std::string detectFormat(const std::string& text) {
         break;
     }
     if (t[0] == '#' || t[0] == '-' || t[0] == '*') return "markdown";
-    // csv heuristic: first line contains comma and known headers
+    // CSV 启发式判断：首行包含逗号且出现已知表头
     auto lines = splitLines(low);
     if (!lines.empty() && lines[0].find(',') != std::string::npos) {
         if (lines[0].find("from") != std::string::npos ||
@@ -613,6 +640,8 @@ inline std::string detectFormat(const std::string& text) {
     return "markdown";
 }
 
+// parseAny: 统一解析入口；支持 format=auto 自动检测
+// 关键步骤：确定格式 -> 调用对应解析器 -> 按需覆盖图类型
 inline Graph parseAny(const std::string& text, std::string format = "auto",
                       std::string diagramType = "") {
     if (format.empty() || format == "auto") format = detectFormat(text);
@@ -633,4 +662,4 @@ inline Graph parseAny(const std::string& text, std::string format = "auto",
     return g;
 }
 
-} // namespace gp
+} // 命名空间 gp

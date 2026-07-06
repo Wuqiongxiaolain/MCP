@@ -1,6 +1,5 @@
-// model.hpp - unified graph model for graphmcp
-// One model to represent flowcharts, architecture diagrams, ER diagrams,
-// org charts, mind maps and freehand whiteboard scenes.
+// model.hpp - graphmcp 的统一图模型
+// 一个模型同时表示流程图、架构图、ER 图、组织图、思维导图和白板自由场景。
 #pragma once
 #include "json.hpp"
 #include <string>
@@ -15,44 +14,51 @@ namespace gm {
 
 using gj::Json;
 
-// diagram kinds understood by parsers / exporters / layout
-// "flowchart" | "architecture" | "er" | "orgchart" | "mindmap" | "whiteboard"
+// 解析器/导出器/布局模块共同理解的图类型
+// 可选值："flowchart" | "architecture" | "er" | "orgchart" | "mindmap" | "whiteboard"
 
+// Node: 图中的“节点”实体（命名上 n 表示 node，id 为机器唯一标识，label 为展示名）
 struct Node {
     std::string id;
     std::string label;
-    std::string shape;   // rect | round | diamond | ellipse | circle | stadium | group
-    std::string parent;  // hierarchy: parent node id ("" = root level)
-    std::string style;   // free-form style hint (color etc.)
-    std::vector<std::string> attrs; // ER attributes: "type name" entries
+    std::string shape;   // 节点形状：rect | round | diamond | ellipse | circle | stadium | group
+    std::string parent;  // 层级关系：父节点 id（空字符串表示根层）
+    std::string style;   // 自由样式提示（颜色等）
+    std::vector<std::string> attrs; // ER 属性列表：形如 "type name"
     double x = 0, y = 0, w = 0, h = 0;
 };
 
+// Edge: 图中的“边/连线”实体（命名上 from/to 表示起点和终点节点 id）
 struct Edge {
     std::string id;
     std::string from, to;
     std::string label;
-    std::string style;   // solid | dashed | thick
-    std::string arrow;   // arrow | none | both
+    std::string style;   // 线型：solid | dashed | thick
+    std::string arrow;   // 箭头：arrow | none | both
 };
 
+// Graph: 统一图模型容器（命名上 g 常用于 Graph 实例）
 struct Graph {
     std::string id;
     std::string name;
     std::string type = "flowchart";
     std::vector<Node> nodes;
     std::vector<Edge> edges;
-    std::vector<Json> elements; // raw whiteboard (excalidraw-like) elements
+    std::vector<Json> elements; // 原始白板元素（类似 excalidraw）
     bool laidOut = false;
 
+    // 通过节点 id 查找可写节点指针；nid = node id
     Node* findNode(const std::string& nid) {
         for (auto& n : nodes) if (n.id == nid) return &n;
         return nullptr;
     }
+    // 通过节点 id 查找只读节点指针；用于 const 场景避免误修改
     const Node* findNode(const std::string& nid) const {
         for (auto& n : nodes) if (n.id == nid) return &n;
         return nullptr;
     }
+    // ensureNode: 若节点已存在则复用，不存在则创建，避免重复建点
+    // 关键步骤：先查重 -> 再按需要补 label -> 最后创建默认 rect 节点
     Node& ensureNode(const std::string& nid, const std::string& label = "") {
         for (auto& n : nodes) {
             if (n.id == nid) {
@@ -68,6 +74,8 @@ struct Graph {
         nodes.push_back(n);
         return nodes.back();
     }
+    // addEdge: 追加一条边，自动生成边 id（e1/e2...）
+    // 参数命名：from/to 与节点 id 对齐，label/style/arrow 分别控制文案、线型、箭头
     void addEdge(const std::string& from, const std::string& to,
                  const std::string& label = "", const std::string& style = "solid",
                  const std::string& arrow = "arrow") {
@@ -77,7 +85,9 @@ struct Graph {
         edges.push_back(e);
     }
 
-    // ---- JSON (de)serialization of the unified model ----
+    // ---- 统一模型的 JSON 序列化/反序列化 ----
+    // toJson: 将 Graph 序列化为 JSON，便于持久化和跨模块传输
+    // 关键步骤：按 nodes/edges/elements 三块组织结构，避免信息丢失
     Json toJson() const {
         Json j = Json::obj();
         j.set("id", id);
@@ -122,6 +132,8 @@ struct Graph {
         return j;
     }
 
+    // fromJson: 从 JSON 还原 Graph；与 toJson 成对，保证双向转换
+    // 关键步骤：先读图级字段 -> 再读 nodes/edges -> 最后恢复 whiteboard elements
     static Graph fromJson(const Json& j) {
         Graph g;
         g.id = j.str("id");
@@ -164,8 +176,9 @@ struct Graph {
     }
 };
 
-// ---- small shared utilities ----
+// ---- 小型通用工具函数 ----
 
+// trim: 去掉字符串首尾空白；命名直观表示“裁剪空白”
 inline std::string trim(const std::string& s) {
     size_t b = s.find_first_not_of(" \t\r\n");
     if (b == std::string::npos) return "";
@@ -173,6 +186,7 @@ inline std::string trim(const std::string& s) {
     return s.substr(b, e - b + 1);
 }
 
+// splitLines: 按行拆分文本（兼容 \r\n），供解析器逐行处理
 inline std::vector<std::string> splitLines(const std::string& text) {
     std::vector<std::string> lines;
     std::string cur;
@@ -184,17 +198,21 @@ inline std::vector<std::string> splitLines(const std::string& text) {
     return lines;
 }
 
+// toLower: 统一转小写，便于做大小写不敏感匹配
 inline std::string toLower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(),
                    [](unsigned char c) { return (char)tolower(c); });
     return s;
 }
 
+// startsWith: 前缀判断，解析协议/关键字时常用
 inline bool startsWith(const std::string& s, const std::string& p) {
     return s.size() >= p.size() && s.compare(0, p.size(), p) == 0;
 }
 
-// generate a short unique-ish id: g<epoch36><rand>
+// 生成简短且基本唯一的 id：g<epoch36><rand>
+// genId: 生成短 id（prefix + 时间戳36进制 + 随机尾缀）
+// 这样比纯随机更可读，也降低冲突概率
 inline std::string genId(const std::string& prefix = "g") {
     static const char* al = "0123456789abcdefghijklmnopqrstuvwxyz";
     unsigned long long v = (unsigned long long)time(nullptr);
@@ -206,7 +224,9 @@ inline std::string genId(const std::string& prefix = "g") {
     return prefix + s;
 }
 
-// default node size derived from label length (UTF-8 aware-ish: count code points)
+// 根据 label 长度估算默认节点尺寸（近似 UTF-8：按码点数统计）
+// defaultSize: 根据文本长度估算节点尺寸（UTF-8 场景下按码点近似）
+// 关键步骤：估算字符宽度 -> 计算基础宽高 -> 针对形状/ER 属性做修正
 inline void defaultSize(Node& n) {
     size_t cps = 0;
     for (unsigned char c : n.label) if ((c & 0xC0) != 0x80) cps++;
@@ -216,8 +236,8 @@ inline void defaultSize(Node& n) {
     n.w = std::max(100.0, cps * perChar + 32.0);
     n.h = (n.shape == "diamond") ? 60.0 : 44.0;
     if (n.shape == "circle") { n.w = std::max(n.w, n.h); n.h = n.w; }
-    if (!n.attrs.empty()) // ER entity: room for attribute rows
+    if (!n.attrs.empty()) // ER 实体：为属性行预留高度
         n.h = 30.0 + 22.0 * (double)n.attrs.size();
 }
 
-} // namespace gm
+} // 命名空间 gm

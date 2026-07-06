@@ -1,6 +1,5 @@
-// mcp.hpp - Model Context Protocol server (JSON-RPC 2.0 over stdio,
-// newline-delimited messages). Exposes graph creation / conversion /
-// export / open / validation / history tools.
+// mcp.hpp - Model Context Protocol 服务端（基于 stdio 的 JSON-RPC 2.0，
+// 按行分隔消息）。对外提供图创建/转换/导出/打开/校验/历史等工具。
 #pragma once
 #include "parsers.hpp"
 #include "exporters.hpp"
@@ -16,8 +15,9 @@ inline const char* SERVER_NAME    = "graphmcp";
 inline const char* SERVER_VERSION = "1.0.0";
 inline const char* PROTOCOL_VERSION = "2024-11-05";
 
-// ---- tool schema helpers ----
+// ---- 工具 Schema 辅助 ----
 
+// prop: 构造单个工具参数描述（type + description）
 inline Json prop(const std::string& type, const std::string& desc) {
     Json p = Json::obj();
     p.set("type", type);
@@ -25,6 +25,8 @@ inline Json prop(const std::string& type, const std::string& desc) {
     return p;
 }
 
+// toolDef: 组装 MCP 工具定义
+// 参数命名：name=工具名，props=参数集合，required=必填参数列表
 inline Json toolDef(const std::string& name, const std::string& desc,
                     Json props, Json required) {
     Json t = Json::obj();
@@ -38,6 +40,7 @@ inline Json toolDef(const std::string& name, const std::string& desc,
     return t;
 }
 
+// toolList: 返回服务暴露的全部工具清单
 inline Json toolList() {
     Json tools = Json::arr();
     {
@@ -115,8 +118,9 @@ inline Json toolList() {
     return tools;
 }
 
-// ---- tool execution ----
+// ---- 工具执行 ----
 
+// textContent: MCP tools/call 的标准文本返回封装
 inline Json textContent(const std::string& text, bool isError = false) {
     Json result = Json::obj();
     Json content = Json::arr();
@@ -129,6 +133,7 @@ inline Json textContent(const std::string& text, bool isError = false) {
     return result;
 }
 
+// issuesToJson: 将校验问题列表转换为 JSON 数组
 inline Json issuesToJson(const std::vector<gl::Issue>& issues) {
     Json arr = Json::arr();
     for (auto& i : issues) {
@@ -140,10 +145,12 @@ inline Json issuesToJson(const std::vector<gl::Issue>& issues) {
     return arr;
 }
 
+// ToolRunner: MCP 工具执行器（工具名 -> 具体业务逻辑）
 class ToolRunner {
 public:
     explicit ToolRunner(gs::Store& store) : store_(store) {}
 
+    // call: 工具分发总入口，统一捕获异常并返回 isError 文本
     Json call(const std::string& name, const Json& args) {
         try {
             if (name == "graph_create")   return create(args);
@@ -163,6 +170,7 @@ public:
 private:
     gs::Store& store_;
 
+    // create: 解析输入并保存图；有结构性错误时直接拒绝创建
     Json create(const Json& a) {
         Graph g = gp::parseAny(a.str("content"), a.str("format", "auto"),
                                a.str("type"));
@@ -188,6 +196,7 @@ private:
         return textContent(out.dump(2));
     }
 
+    // convert: 一次性格式转换，不进入存储层
     Json convert(const Json& a) {
         Graph g = gp::parseAny(a.str("content"), a.str("format", "auto"));
         ge::ExportResult r = ge::exportGraph(g, a.str("to"));
@@ -195,6 +204,7 @@ private:
         return textContent(r.content.empty() ? r.message : r.content);
     }
 
+    // exportTool: 读取存储图并导出到目标格式
     Json exportTool(const Json& a) {
         Graph g;
         std::string err;
@@ -207,6 +217,7 @@ private:
         return textContent(text);
     }
 
+    // open: 生成目标文件或 URL，并尝试调用系统默认程序打开
     Json open(const Json& a) {
         Graph g;
         std::string err;
@@ -234,6 +245,7 @@ private:
         return textContent(out.dump(2));
     }
 
+    // validateTool: 校验内容或已存图，返回 valid + issues
     Json validateTool(const Json& a) {
         Graph g;
         if (!a.str("id").empty()) {
@@ -252,11 +264,13 @@ private:
         return textContent(out.dump(2));
     }
 
+    // list: 返回存储索引 JSON
     Json list() {
         Json idx = store_.loadIndex();
         return textContent(idx.dump(2));
     }
 
+    // history: 返回指定图的历史版本信息
     Json history(const Json& a) {
         Json h = store_.history(a.str("id"));
         if (h.size() == 0)
@@ -264,6 +278,7 @@ private:
         return textContent(h.dump(2));
     }
 
+    // rollback: 回滚到指定版本并生成一个新的最新版本
     Json rollback(const Json& a) {
         int nv = 0;
         std::string err;
@@ -277,8 +292,9 @@ private:
     }
 };
 
-// ---- JSON-RPC plumbing ----
+// ---- JSON-RPC 通信处理 ----
 
+// rpcResult/rpcError: JSON-RPC 响应构造工具
 inline Json rpcResult(const Json& id, Json result) {
     Json r = Json::obj();
     r.set("jsonrpc", "2.0");
@@ -298,7 +314,9 @@ inline Json rpcError(const Json& id, int code, const std::string& msg) {
     return r;
 }
 
-// handle one request; returns false if no response should be sent (notification)
+// 处理一条请求；若是通知消息且无需响应则返回 false
+// handleMessage: 处理单条 JSON-RPC 请求
+// 关键步骤：识别方法 -> 分发工具或协议方法 -> 返回 result/error
 inline bool handleMessage(const Json& msg, gs::Store& store, Json& response) {
     std::string method = msg.str("method");
     const Json* idPtr = msg.find("id");
@@ -347,7 +365,8 @@ inline bool handleMessage(const Json& msg, gs::Store& store, Json& response) {
     return true;
 }
 
-// blocking stdio server loop (newline-delimited JSON-RPC)
+// 阻塞式 stdio 服务循环（按行读取 JSON-RPC）
+// serve: MCP stdio 主循环（逐行读取 JSON-RPC）
 inline int serve(gs::Store& store) {
     std::string line;
     while (std::getline(std::cin, line)) {
@@ -366,4 +385,4 @@ inline int serve(gs::Store& store) {
     return 0;
 }
 
-} // namespace mcp
+} // 命名空间 mcp

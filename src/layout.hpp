@@ -1,4 +1,4 @@
-// layout.hpp - basic automatic layout + graph structure validation
+// layout.hpp - 基础自动布局 + 图结构校验
 #pragma once
 #include "model.hpp"
 #include <queue>
@@ -9,13 +9,16 @@ namespace gl {
 using gm::Graph;
 using gm::Node;
 
-// ------------------------------------------------------------- validation --
+// ------------------------------------------------------------- 校验 --
 
+// Issue: 校验问题项（severity 表示级别，message 为可读描述）
 struct Issue {
-    std::string severity; // "error" | "warning"
+    std::string severity; // 问题级别："error" | "warning"
     std::string message;
 };
 
+// validate: 图结构校验入口
+// 关键步骤：空图检查 -> 节点/父子关系检查 -> 边引用检查 -> 环与孤点检查
 inline std::vector<Issue> validate(const Graph& g) {
     std::vector<Issue> issues;
     auto err  = [&](const std::string& m) { issues.push_back({"error", m}); };
@@ -40,7 +43,7 @@ inline std::vector<Issue> validate(const Graph& g) {
         if (!ids.count(e.to))   err("edge '" + e.id + "' references missing node '" + e.to + "'");
         if (e.from == e.to)     warn("edge '" + e.id + "' is a self-loop on '" + e.from + "'");
     }
-    // hierarchy cycle detection (parent chains)
+    // 层级环检测（沿 parent 链向上追踪）
     for (auto& n : g.nodes) {
         std::set<std::string> seen;
         const Node* cur = &n;
@@ -52,7 +55,7 @@ inline std::vector<Issue> validate(const Graph& g) {
             cur = g.findNode(cur->parent);
         }
     }
-    // isolated nodes (flow-like diagrams only)
+    // 孤立节点检测（仅对流程类图）
     if ((g.type == "flowchart" || g.type == "architecture") && g.nodes.size() > 1) {
         std::set<std::string> connected;
         for (auto& e : g.edges) { connected.insert(e.from); connected.insert(e.to); }
@@ -63,17 +66,20 @@ inline std::vector<Issue> validate(const Graph& g) {
     return issues;
 }
 
+// hasErrors: 快速判断问题列表里是否存在 error 级别
 inline bool hasErrors(const std::vector<Issue>& issues) {
     for (auto& i : issues) if (i.severity == "error") return true;
     return false;
 }
 
-// ----------------------------------------------------------------- layout --
+// ----------------------------------------------------------------- 布局 --
 
 namespace detail {
 
-// tree layout: recursive subtree-width placement.
-// horizontal=false: top-down (org chart), horizontal=true: left-right (mind map)
+// 树布局：递归计算子树宽度并放置节点
+// horizontal=false 表示上下布局（组织图），true 表示左右布局（思维导图）
+// TreeLayout: 树形布局辅助器
+// 命名说明：depth 表示主轴深度，breadth 表示横向展开宽度
 struct TreeLayout {
     Graph& g;
     std::map<std::string, std::vector<std::string>> children;
@@ -84,7 +90,8 @@ struct TreeLayout {
         for (auto& n : g.nodes)
             if (!n.parent.empty()) children[n.parent].push_back(n.id);
     }
-    // returns extent of the subtree along the "breadth" axis
+    // 返回子树在“横向展开轴”（breadth）上的占用范围
+    // place: 递归放置子树并返回该子树在 breadth 方向占用的总宽度
     double place(const std::string& id, double depthPos, double breadthPos) {
         Node* n = g.findNode(id);
         if (!n) return 0;
@@ -105,15 +112,18 @@ struct TreeLayout {
         setPos(*n, depthPos, breadthPos + total / 2);
         return total;
     }
+    // setPos: 根据横向/纵向布局模式统一设置节点坐标
     void setPos(Node& n, double depthPos, double breadthCenter) {
         if (horizontal) { n.x = depthPos; n.y = breadthCenter - n.h / 2; }
         else            { n.x = breadthCenter - n.w / 2; n.y = depthPos; }
     }
 };
 
-} // namespace detail
+} // 命名空间 detail
 
-// layered layout for flow-like graphs: BFS ranks from in-degree-0 sources
+// 分层布局（流程类图）：从入度为 0 的源点进行 BFS 分层
+// layoutLayered: 分层布局（适合流程图）
+// 关键步骤：Kahn 分层 -> 同层排布 -> 最后包裹 group 容器
 inline void layoutLayered(Graph& g) {
     std::map<std::string, int> indeg;
     std::map<std::string, std::vector<std::string>> out;
@@ -126,7 +136,7 @@ inline void layoutLayered(Graph& g) {
     }
     std::map<std::string, int> rank;
     std::queue<std::string> q;
-    // Kahn topological ranking; cyclic remainder handled afterwards
+    // Kahn 拓扑分层；剩余成环节点在后续兜底处理
     std::map<std::string, int> deg = indeg;
     for (auto& n : g.nodes) if (deg[n.id] == 0) { rank[n.id] = 0; q.push(n.id); }
     while (!q.empty()) {
@@ -138,10 +148,10 @@ inline void layoutLayered(Graph& g) {
     }
     int maxRank = 0;
     for (auto& n : g.nodes) {
-        if (!rank.count(n.id)) rank[n.id] = 0; // node inside a cycle
+        if (!rank.count(n.id)) rank[n.id] = 0; // 位于环中的节点
         maxRank = std::max(maxRank, rank[n.id]);
     }
-    // group nodes (subgraph containers) are placed behind their children later
+    // group 容器节点后置处理，用于包裹子节点范围
     std::map<int, std::vector<Node*>> byRank;
     for (auto& n : g.nodes)
         if (n.shape != "group") byRank[rank[n.id]].push_back(&n);
@@ -162,7 +172,7 @@ inline void layoutLayered(Graph& g) {
         }
         y += rowH + 80;
     }
-    // fit group containers around their members
+    // 根据成员节点边界回填 group 容器尺寸
     for (auto& grp : g.nodes) {
         if (grp.shape != "group") continue;
         double minX = 1e18, minY = 1e18, maxX = -1e18, maxY = -1e18;
@@ -180,19 +190,21 @@ inline void layoutLayered(Graph& g) {
     }
 }
 
+// layoutTree: 树布局入口（horizontal=true 为左右，false 为上下）
 inline void layoutTree(Graph& g, bool horizontal) {
     detail::TreeLayout tl(g, horizontal);
     std::set<std::string> hasParent;
     for (auto& n : g.nodes) if (!n.parent.empty()) hasParent.insert(n.id);
     double offset = 40;
     for (auto& n : g.nodes) {
-        if (hasParent.count(n.id)) continue; // not a root
+        if (hasParent.count(n.id)) continue; // 非根节点
         double ext = tl.place(n.id, 40, offset);
         offset += ext + 60;
     }
 }
 
-// grid fallback for graphs with no structure at all
+// 无结构图的网格兜底布局
+// layoutGrid: 无边结构的兜底网格布局
 inline void layoutGrid(Graph& g) {
     int cols = (int)std::max(1.0, std::ceil(std::sqrt((double)g.nodes.size())));
     int i = 0;
@@ -203,7 +215,9 @@ inline void layoutGrid(Graph& g) {
     }
 }
 
-// entry point: pick strategy by diagram type; assigns sizes first
+// 入口：按图类型选择布局策略，并先补齐节点尺寸
+// layout: 总布局入口（按图类型选择策略）
+// 关键步骤：补默认尺寸 -> 策略分发 -> 坐标归一化到正区间
 inline void layout(Graph& g, bool force = false) {
     if (g.laidOut && !force) return;
     for (auto& n : g.nodes)
@@ -212,7 +226,7 @@ inline void layout(Graph& g, bool force = false) {
     else if (g.type == "orgchart") layoutTree(g, false);
     else if (g.edges.empty())      layoutGrid(g);
     else                           layoutLayered(g);
-    // normalize to positive coordinates
+    // 坐标归一化到正区间
     double minX = 1e18, minY = 1e18;
     for (auto& n : g.nodes) { minX = std::min(minX, n.x); minY = std::min(minY, n.y); }
     if (!g.nodes.empty() && (minX < 20 || minY < 20)) {
@@ -222,4 +236,4 @@ inline void layout(Graph& g, bool force = false) {
     g.laidOut = true;
 }
 
-} // namespace gl
+} // 命名空间 gl

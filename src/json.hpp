@@ -254,7 +254,7 @@ public:
                                 else if (h >= 'A' && h <= 'F') cp |= (unsigned)(h - 'A' + 10);
                                 else return fail("bad hex digit");
                             }
-            // 代理对
+                            // 代理对
                             if (cp >= 0xD800 && cp <= 0xDBFF && pos + 6 <= src.size() &&
                                 src[pos] == '\\' && src[pos + 1] == 'u') {
                                 unsigned lo = 0;

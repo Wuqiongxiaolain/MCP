@@ -50,6 +50,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         uses: msys2/setup-msys2@v2
         with:
+          msystem: MINGW64
           update: true
           install: >-
             mingw-w64-x86_64-toolchain
@@ -59,7 +60,12 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: msys2 {0}
         run: |
-          make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
+          mkdir -p bin
+          make all \
+            CXXFLAGS="-std=c++17 -O2 -Wall -Wextra" \
+            MKDIR="mkdir -p \$(BIN)" \
+            EXE=".exe" \
+            STATIC="-static -static-libgcc -static-libstdc++"
 
       - name: 打包（Linux/macOS）
         if: matrix.os != 'windows-latest'

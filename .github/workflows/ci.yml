@@ -35,14 +35,37 @@ jobs:
         run: |
           set -euo pipefail
           export GRAPHMCP_STORE=ci-store
-          ./bin/graphmcp create --input examples/flowchart.mmd --name ci-smoke
-          GID=$(./bin/graphmcp list | head -n1 | awk '{print $1}')
-          ./bin/graphmcp export --id "$GID" --to drawio -o ci-smoke.drawio
-          ./bin/graphmcp export --id "$GID" --to svg    -o ci-smoke.svg
-          printf '%s\n%s\n' \
+          SMOKE_ID="ci-smoke-${GITHUB_RUN_NUMBER}"
+
+          # create/list/history/rollback/validate: 覆盖版本化主链路
+          ./bin/graphmcp create --input examples/flowchart.mmd --id "$SMOKE_ID" --name ci-smoke-flow
+          ./bin/graphmcp create --input examples/orgchart.csv  --id "$SMOKE_ID" --name ci-smoke-org
+          ./bin/graphmcp list | grep -q "$SMOKE_ID"
+          ./bin/graphmcp history --id "$SMOKE_ID" | tee ci-smoke.history
+          grep -q '^v1' ci-smoke.history
+          grep -q '^v2' ci-smoke.history
+          ./bin/graphmcp rollback --id "$SMOKE_ID" --version 1
+          ./bin/graphmcp validate --id "$SMOKE_ID" | grep -q "valid: no issues found"
+
+          # export/convert/validate: 覆盖核心功能输出
+          ./bin/graphmcp export --id "$SMOKE_ID" --to drawio -o ci-smoke.drawio
+          ./bin/graphmcp export --id "$SMOKE_ID" --to svg    -o ci-smoke.svg
+          ./bin/graphmcp export --id "$SMOKE_ID" --to mermaid -o ci-smoke.mmd
+          ./bin/graphmcp convert --input examples/mindmap.md --to mermaid -o ci-smoke-convert.mmd
+          ./bin/graphmcp validate --input examples/er.mmd --format mermaid | grep -q "valid: no issues found"
+          test -s ci-smoke.drawio
+          test -s ci-smoke.svg
+          test -s ci-smoke.mmd
+          test -s ci-smoke-convert.mmd
+
+          # serve: tools/list + tools/call graph_create
+          printf '%s\n%s\n%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
             '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
-            | ./bin/graphmcp serve | grep -q graph_create
+            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"graph_create","arguments":{"content":"flowchart TD\nM[MCP]-->N[Test]","name":"ci-mcp"}}}' \
+            | ./bin/graphmcp serve | tee ci-smoke.mcp.log
+          grep -q graph_create ci-smoke.mcp.log
+          grep -q '"status":"created"' ci-smoke.mcp.log
 
       - name: 打包制品
         run: |
@@ -64,7 +87,8 @@ jobs:
     name: SonarQube 静态分析
     needs: build-test-package
     runs-on: ubuntu-latest
-    # 仅在仓库配置了 SONAR_TOKEN 时执行    if: >-
+    # 仅在仓库配置了 SONAR_TOKEN 时执行
+    if: >-
       github.event_name == 'push'
       && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
       && vars.SONAR_ENABLED == 'true'
@@ -96,3 +120,61 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  mirror-to-gitlab:
+    name: 同步 main 到 GitLab 备份仓
+    needs: [build-test-package, sonarqube]
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push'
+      && github.ref == 'refs/heads/main'
+      && vars.GITLAB_MIRROR_ENABLED == 'true'
+      && (needs.sonarqube.result == 'success' || needs.sonarqube.result == 'skipped')
+    timeout-minutes: 10
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 同步到 GitLab 仓库
+        env:
+          GITLAB_MIRROR_TOKEN: ${{ secrets.GITLAB_MIRROR_TOKEN }}
+          GITLAB_MIRROR_URL: ${{ vars.GITLAB_MIRROR_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GITLAB_MIRROR_TOKEN:-}" ]; then
+            echo "::warning::缺少 GITLAB_MIRROR_TOKEN，已跳过 GitLab 镜像同步"
+            exit 0
+          fi
+
+          MIRROR_URL="${GITLAB_MIRROR_URL:-http://csgitlab.whu.edu.cn/2025-2026-3-devops/2025-se-32-mcp/MCP.git}"
+          AUTH_URL="${MIRROR_URL}"
+          AUTH_URL="${AUTH_URL/https:\/\//https:\/\/oauth2:${GITLAB_MIRROR_TOKEN}@}"
+          AUTH_URL="${AUTH_URL/http:\/\//http:\/\/oauth2:${GITLAB_MIRROR_TOKEN}@}"
+          echo "::add-mask::${GITLAB_MIRROR_TOKEN}"
+          echo "::add-mask::${AUTH_URL}"
+
+          git remote remove gitlab-backup || true
+          git remote add gitlab-backup "${AUTH_URL}"
+
+          # 镜像同步失败不阻断主流程：最多重试 2 次，仍失败则告警并跳过
+          push_ok=0
+          for attempt in 1 2; do
+            if git push gitlab-backup HEAD:main; then
+              echo "GitLab 镜像同步成功（第 ${attempt} 次）"
+              push_ok=1
+              break
+            fi
+            echo "第 ${attempt} 次镜像同步失败"
+            if [ "${attempt}" -lt 2 ]; then
+              echo "等待 5 秒后重试..."
+              sleep 5
+            fi
+          done
+
+          if [ "${push_ok}" -ne 1 ]; then
+            echo "::warning::GitLab 镜像同步连续 2 次失败，已跳过，不阻断主流程"
+            exit 0
+          fi

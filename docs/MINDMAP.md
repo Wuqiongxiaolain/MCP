@@ -63,13 +63,11 @@ mindmap
       结构校验拒绝坏图
     DevOps
       Git 版本控制
-      Jenkins 流水线
+      GitHub Actions
         构建 测试 冒烟
         SonarQube 质量门
         打包制品
-        Ansible 部署
       SonarQube 静态分析
-      Ansible 自动化部署
 ```
 
 ## 大纲版（graphmcp 原生可解析）
@@ -100,6 +98,5 @@ mindmap
 - MCP 会话测试
 ## DevOps
 - Git 版本控制
-- Jenkins 流水线
+- GitHub Actions 流水线
 - SonarQube 静态分析
-- Ansible 自动化部署

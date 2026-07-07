@@ -1,0 +1,98 @@
+# graphmcp 持续集成：构建 → 单元测试 → 冒烟测试 → 打包制品
+name: CI
+on:
+  push:
+    branches: [main, dev, 'feature/**']
+  pull_request:
+    branches: [main, dev]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-package:
+    name: 构建与测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ make
+
+      - name: 编译
+        run: make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
+
+      - name: 单元测试
+        run: make test
+
+      - name: 冒烟测试（CLI + MCP）
+        run: |
+          set -euo pipefail
+          export GRAPHMCP_STORE=ci-store
+          ./bin/graphmcp create --input examples/flowchart.mmd --name ci-smoke
+          GID=$(./bin/graphmcp list | head -n1 | awk '{print $1}')
+          ./bin/graphmcp export --id "$GID" --to drawio -o ci-smoke.drawio
+          ./bin/graphmcp export --id "$GID" --to svg    -o ci-smoke.svg
+          printf '%s\n%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | ./bin/graphmcp serve | grep -q graph_create
+
+      - name: 打包制品
+        run: |
+          mkdir -p dist
+          cp bin/graphmcp dist/
+          cp README.md dist/
+          tar czf "graphmcp-${GITHUB_RUN_NUMBER}.tar.gz" -C dist .
+
+      - name: 上传制品
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphmcp-${{ github.run_number }}
+          path: |
+            bin/graphmcp
+            graphmcp-*.tar.gz
+          retention-days: 30
+
+  sonarqube:
+    name: SonarQube 静态分析
+    needs: build-test-package
+    runs-on: ubuntu-latest
+    # 仅在仓库配置了 SONAR_TOKEN 时执行    if: >-
+      github.event_name == 'push'
+      && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+      && vars.SONAR_ENABLED == 'true'
+    timeout-minutes: 20
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ make unzip
+
+      - name: 编译（供分析使用）
+        run: make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
+
+      - name: SonarScanner 分析
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      - name: 质量门禁
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 10
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}

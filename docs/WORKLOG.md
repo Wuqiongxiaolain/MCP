@@ -104,11 +104,14 @@ MCP     ：initialize 握手 → tools/list 返回 8 工具 →
 
 ### 阶段六：DevOps 配置
 - **Git**：`.gitignore`（bin/dist/store 等产物），分阶段提交。
-- **Jenkinsfile**：Checkout → Build → Unit Tests → Smoke Test（CLI+MCP 会话脚本）
-  → SonarQube Analysis → Quality Gate（不达标中断）→ Package（tar.gz 制品归档）
-  → Deploy（仅 main 分支，调 Ansible）。
-- **Ansible**：`ansible/deploy.yml` 解包制品 → /opt/graphmcp → 软链
-  /usr/local/bin → 建存储目录 → `graphmcp list` 部署后自检。
+- **GitHub Actions**：`.github/workflows/ci.yml`，构建 → 单元测试 → 冒烟测试
+  → 打包制品。
+- **可选 SonarQube 流水线**：仅在 GitHub Actions 仓库变量
+  `vars.SONAR_ENABLED=true`，且仓库 Secrets 中已配置 `SONAR_TOKEN` 与
+  `SONAR_HOST_URL` 时执行静态分析与质量门禁。
+- **可选 GitLab 镜像同步**：仅在 push 到 `main` 时，且 GitHub Actions
+  仓库变量 `vars.GITLAB_MIRROR_ENABLED=true`、`vars.GITLAB_MIRROR_URL`
+  已配置，并且仓库 Secret `GITLAB_MIRROR_TOKEN` 已配置时执行。
 - **SonarQube**：`sonar-project.properties`（sources/tests 划分、产物目录排除、
   cfamily build-wrapper 配置）。
 
@@ -120,7 +123,7 @@ MCP     ：initialize 握手 → tools/list 返回 8 工具 →
 | 核心库编码（模型/解析/布局/导出/存储/MCP） | 50% |
 | 测试编写与端到端验证 | 20% |
 | 缺陷修复（目录创建、Windows 编码） | 5% |
-| DevOps 配置（Jenkins/Ansible/Sonar/Git） | 10% |
+| DevOps 配置（GitHub Actions/Sonar/Git） | 10% |
 | 文档（README/架构/思维导图/工作记录） | 5% |
 
 ## 4. 遗留与展望

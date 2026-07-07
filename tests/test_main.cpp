@@ -46,12 +46,21 @@ static void testMermaidFlowchart() {
         "  end\n"
         "  C --> D\n");
     CHECK(g.type == "flowchart");
-    CHECK(g.findNode("A") != nullptr);
-    CHECK(g.findNode("A")->label == "Start");
-    CHECK(g.findNode("B")->shape == "diamond");
-    CHECK(g.findNode("C")->shape == "round");
-    CHECK(g.findNode("S1") != nullptr && g.findNode("S1")->shape == "group");
-    CHECK(g.findNode("D")->parent == "S1");
+    const gm::Node* nodeA = g.findNode("A");
+    const gm::Node* nodeB = g.findNode("B");
+    const gm::Node* nodeC = g.findNode("C");
+    const gm::Node* nodeS1 = g.findNode("S1");
+    const gm::Node* nodeD = g.findNode("D");
+    CHECK(nodeA != nullptr);
+    CHECK(nodeB != nullptr);
+    CHECK(nodeC != nullptr);
+    CHECK(nodeS1 != nullptr);
+    CHECK(nodeD != nullptr);
+    if (nodeA) CHECK(nodeA->label == "Start");
+    if (nodeB) CHECK(nodeB->shape == "diamond");
+    if (nodeC) CHECK(nodeC->shape == "round");
+    if (nodeS1) CHECK(nodeS1->shape == "group");
+    if (nodeD) CHECK(nodeD->parent == "S1");
     CHECK(g.edges.size() == 5);
     bool foundYes = false, foundDashed = false;
     for (auto& e : g.edges) {
@@ -317,7 +326,8 @@ static void testMcpProtocol() {
     CHECK(mcp::handleMessage(call, store, resp));
     const Json* result = resp.find("result");
     CHECK(result != nullptr);
-    std::string text = result->find("content")->a->at(0).str("text");
+    std::string text;
+    if (result) text = result->find("content")->a->at(0).str("text");
     Json created = Json::parse(text, &err);
     CHECK(created.str("status") == "created");
     std::string gid = created.str("id");

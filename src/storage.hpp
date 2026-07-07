@@ -31,7 +31,7 @@ inline void makeDir(const std::string& path) {
 // nowIso: 生成本地时间 ISO 字符串，用于版本时间戳
 inline std::string nowIso() {
     time_t t = time(nullptr);
-    struct tm tmv;
+    struct tm tmv = {};
 #ifdef _WIN32
     localtime_s(&tmv, &t);
 #else

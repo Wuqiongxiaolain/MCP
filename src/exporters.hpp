@@ -446,8 +446,6 @@ inline std::string toExcalidraw(Graph g)
             if (y2 < y1) {
                 y1 = a->y + a->h / 2;
                 y2 = b->y + b->h / 2;
-                x1 = a->x + (x2 > x1 ? a->w : 0) -
-                     (x2 > x1 ? 0 : a->w / 2 - a->w / 2);
                 x1 = x2 > a->x + a->w / 2 ? a->x + a->w : a->x;
             }
             Json el  = excalidrawBase(e.id, "arrow", x1, y1, x2 - x1, y2 - y1,

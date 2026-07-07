@@ -1,0 +1,129 @@
+name: CD 制品发布
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cd-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-package:
+    name: 构建 ${{ matrix.label }} 制品
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: Linux
+            platform: linux-x64
+          - os: macos-latest
+            label: macOS
+            platform: macos-x64
+          - os: windows-latest
+            label: Windows
+            platform: windows-x64
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装构建依赖（Linux）
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ make
+
+      - name: 构建（Linux/macOS）
+        if: matrix.os != 'windows-latest'
+        run: |
+          make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
+
+      - name: 安装构建依赖（Windows）
+        if: matrix.os == 'windows-latest'
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            make
+
+      - name: 构建（Windows）
+        if: matrix.os == 'windows-latest'
+        shell: msys2 {0}
+        run: |
+          make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
+
+      - name: 打包（Linux/macOS）
+        if: matrix.os != 'windows-latest'
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp bin/graphmcp dist/
+          cp README.md dist/
+          ASSET_NAME="graphmcp-${{ github.ref_name }}-${{ matrix.platform }}.tar.gz"
+          tar czf "${ASSET_NAME}" -C dist .
+
+      - name: 打包（Windows）
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Copy-Item "bin/graphmcp.exe" "dist/graphmcp.exe"
+          Copy-Item "README.md" "dist/README.md"
+          $asset_name = "graphmcp-${{ github.ref_name }}-${{ matrix.platform }}.zip"
+          if (Test-Path $asset_name) { Remove-Item $asset_name -Force }
+          Compress-Archive -Path "dist/*" -DestinationPath $asset_name
+
+      - name: 上传构建制品（Linux/macOS）
+        if: matrix.os != 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphmcp-${{ github.ref_name }}-${{ matrix.platform }}.tar.gz
+          path: graphmcp-${{ github.ref_name }}-${{ matrix.platform }}.tar.gz
+          retention-days: 30
+
+      - name: 上传构建制品（Windows）
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphmcp-${{ github.ref_name }}-${{ matrix.platform }}.zip
+          path: graphmcp-${{ github.ref_name }}-${{ matrix.platform }}.zip
+          retention-days: 30
+
+  release:
+    name: 发布 GitHub Release
+    needs: build-package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 下载全部平台制品
+        uses: actions/download-artifact@v4
+        with:
+          pattern: graphmcp-${{ github.ref_name }}-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: 发布到 GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          name: graphmcp ${{ github.ref_name }}
+          generate_release_notes: true
+          files: release-assets/*
+          fail_on_unmatched_files: true
+          append_body: true
+          body: |
+            本次为 Tag 触发的多平台自动制品发布（CD）。
+            - 触发 Tag：`${{ github.ref_name }}`
+            - 提交：`${{ github.sha }}`
+            - 平台：Linux / macOS / Windows

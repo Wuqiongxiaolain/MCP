@@ -65,7 +65,7 @@ jobs:
             '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"graph_create","arguments":{"content":"flowchart TD\nM[MCP]-->N[Test]","name":"ci-mcp"}}}' \
             | ./bin/graphmcp serve | tee ci-smoke.mcp.log
           grep -q graph_create ci-smoke.mcp.log
-          grep -q '"status":"created"' ci-smoke.mcp.log
+          grep -Eq '\\"status\\"[[:space:]]*:[[:space:]]*\\"created\\"' ci-smoke.mcp.log
 
       - name: 打包制品
         run: |

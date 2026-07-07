@@ -105,7 +105,13 @@ MCP     ：initialize 握手 → tools/list 返回 8 工具 →
 ### 阶段六：DevOps 配置
 - **Git**：`.gitignore`（bin/dist/store 等产物），分阶段提交。
 - **GitHub Actions**：`.github/workflows/ci.yml`，构建 → 单元测试 → 冒烟测试
-  → 打包制品；可选 SonarQube 静态分析与质量门禁（`SONAR_ENABLED=true`）。
+  → 打包制品。
+- **可选 SonarQube 流水线**：仅在 GitHub Actions 仓库变量
+  `vars.SONAR_ENABLED=true`，且仓库 Secrets 中已配置 `SONAR_TOKEN` 与
+  `SONAR_HOST_URL` 时执行静态分析与质量门禁。
+- **可选 GitLab 镜像同步**：仅在 push 到 `main` 时，且 GitHub Actions
+  仓库变量 `vars.GITLAB_MIRROR_ENABLED=true`、`vars.GITLAB_MIRROR_URL`
+  已配置，并且仓库 Secret `GITLAB_MIRROR_TOKEN` 已配置时执行。
 - **SonarQube**：`sonar-project.properties`（sources/tests 划分、产物目录排除、
   cfamily build-wrapper 配置）。
 

@@ -65,7 +65,7 @@ jobs:
             '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"graph_create","arguments":{"content":"flowchart TD\nM[MCP]-->N[Test]","name":"ci-mcp"}}}' \
             | ./bin/graphmcp serve | tee ci-smoke.mcp.log
           grep -q graph_create ci-smoke.mcp.log
-          grep -Eq '\\"status\\"[[:space:]]*:[[:space:]]*\\"created\\"' ci-smoke.mcp.log
+          grep -Eq '"status"[[:space:]]*:[[:space:]]*"created"' ci-smoke.mcp.log
 
       - name: 打包制品
         run: |
@@ -87,48 +87,63 @@ jobs:
     name: SonarQube 静态分析
     needs: build-test-package
     runs-on: ubuntu-latest
-    # 仅在仓库配置了 SONAR_TOKEN 时执行
+    # 仅在 push 到 main/dev 且仓库变量启用时启动；缺少 Sonar Secrets 时仅告警并跳过分析步骤
     if: >-
       github.event_name == 'push'
       && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
       && vars.SONAR_ENABLED == 'true'
     timeout-minutes: 20
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
     steps:
+      - name: 检查 Sonar 配置
+        id: sonar_precheck
+        run: |
+          if [ -z "${SONAR_TOKEN:-}" ] || [ -z "${SONAR_HOST_URL:-}" ]; then
+            echo "::warning::SONAR_ENABLED 已开启，但缺少 SONAR_TOKEN 或 SONAR_HOST_URL，已跳过 SonarQube 分析"
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: 检出代码
+        if: steps.sonar_precheck.outputs.should_run == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: 安装依赖
+        if: steps.sonar_precheck.outputs.should_run == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y g++ make unzip
 
       - name: 编译（供分析使用）
+        if: steps.sonar_precheck.outputs.should_run == 'true'
         run: make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
 
       - name: SonarScanner 分析
+        if: steps.sonar_precheck.outputs.should_run == 'true'
         uses: SonarSource/sonarqube-scan-action@v5
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
       - name: 质量门禁
+        if: steps.sonar_precheck.outputs.should_run == 'true'
         uses: SonarSource/sonarqube-quality-gate-action@v1
         timeout-minutes: 10
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
   mirror-to-gitlab:
     name: 同步 main 到 GitLab 备份仓
     needs: [build-test-package, sonarqube]
     runs-on: ubuntu-latest
     if: >-
-      github.event_name == 'push'
+      always()
+      && github.event_name == 'push'
       && github.ref == 'refs/heads/main'
       && vars.GITLAB_MIRROR_ENABLED == 'true'
+      && vars.GITLAB_MIRROR_URL != ''
+      && needs.build-test-package.result == 'success'
       && (needs.sonarqube.result == 'success' || needs.sonarqube.result == 'skipped')
     timeout-minutes: 10
 
@@ -149,7 +164,12 @@ jobs:
             exit 0
           fi
 
-          MIRROR_URL="${GITLAB_MIRROR_URL:-http://csgitlab.whu.edu.cn/2025-2026-3-devops/2025-se-32-mcp/MCP.git}"
+          if [ -z "${GITLAB_MIRROR_URL:-}" ]; then
+            echo "::warning::缺少 GITLAB_MIRROR_URL，已跳过 GitLab 镜像同步"
+            exit 0
+          fi
+
+          MIRROR_URL="${GITLAB_MIRROR_URL}"
           AUTH_URL="${MIRROR_URL}"
           AUTH_URL="${AUTH_URL/https:\/\//https:\/\/oauth2:${GITLAB_MIRROR_TOKEN}@}"
           AUTH_URL="${AUTH_URL/http:\/\//http:\/\/oauth2:${GITLAB_MIRROR_TOKEN}@}"

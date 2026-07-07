@@ -13,3 +13,4 @@ test-store-tmp/
 ci-smoke.*
 .vscode/
 .idea/
+out/

@@ -15,6 +15,7 @@ concurrency:
 jobs:
   build-package:
     name: 构建 ${{ matrix.label }} 制品
+    if: ${{ !github.event.deleted }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
@@ -46,6 +47,11 @@ jobs:
         run: |
           make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
 
+      - name: 测试（Linux/macOS）
+        if: matrix.os != 'windows-latest'
+        run: |
+          make test CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
+
       - name: 安装构建依赖（Windows）
         if: matrix.os == 'windows-latest'
         uses: msys2/setup-msys2@v2
@@ -66,6 +72,16 @@ jobs:
             MKDIR="mkdir -p \$(BIN)" \
             EXE=".exe" \
             STATIC="-static -static-libgcc -static-libstdc++"
+
+      - name: 测试（Windows）
+        if: matrix.os == 'windows-latest'
+        shell: msys2 {0}
+        run: |
+          mkdir -p bin
+          make test \
+            CXXFLAGS="-std=c++17 -O2 -Wall -Wextra" \
+            MKDIR="mkdir -p \$(BIN)" \
+            EXE=".exe"
 
       - name: 打包（Linux/macOS）
         if: matrix.os != 'windows-latest'
@@ -107,6 +123,7 @@ jobs:
   release:
     name: 发布 GitHub Release
     needs: build-package
+    if: ${{ !github.event.deleted }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
 

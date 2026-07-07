@@ -2,64 +2,77 @@
 // 一个模型同时表示流程图、架构图、ER 图、组织图、思维导图和白板自由场景。
 #pragma once
 #include "json.hpp"
-#include <string>
-#include <vector>
+#include <algorithm>
+#include <cstdlib>
+#include <ctime>
 #include <map>
 #include <set>
-#include <algorithm>
-#include <ctime>
-#include <cstdlib>
+#include <string>
+#include <vector>
 
 namespace gm {
 
 using gj::Json;
 
 // 解析器/导出器/布局模块共同理解的图类型
-// 可选值："flowchart" | "architecture" | "er" | "orgchart" | "mindmap" | "whiteboard"
+// 可选值："flowchart" | "architecture" | "er" | "orgchart" | "mindmap" |
+// "whiteboard"
 
-// Node: 图中的“节点”实体（命名上 n 表示 node，id 为机器唯一标识，label 为展示名）
-struct Node {
+// Node: 图中的“节点”实体（命名上 n 表示 node，id 为机器唯一标识，label
+// 为展示名）
+struct Node
+{
     std::string id;
     std::string label;
-    std::string shape;   // 节点形状：rect | round | diamond | ellipse | circle | stadium | group
-    std::string parent;  // 层级关系：父节点 id（空字符串表示根层）
-    std::string style;   // 自由样式提示（颜色等）
-    std::vector<std::string> attrs; // ER 属性列表：形如 "type name"
-    double x = 0, y = 0, w = 0, h = 0;
+    std::string shape;  // 节点形状：rect | round | diamond | ellipse | circle |
+                        // stadium | group
+    std::string              parent;  // 层级关系：父节点 id（空字符串表示根层）
+    std::string              style;   // 自由样式提示（颜色等）
+    std::vector<std::string> attrs;   // ER 属性列表：形如 "type name"
+    double                   x = 0, y = 0, w = 0, h = 0;
 };
 
 // Edge: 图中的“边/连线”实体（命名上 from/to 表示起点和终点节点 id）
-struct Edge {
+struct Edge
+{
     std::string id;
     std::string from, to;
     std::string label;
-    std::string style;   // 线型：solid | dashed | thick
-    std::string arrow;   // 箭头：arrow | none | both
+    std::string style;  // 线型：solid | dashed | thick
+    std::string arrow;  // 箭头：arrow | none | both
 };
 
 // Graph: 统一图模型容器（命名上 g 常用于 Graph 实例）
-struct Graph {
-    std::string id;
-    std::string name;
-    std::string type = "flowchart";
+struct Graph
+{
+    std::string       id;
+    std::string       name;
+    std::string       type = "flowchart";
     std::vector<Node> nodes;
     std::vector<Edge> edges;
-    std::vector<Json> elements; // 原始白板元素（类似 excalidraw）
-    bool laidOut = false;
+    std::vector<Json> elements;  // 原始白板元素（类似 excalidraw）
+    bool              laidOut = false;
 
     // 通过节点 id 查找可写节点指针；nid = node id
-    Node* findNode(const std::string& nid) {
-        for (auto& n : nodes) if (n.id == nid) return &n;
+    Node* findNode(const std::string& nid)
+    {
+        for (auto& n : nodes)
+            if (n.id == nid)
+                return &n;
         return nullptr;
     }
     // 通过节点 id 查找只读节点指针；用于 const 场景避免误修改
-    const Node* findNode(const std::string& nid) const {
-        for (auto& n : nodes) if (n.id == nid) return &n;
+    const Node* findNode(const std::string& nid) const
+    {
+        for (auto& n : nodes)
+            if (n.id == nid)
+                return &n;
         return nullptr;
     }
     // ensureNode: 若节点已存在则复用，不存在则创建，避免重复建点
     // 关键步骤：先查重 -> 再按需要补 label -> 最后创建默认 rect 节点
-    Node& ensureNode(const std::string& nid, const std::string& label = "") {
+    Node& ensureNode(const std::string& nid, const std::string& label = "")
+    {
         for (auto& n : nodes) {
             if (n.id == nid) {
                 if (!label.empty() && (n.label.empty() || n.label == n.id))
@@ -68,27 +81,36 @@ struct Graph {
             }
         }
         Node n;
-        n.id = nid;
+        n.id    = nid;
         n.label = label.empty() ? nid : label;
         n.shape = "rect";
         nodes.push_back(n);
         return nodes.back();
     }
     // addEdge: 追加一条边，自动生成边 id（e1/e2...）
-    // 参数命名：from/to 与节点 id 对齐，label/style/arrow 分别控制文案、线型、箭头
-    void addEdge(const std::string& from, const std::string& to,
-                 const std::string& label = "", const std::string& style = "solid",
-                 const std::string& arrow = "arrow") {
+    // 参数命名：from/to 与节点 id 对齐，label/style/arrow
+    // 分别控制文案、线型、箭头
+    void addEdge(const std::string& from,
+                 const std::string& to,
+                 const std::string& label = "",
+                 const std::string& style = "solid",
+                 const std::string& arrow = "arrow")
+    {
         Edge e;
-        e.id = "e" + std::to_string(edges.size() + 1);
-        e.from = from; e.to = to; e.label = label; e.style = style; e.arrow = arrow;
+        e.id    = "e" + std::to_string(edges.size() + 1);
+        e.from  = from;
+        e.to    = to;
+        e.label = label;
+        e.style = style;
+        e.arrow = arrow;
         edges.push_back(e);
     }
 
     // ---- 统一模型的 JSON 序列化/反序列化 ----
     // toJson: 将 Graph 序列化为 JSON，便于持久化和跨模块传输
     // 关键步骤：按 nodes/edges/elements 三块组织结构，避免信息丢失
-    Json toJson() const {
+    Json toJson() const
+    {
         Json j = Json::obj();
         j.set("id", id);
         j.set("name", name);
@@ -100,15 +122,20 @@ struct Graph {
             jn.set("id", n.id);
             jn.set("label", n.label);
             jn.set("shape", n.shape);
-            if (!n.parent.empty()) jn.set("parent", n.parent);
-            if (!n.style.empty())  jn.set("style", n.style);
+            if (!n.parent.empty())
+                jn.set("parent", n.parent);
+            if (!n.style.empty())
+                jn.set("style", n.style);
             if (!n.attrs.empty()) {
                 Json ja = Json::arr();
-                for (auto& a : n.attrs) ja.push(Json(a));
+                for (auto& a : n.attrs)
+                    ja.push(Json(a));
                 jn.set("attrs", ja);
             }
-            jn.set("x", n.x); jn.set("y", n.y);
-            jn.set("w", n.w); jn.set("h", n.h);
+            jn.set("x", n.x);
+            jn.set("y", n.y);
+            jn.set("w", n.w);
+            jn.set("h", n.h);
             ns.push(jn);
         }
         j.set("nodes", ns);
@@ -118,7 +145,8 @@ struct Graph {
             je.set("id", e.id);
             je.set("from", e.from);
             je.set("to", e.to);
-            if (!e.label.empty()) je.set("label", e.label);
+            if (!e.label.empty())
+                je.set("label", e.label);
             je.set("style", e.style);
             je.set("arrow", e.arrow);
             es.push(je);
@@ -126,51 +154,62 @@ struct Graph {
         j.set("edges", es);
         if (!elements.empty()) {
             Json els = Json::arr();
-            for (auto& el : elements) els.push(el);
+            for (auto& el : elements)
+                els.push(el);
             j.set("elements", els);
         }
         return j;
     }
 
     // fromJson: 从 JSON 还原 Graph；与 toJson 成对，保证双向转换
-    // 关键步骤：先读图级字段 -> 再读 nodes/edges -> 最后恢复 whiteboard elements
-    static Graph fromJson(const Json& j) {
+    // 关键步骤：先读图级字段 -> 再读 nodes/edges -> 最后恢复 whiteboard
+    // elements
+    static Graph fromJson(const Json& j)
+    {
         Graph g;
-        g.id = j.str("id");
-        g.name = j.str("name");
-        g.type = j.str("type", "flowchart");
+        g.id      = j.str("id");
+        g.name    = j.str("name");
+        g.type    = j.str("type", "flowchart");
         g.laidOut = j.boolean("laidOut", false);
         if (const Json* ns = j.find("nodes")) {
-            if (ns->isArr()) for (auto& jn : *ns->a) {
-                Node n;
-                n.id = jn.str("id");
-                n.label = jn.str("label");
-                n.shape = jn.str("shape", "rect");
-                n.parent = jn.str("parent");
-                n.style = jn.str("style");
-                if (const Json* ja = jn.find("attrs")) {
-                    if (ja->isArr()) for (auto& a : *ja->a)
-                        if (a.isStr()) n.attrs.push_back(a.s);
+            if (ns->isArr())
+                for (auto& jn : *ns->a) {
+                    Node n;
+                    n.id     = jn.str("id");
+                    n.label  = jn.str("label");
+                    n.shape  = jn.str("shape", "rect");
+                    n.parent = jn.str("parent");
+                    n.style  = jn.str("style");
+                    if (const Json* ja = jn.find("attrs")) {
+                        if (ja->isArr())
+                            for (auto& a : *ja->a)
+                                if (a.isStr())
+                                    n.attrs.push_back(a.s);
+                    }
+                    n.x = jn.num("x");
+                    n.y = jn.num("y");
+                    n.w = jn.num("w");
+                    n.h = jn.num("h");
+                    g.nodes.push_back(n);
                 }
-                n.x = jn.num("x"); n.y = jn.num("y");
-                n.w = jn.num("w"); n.h = jn.num("h");
-                g.nodes.push_back(n);
-            }
         }
         if (const Json* es = j.find("edges")) {
-            if (es->isArr()) for (auto& je : *es->a) {
-                Edge e;
-                e.id = je.str("id");
-                e.from = je.str("from");
-                e.to = je.str("to");
-                e.label = je.str("label");
-                e.style = je.str("style", "solid");
-                e.arrow = je.str("arrow", "arrow");
-                g.edges.push_back(e);
-            }
+            if (es->isArr())
+                for (auto& je : *es->a) {
+                    Edge e;
+                    e.id    = je.str("id");
+                    e.from  = je.str("from");
+                    e.to    = je.str("to");
+                    e.label = je.str("label");
+                    e.style = je.str("style", "solid");
+                    e.arrow = je.str("arrow", "arrow");
+                    g.edges.push_back(e);
+                }
         }
         if (const Json* els = j.find("elements")) {
-            if (els->isArr()) for (auto& el : *els->a) g.elements.push_back(el);
+            if (els->isArr())
+                for (auto& el : *els->a)
+                    g.elements.push_back(el);
         }
         return g;
     }
@@ -179,45 +218,57 @@ struct Graph {
 // ---- 小型通用工具函数 ----
 
 // trim: 去掉字符串首尾空白；命名直观表示“裁剪空白”
-inline std::string trim(const std::string& s) {
+inline std::string trim(const std::string& s)
+{
     size_t b = s.find_first_not_of(" \t\r\n");
-    if (b == std::string::npos) return "";
+    if (b == std::string::npos)
+        return "";
     size_t e = s.find_last_not_of(" \t\r\n");
     return s.substr(b, e - b + 1);
 }
 
 // splitLines: 按行拆分文本（兼容 \r\n），供解析器逐行处理
-inline std::vector<std::string> splitLines(const std::string& text) {
+inline std::vector<std::string> splitLines(const std::string& text)
+{
     std::vector<std::string> lines;
-    std::string cur;
+    std::string              cur;
     for (char c : text) {
-        if (c == '\n') { lines.push_back(cur); cur.clear(); }
-        else if (c != '\r') cur += c;
+        if (c == '\n') {
+            lines.push_back(cur);
+            cur.clear();
+        }
+        else if (c != '\r')
+            cur += c;
     }
-    if (!cur.empty()) lines.push_back(cur);
+    if (!cur.empty())
+        lines.push_back(cur);
     return lines;
 }
 
 // toLower: 统一转小写，便于做大小写不敏感匹配
-inline std::string toLower(std::string s) {
+inline std::string toLower(std::string s)
+{
     std::transform(s.begin(), s.end(), s.begin(),
                    [](unsigned char c) { return (char)tolower(c); });
     return s;
 }
 
 // startsWith: 前缀判断，解析协议/关键字时常用
-inline bool startsWith(const std::string& s, const std::string& p) {
-    return s.size() >= p.size() && s.compare(0, p.size(), p) == 0;
-}
+inline bool startsWith(const std::string& s, const std::string& p)
+{ return s.size() >= p.size() && s.compare(0, p.size(), p) == 0; }
 
 // 生成简短且基本唯一的 id：g<epoch36><rand>
 // genId: 生成短 id（prefix + 时间戳36进制 + 随机尾缀）
 // 这样比纯随机更可读，也降低冲突概率
-inline std::string genId(const std::string& prefix = "g") {
+inline std::string genId(const std::string& prefix = "g")
+{
     static const char* al = "0123456789abcdefghijklmnopqrstuvwxyz";
-    unsigned long long v = (unsigned long long)time(nullptr);
-    std::string s;
-    while (v) { s += al[v % 36]; v /= 36; }
+    unsigned long long v  = (unsigned long long)time(nullptr);
+    std::string        s;
+    while (v) {
+        s += al[v % 36];
+        v /= 36;
+    }
     std::reverse(s.begin(), s.end());
     s += al[rand() % 36];
     s += al[rand() % 36];
@@ -227,17 +278,27 @@ inline std::string genId(const std::string& prefix = "g") {
 // 根据 label 长度估算默认节点尺寸（近似 UTF-8：按码点数统计）
 // defaultSize: 根据文本长度估算节点尺寸（UTF-8 场景下按码点近似）
 // 关键步骤：估算字符宽度 -> 计算基础宽高 -> 针对形状/ER 属性做修正
-inline void defaultSize(Node& n) {
+inline void defaultSize(Node& n)
+{
     size_t cps = 0;
-    for (unsigned char c : n.label) if ((c & 0xC0) != 0x80) cps++;
+    for (unsigned char c : n.label)
+        if ((c & 0xC0) != 0x80)
+            cps++;
     double wide = 0;
-    for (unsigned char c : n.label) if (c >= 0x80) { wide = 1; break; }
+    for (unsigned char c : n.label)
+        if (c >= 0x80) {
+            wide = 1;
+            break;
+        }
     double perChar = wide ? 14.0 : 8.5;
-    n.w = std::max(100.0, cps * perChar + 32.0);
-    n.h = (n.shape == "diamond") ? 60.0 : 44.0;
-    if (n.shape == "circle") { n.w = std::max(n.w, n.h); n.h = n.w; }
-    if (!n.attrs.empty()) // ER 实体：为属性行预留高度
+    n.w            = std::max(100.0, cps * perChar + 32.0);
+    n.h            = (n.shape == "diamond") ? 60.0 : 44.0;
+    if (n.shape == "circle") {
+        n.w = std::max(n.w, n.h);
+        n.h = n.w;
+    }
+    if (!n.attrs.empty())  // ER 实体：为属性行预留高度
         n.h = 30.0 + 22.0 * (double)n.attrs.size();
 }
 
-} // 命名空间 gm
+}  // namespace gm

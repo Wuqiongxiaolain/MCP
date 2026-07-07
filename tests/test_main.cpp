@@ -326,8 +326,14 @@ static void testMcpProtocol() {
     CHECK(mcp::handleMessage(call, store, resp));
     const Json* result = resp.find("result");
     CHECK(result != nullptr);
+    const Json* content = result ? result->find("content") : nullptr;
+    CHECK(content != nullptr);
+    CHECK(content && content->isArr());
+    CHECK(content && content->a != nullptr);
+    CHECK(content && !content->a->empty());
     std::string text;
-    if (result) text = result->find("content")->a->at(0).str("text");
+    if (content && content->isArr() && content->a && !content->a->empty())
+        text = content->a->at(0).str("text");
     Json created = Json::parse(text, &err);
     CHECK(created.str("status") == "created");
     std::string gid = created.str("id");

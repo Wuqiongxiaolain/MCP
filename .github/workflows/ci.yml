@@ -118,11 +118,20 @@ jobs:
         if: steps.sonar_precheck.outputs.should_run == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++ make unzip
+          sudo apt-get install -y curl g++ make unzip
 
-      - name: 编译（供分析使用）
+      - name: 下载 SonarCFamily build-wrapper
         if: steps.sonar_precheck.outputs.should_run == 'true'
-        run: make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
+        run: |
+          curl -fsSL "${SONAR_HOST_URL}/static/cpp/build-wrapper-linux-x86.zip" -o build-wrapper.zip
+          unzip -q build-wrapper.zip
+
+      - name: 生成 CFamily 编译数据库
+        if: steps.sonar_precheck.outputs.should_run == 'true'
+        run: |
+          rm -rf bw-output
+          ./build-wrapper-linux-x86/build-wrapper-linux-x86-64 --out-dir bw-output \
+            make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
 
       - name: SonarScanner 分析
         if: steps.sonar_precheck.outputs.should_run == 'true'

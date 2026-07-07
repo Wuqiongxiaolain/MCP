@@ -17,3 +17,4 @@ ci-smoke.*
 
 # 课程小作业草稿，不纳入版本控制
 docs/MiniTasks/
+out/

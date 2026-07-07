@@ -1,11 +1,11 @@
-// storage.hpp - JSON-file based graph store with version history & rollback
-// Layout on disk:
-//   <root>/index.json                     - graph catalogue
-//   <root>/<graphId>/latest.json          - current version of the model
-//   <root>/<graphId>/versions/v<N>.json   - immutable history snapshots
+// storage.hpp - 基于 JSON 文件的图存储（支持版本历史与回滚）
+// 磁盘结构：
+//   <root>/index.json                     - 图索引目录
+//   <root>/<graphId>/latest.json          - 当前模型版本
+//   <root>/<graphId>/versions/v<N>.json   - 不可变历史快照
 #pragma once
 #include "model.hpp"
-#include "exporters.hpp" // writeFile / readFile
+#include "exporters.hpp" // 复用 writeFile / readFile
 #include <ctime>
 #ifdef _WIN32
 #include <direct.h>
@@ -19,6 +19,7 @@ namespace gs {
 using gm::Graph;
 using gj::Json;
 
+// makeDir: 平台无关目录创建封装
 inline void makeDir(const std::string& path) {
 #ifdef _WIN32
     _mkdir(path.c_str());
@@ -27,6 +28,7 @@ inline void makeDir(const std::string& path) {
 #endif
 }
 
+// nowIso: 生成本地时间 ISO 字符串，用于版本时间戳
 inline std::string nowIso() {
     time_t t = time(nullptr);
     struct tm tmv;
@@ -40,8 +42,10 @@ inline std::string nowIso() {
     return buf;
 }
 
+// Store: 文件系统版图存储服务（索引 + latest + versions）
 class Store {
 public:
+    // root 为空时回退到环境变量 GRAPHMCP_STORE 或默认 graph-store
     explicit Store(std::string root = "") {
         if (root.empty()) {
             const char* env = getenv("GRAPHMCP_STORE");
@@ -53,7 +57,8 @@ public:
 
     const std::string& root() const { return root_; }
 
-    // ---- index ----
+    // ---- 索引 ----
+    // loadIndex: 读取索引；文件缺失或损坏时返回空索引结构
     Json loadIndex() const {
         std::string txt = ge::readFile(root_ + "/index.json");
         if (txt.empty()) {
@@ -70,12 +75,15 @@ public:
         }
         return j;
     }
+    // saveIndex: 将索引写回 index.json
     void saveIndex(const Json& idx) const {
         ge::writeFile(root_ + "/index.json", idx.dump(2));
     }
 
-    // ---- save: writes latest.json + a new immutable version snapshot ----
-    // returns the new version number
+    // ---- 保存：写 latest.json + 新的不可变版本快照 ----
+    // 返回新版本号
+    // save: 保存当前图并创建不可变快照版本
+    // 关键步骤：补齐 id/name -> 写 latest -> 写 versions/vN -> 更新索引版本计数
     int save(Graph& g, const std::string& note = "") {
         if (g.id.empty()) g.id = gm::genId();
         if (g.name.empty()) g.name = g.id;
@@ -120,7 +128,8 @@ public:
         return version;
     }
 
-    // ---- load latest or specific version ----
+    // ---- 加载 latest 或指定版本 ----
+    // load: 读取最新版本或指定版本；version<=0 表示 latest
     bool load(const std::string& id, Graph& out, int version = 0,
               std::string* err = nullptr) const {
         std::string path;
@@ -152,7 +161,8 @@ public:
         return true;
     }
 
-    // ---- history listing ----
+    // ---- 历史列表 ----
+    // history: 聚合指定图的版本元数据（时间、备注、节点/边数量）
     Json history(const std::string& id) const {
         Json list = Json::arr();
         Json idx = loadIndex();
@@ -180,7 +190,8 @@ public:
         return list;
     }
 
-    // ---- rollback: re-save an old snapshot as the newest version ----
+    // ---- 回滚：将旧快照重新保存为最新版本 ----
+    // rollback: 基于旧版本重新 save 成新版本（非破坏式回滚）
     bool rollback(const std::string& id, int version, int* newVersion,
                   std::string* err = nullptr) {
         Graph g;
@@ -195,4 +206,4 @@ private:
     std::string root_;
 };
 
-} // namespace gs
+} // 命名空间 gs

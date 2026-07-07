@@ -1,5 +1,5 @@
-// exporters.hpp - unified graph model -> drawio XML, Mermaid, Excalidraw
-// JSON, SVG, browser URLs; PNG/PDF via external converters when available.
+// exporters.hpp - 统一图模型导出：drawio XML、Mermaid、Excalidraw JSON、
+// SVG、浏览器 URL；PNG/PDF 在可用时通过外部转换器生成。
 #pragma once
 #include "model.hpp"
 #include "layout.hpp"
@@ -25,8 +25,9 @@ using gm::Node;
 using gm::Edge;
 using gj::Json;
 
-// ------------------------------------------------------------------ utils --
+// ------------------------------------------------------------------ 工具函数 --
 
+// xmlEscape: XML 文本转义，避免标签字符破坏导出结构
 inline std::string xmlEscape(const std::string& s) {
     std::string out;
     for (char c : s) {
@@ -42,6 +43,7 @@ inline std::string xmlEscape(const std::string& s) {
     return out;
 }
 
+// base64Encode: URL/嵌入场景下的二进制安全编码
 inline std::string base64Encode(const std::string& in) {
     static const char* tbl =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -66,12 +68,13 @@ inline std::string base64Encode(const std::string& in) {
     return out;
 }
 
-// create all parent directories of a file path (best-effort)
+// 创建文件路径的所有父目录（尽力而为）
+// ensureParentDirs: 按路径逐级创建父目录（best-effort）
 inline void ensureParentDirs(const std::string& path) {
     for (size_t i = 1; i < path.size(); i++) {
         if (path[i] == '/' || path[i] == '\\') {
             std::string dir = path.substr(0, i);
-            if (dir.size() == 2 && dir[1] == ':') continue; // drive letter
+            if (dir.size() == 2 && dir[1] == ':') continue; // Windows 盘符
 #ifdef _WIN32
             _mkdir(dir.c_str());
 #else
@@ -81,6 +84,7 @@ inline void ensureParentDirs(const std::string& path) {
     }
 }
 
+// writeFile/readFile: 统一文件 IO 封装，供导出与存储模块复用
 inline bool writeFile(const std::string& path, const std::string& content) {
     ensureParentDirs(path);
     std::ofstream f(path, std::ios::binary);
@@ -97,8 +101,9 @@ inline std::string readFile(const std::string& path) {
     return os.str();
 }
 
-// ---------------------------------------------------------------- mermaid --
+// ---------------------------------------------------------------- Mermaid --
 
+// sanitizeMermaidId: Mermaid 标识符清洗，规避非法字符导致的渲染失败
 inline std::string sanitizeMermaidId(const std::string& id) {
     std::string out;
     for (char c : id)
@@ -107,6 +112,8 @@ inline std::string sanitizeMermaidId(const std::string& id) {
     return out;
 }
 
+// toMermaid: 统一模型导出为 Mermaid 文本
+// 关键步骤：按图类型分支（mindmap/er/flowchart）-> 输出节点 -> 输出边
 inline std::string toMermaid(const Graph& g) {
     std::ostringstream os;
     if (g.type == "mindmap") {
@@ -142,7 +149,7 @@ inline std::string toMermaid(const Graph& g) {
         }
         return os.str();
     }
-    // flowchart / architecture / orgchart / whiteboard -> flowchart TD
+    // flowchart / architecture / orgchart / whiteboard 统一导出为 flowchart TD
     os << "flowchart TD\n";
     std::map<std::string, std::vector<const Node*>> byGroup;
     for (auto& n : g.nodes) {
@@ -152,7 +159,7 @@ inline std::string toMermaid(const Graph& g) {
     auto emitNode = [&](const Node* n, int indent) {
         std::string id = sanitizeMermaidId(n->id);
         std::string label = n->label.empty() ? n->id : n->label;
-        // escape mermaid-breaking chars inside labels
+        // 处理会影响 mermaid 解析的标签字符
         std::string safe;
         for (char c : label) {
             if (c == '"') safe += "#quot;";
@@ -167,7 +174,7 @@ inline std::string toMermaid(const Graph& g) {
         else                            os << "[\"" << safe << "\"]";
         os << "\n";
     };
-    // groups become subgraphs (single level)
+    // group 节点导出为 subgraph（单层）
     for (auto& n : g.nodes) {
         if (n.shape != "group") continue;
         os << "    subgraph " << sanitizeMermaidId(n.id)
@@ -175,7 +182,7 @@ inline std::string toMermaid(const Graph& g) {
         for (auto* c : byGroup[n.id]) emitNode(c, 8);
         os << "    end\n";
     }
-    // ungrouped nodes (and nodes whose parent is a normal node)
+    // 未分组节点（以及 parent 不是 group 的节点）
     for (auto& kv : byGroup) {
         const Node* p = kv.first.empty() ? nullptr : g.findNode(kv.first);
         if (p && p->shape == "group") continue;
@@ -194,8 +201,9 @@ inline std::string toMermaid(const Graph& g) {
     return os.str();
 }
 
-// ----------------------------------------------------------------- drawio --
+// ----------------------------------------------------------------- draw.io --
 
+// drawioStyle: 将统一 shape 映射为 draw.io 样式字符串
 inline std::string drawioStyle(const Node& n) {
     std::string base = "whiteSpace=wrap;html=1;";
     if (n.shape == "diamond") return "rhombus;" + base;
@@ -210,6 +218,8 @@ inline std::string drawioStyle(const Node& n) {
     return "rounded=0;" + base;
 }
 
+// toDrawio: 导出 draw.io XML
+// 关键步骤：先 layout 保证有坐标 -> 先输出 group 再输出普通节点 -> 最后输出边
 inline std::string toDrawio(Graph g) {
     gl::layout(g);
     std::ostringstream os;
@@ -223,20 +233,20 @@ inline std::string toDrawio(Graph g) {
     os << "      <root>\n";
     os << "        <mxCell id=\"0\"/>\n";
     os << "        <mxCell id=\"1\" parent=\"0\"/>\n";
-    // groups first so children can reference them as parents
+    // 先输出 group，确保子节点可引用其作为 parent
     std::vector<const Node*> ordered;
     for (auto& n : g.nodes) if (n.shape == "group") ordered.push_back(&n);
     for (auto& n : g.nodes) if (n.shape != "group") ordered.push_back(&n);
     for (auto* n : ordered) {
         std::string label = n->label;
-        if (!n->attrs.empty()) { // ER entity: label + attribute lines (HTML)
+        if (!n->attrs.empty()) { // ER 实体：标题 + 属性行（HTML）
             label = "<b>" + n->label + "</b>";
             for (auto& a : n->attrs) label += "<br/>" + a;
         }
         const Node* p = n->parent.empty() ? nullptr : g.findNode(n->parent);
         bool insideGroup = p && p->shape == "group";
         double x = n->x, y = n->y;
-        if (insideGroup) { x -= p->x; y -= p->y; } // drawio children use relative coords
+        if (insideGroup) { x -= p->x; y -= p->y; } // draw.io 子节点使用相对坐标
         os << "        <mxCell id=\"" << xmlEscape(n->id) << "\" value=\""
            << xmlEscape(label) << "\" style=\"" << drawioStyle(*n)
            << "\" vertex=\"1\" parent=\""
@@ -267,8 +277,9 @@ inline std::string toDrawio(Graph g) {
     return os.str();
 }
 
-// ------------------------------------------------------------- excalidraw --
+// ------------------------------------------------------------- Excalidraw --
 
+// excalidrawBase: 生成 Excalidraw 元素公共字段模板
 inline Json excalidrawBase(const std::string& id, const std::string& type,
                            double x, double y, double w, double h, int seed) {
     Json el = Json::obj();
@@ -297,6 +308,8 @@ inline Json excalidrawBase(const std::string& id, const std::string& type,
     return el;
 }
 
+// toExcalidraw: 导出 Excalidraw JSON
+// 关键步骤：whiteboard 直接透传；否则按节点/文本/连线分别生成元素
 inline std::string toExcalidraw(Graph g) {
     Json doc = Json::obj();
     doc.set("type", "excalidraw");
@@ -304,7 +317,7 @@ inline std::string toExcalidraw(Graph g) {
     doc.set("source", "graphmcp");
     Json els = Json::arr();
     if (!g.elements.empty()) {
-        // whiteboard scene: lossless pass-through of original elements
+        // 白板场景：无损透传原始 elements
         for (auto& el : g.elements) els.push(el);
     } else {
         gl::layout(g);
@@ -326,7 +339,7 @@ inline std::string toExcalidraw(Graph g) {
             bound.push(bt);
             el.set("boundElements", bound);
             els.push(el);
-            // bound text label
+            // 绑定文本标签
             std::string label = n.label;
             for (auto& a : n.attrs) label += "\n" + a;
             Json txt = excalidrawBase(n.id + "_txt", "text",
@@ -379,8 +392,10 @@ inline std::string toExcalidraw(Graph g) {
     return doc.dump(2);
 }
 
-// -------------------------------------------------------------------- svg --
+// -------------------------------------------------------------------- SVG --
 
+// toSVG: 导出可视化 SVG
+// 关键步骤：布局 -> 先画边后画节点 -> 根据形状选择图元并绘制标签
 inline std::string toSVG(Graph g) {
     gl::layout(g);
     double maxX = 200, maxY = 150;
@@ -397,14 +412,14 @@ inline std::string toSVG(Graph g) {
           "<path d=\"M0,0 L10,5 L0,10 z\" fill=\"#333\"/></marker></defs>\n";
     os << "  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}"
           ".lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>\n";
-    // edges under nodes
+    // 边先绘制在底层
     for (auto& e : g.edges) {
         const Node* a = g.findNode(e.from);
         const Node* b = g.findNode(e.to);
         if (!a || !b) continue;
         double ax = a->x + a->w / 2, ay = a->y + a->h / 2;
         double bx = b->x + b->w / 2, by = b->y + b->h / 2;
-        // clip to node borders (approximate, axis-aligned)
+        // 将连线端点裁剪到节点边界（近似、轴对齐）
         auto clip = [](double cx, double cy, double w, double h,
                        double tx, double ty, double& ox, double& oy) {
             double dx = tx - cx, dy = ty - cy;
@@ -430,7 +445,7 @@ inline std::string toSVG(Graph g) {
                << xmlEscape(e.label) << "</text>\n";
         }
     }
-    // nodes
+    // 再绘制节点
     for (auto& n : g.nodes) {
         std::string fill = n.shape == "group" ? "none" : "#eef4ff";
         std::string stroke = "#4a72b8";
@@ -460,7 +475,7 @@ inline std::string toSVG(Graph g) {
         if (n.attrs.empty()) {
             os << "  <text class=\"lbl\" x=\"" << cx << "\" y=\"" << cy + 5
                << "\" text-anchor=\"middle\">" << xmlEscape(n.label) << "</text>\n";
-        } else { // ER entity with attribute rows
+        } else { // ER 实体（包含属性行）
             os << "  <text class=\"lbl\" x=\"" << cx << "\" y=\"" << n.y + 20
                << "\" text-anchor=\"middle\" font-weight=\"bold\">"
                << xmlEscape(n.label) << "</text>\n";
@@ -478,9 +493,10 @@ inline std::string toSVG(Graph g) {
     return os.str();
 }
 
-// -------------------------------------------------------------------- url --
+// -------------------------------------------------------------------- URL --
 
-// mermaid.live URL with plain-base64 payload (no compression needed)
+// mermaid.live URL：使用普通 base64 载荷（无需压缩）
+// toMermaidLiveUrl: 生成可直接打开的 mermaid.live 编辑链接
 inline std::string toMermaidLiveUrl(const Graph& g) {
     Json payload = Json::obj();
     payload.set("code", toMermaid(g));
@@ -490,9 +506,10 @@ inline std::string toMermaidLiveUrl(const Graph& g) {
     return "https://mermaid.live/edit#base64:" + base64Encode(payload.dump());
 }
 
-// ------------------------------------------------------ png/pdf via tools --
+// ------------------------------------------------------ PNG/PDF 工具导出 --
 
-// absolute path (needed for browser file:// URLs)
+// 绝对路径（浏览器 file:// URL 需要）
+// absPath: 取绝对路径，避免外部工具在不同工作目录下找不到文件
 inline std::string absPath(const std::string& p) {
 #ifdef _WIN32
     char buf[1024];
@@ -504,14 +521,16 @@ inline std::string absPath(const std::string& p) {
     return p;
 }
 
-// build a browser file:// URL from a filesystem path
+// 由文件系统路径构建浏览器可用 file:// URL
+// fileUrl: 将本地文件路径转换为浏览器可识别的 file:/// URL
 inline std::string fileUrl(const std::string& path) {
     std::string abs = absPath(path);
     for (char& c : abs) if (c == '\\') c = '/';
     return "file:///" + abs;
 }
 
-// integer attribute value from the SVG header (width="..." / height="...")
+// 从 SVG 头部读取整型属性（width="..." / height="..."）
+// svgDim: 从 SVG 头部读取宽高属性，为截图/PDF输出提供尺寸参数
 inline int svgDim(const std::string& svg, const std::string& attr) {
     size_t p = svg.find(attr + "=\"");
     if (p == std::string::npos) return 0;
@@ -521,7 +540,8 @@ inline int svgDim(const std::string& svg, const std::string& attr) {
     return v;
 }
 
-// locate a Chromium-based browser (Chrome or Edge), by PATH name or install path
+// 按 PATH 名称或安装路径定位 Chromium 内核浏览器（Chrome/Edge）
+// findBrowser: 按候选路径探测可用 Chromium 内核浏览器
 inline std::string findBrowser() {
     std::vector<std::string> cands;
 #ifdef _WIN32
@@ -536,8 +556,8 @@ inline std::string findBrowser() {
     add(lad,  "\\Google\\Chrome\\Application\\chrome.exe");
     add(pf,   "\\Microsoft\\Edge\\Application\\msedge.exe");
     add(pf86, "\\Microsoft\\Edge\\Application\\msedge.exe");
-    // Hardcoded fallbacks: some shells (MSYS/Git Bash) hide env vars whose
-    // name contains parentheses, e.g. ProgramFiles(x86), so getenv fails.
+    // 硬编码兜底：某些 shell（MSYS/Git Bash）会隐藏带括号的环境变量名，
+    // 例如 ProgramFiles(x86)，导致 getenv 取不到。
     cands.push_back("C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe");
     cands.push_back("C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe");
     cands.push_back("C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe");
@@ -553,9 +573,9 @@ inline std::string findBrowser() {
     return "";
 }
 
-// Run a command quietly. On Windows, route through a temp .bat to dodge
-// cmd.exe's quote-stripping bug when a quoted exe path is combined with
-// redirection (which silently breaks std::system on such command lines).
+// 静默执行命令。Windows 下通过临时 .bat 规避 cmd.exe 在“带引号可执行路径
+// + 重定向”场景下的引号剥离问题（该问题会让 std::system 悄悄失败）。
+// runQuiet: 静默执行命令（Windows 下通过 .bat 规避 system 引号问题）
 inline int runQuiet(const std::string& cmd, const std::string& tmpBase) {
 #ifdef _WIN32
     std::string bat = tmpBase + ".run.bat";
@@ -578,11 +598,11 @@ inline std::wstring widen(const std::string& s) {
 }
 #endif
 
-// Launch a browser directly (no shell). On Windows this uses CreateProcessW
-// so it does not depend on cmd.exe / COMSPEC / PATH - important because MCP
-// clients often spawn the server with a stripped environment. bInheritHandles
-// is FALSE so the child can never write to our stdout (the JSON-RPC channel).
-// `argstr` is everything after the executable, pre-quoted as needed.
+// 直接拉起浏览器（不经 shell）。Windows 使用 CreateProcessW，因此不依赖
+// cmd.exe / COMSPEC / PATH。MCP 客户端常在精简环境中启动服务端，这点很关键。
+// bInheritHandles 设为 FALSE，避免子进程写入 stdout（JSON-RPC 通道）。
+// argstr 表示可执行文件之后的完整参数字符串（需提前处理好引号）。
+// launchBrowser: 直接拉起浏览器子进程做渲染，避免依赖 shell 环境
 inline int launchBrowser(const std::string& exe, const std::string& argstr) {
 #ifdef _WIN32
     std::string cmdline = "\"" + exe + "\" " + argstr;
@@ -606,12 +626,14 @@ inline int launchBrowser(const std::string& exe, const std::string& argstr) {
 #endif
 }
 
-// try external converters; returns tool name used or "" on failure.
-// Order: inkscape/rsvg/magick (if on PATH) -> Chromium browser (Chrome/Edge).
+// 尝试外部转换器；成功返回工具名，失败返回空字符串。
+// 顺序：inkscape/rsvg/magick（若在 PATH）-> Chromium 浏览器（Chrome/Edge）。
+// rasterize: 将 SVG 栅格化/打印为 png 或 pdf
+// 关键步骤：优先本地工具链 -> 失败后回退 headless 浏览器 -> 校验输出文件
 inline std::string rasterize(const std::string& svgPathIn, const std::string& outPathIn,
                              const std::string& fmt) {
-    // Normalize to absolute paths: browsers resolve --print-to-pdf / --screenshot
-    // relative to their own working dir, so a relative outPath silently misses.
+    // 统一转绝对路径：浏览器会以自身工作目录解析 --print-to-pdf / --screenshot，
+    // 若 outPath 是相对路径，可能静默写到错误位置。
     std::string svgPath = absPath(svgPathIn);
     std::string outPath = absPath(outPathIn);
 #ifdef _WIN32
@@ -624,7 +646,7 @@ inline std::string rasterize(const std::string& svgPathIn, const std::string& ou
         return check.good() && check.peek() != std::ifstream::traits_type::eof();
     };
 
-    std::vector<std::pair<std::string, std::string>> cands; // {tool, command}
+    std::vector<std::pair<std::string, std::string>> cands; // {工具名, 命令}
     cands.push_back({"inkscape",
         "inkscape \"" + svgPath + "\" --export-filename=\"" + outPath + "\"" + quiet});
     cands.push_back({"rsvg-convert",
@@ -636,8 +658,7 @@ inline std::string rasterize(const std::string& svgPathIn, const std::string& ou
         if (runQuiet(c.second, outPath) == 0 && produced()) return c.first;
     }
 
-    // Chromium fallback: wrap the SVG in a tightly-sized HTML page so the
-    // rendered output matches the diagram bounds instead of a full A4 page.
+    // Chromium 兜底：将 SVG 包进紧凑尺寸 HTML，避免输出默认为整页 A4。
     std::string browser = findBrowser();
     if (!browser.empty()) {
         std::string svg = readFile(svgPath);
@@ -652,9 +673,8 @@ inline std::string rasterize(const std::string& svgPathIn, const std::string& ou
         std::string htmlPath = svgPath + ".wrap.html";
         writeFile(htmlPath, html);
         std::string url = fileUrl(htmlPath);
-        // Dedicated user-data-dir: without it a new headless invocation attaches
-        // to an already-running Chrome/Edge and silently skips the job. Fall back
-        // to a dir beside the output when TEMP is unset (stripped MCP env).
+        // 独立 user-data-dir：没有它时，新 headless 进程可能附着到已运行浏览器，
+        // 导致任务被静默跳过。若 TEMP 不可用（精简 MCP 环境），回退到输出目录旁。
         const char* tmp = getenv("TEMP");
         if (!tmp) tmp = getenv("TMP");
         std::string profile = (tmp ? std::string(tmp) + "/graphmcp-chrome-profile"
@@ -682,16 +702,19 @@ inline std::string rasterize(const std::string& svgPathIn, const std::string& ou
     return "";
 }
 
-// --------------------------------------------------------------- dispatch --
+// --------------------------------------------------------------- 分发入口 --
 
+// ExportResult: 导出结果对象（ok/message/content/path 四元信息）
 struct ExportResult {
     bool ok = false;
-    std::string message;   // human-readable status
-    std::string content;   // inline content (text formats / url)
-    std::string path;      // output file, when written
+    std::string message;   // 人类可读状态信息
+    std::string content;   // 内联内容（文本格式 / URL）
+    std::string path;      // 写文件时的输出路径
 };
 
-// to: drawio | mermaid | excalidraw | svg | png | pdf | url | model
+// to 可选：drawio | mermaid | excalidraw | svg | png | pdf | url | model
+// exportGraph: 统一导出分发入口
+// 关键步骤：按目标格式生成内容 -> 可选写文件 -> 对 png/pdf 提供 SVG 回退
 inline ExportResult exportGraph(Graph g, const std::string& to,
                                 const std::string& outPath = "") {
     ExportResult r;
@@ -723,7 +746,7 @@ inline ExportResult exportGraph(Graph g, const std::string& to,
         std::string tool = rasterize(svgPath, base, to);
         std::remove(svgPath.c_str());
         if (tool.empty()) {
-            // graceful fallback: keep the SVG next to the requested output
+            // 平滑兜底：在目标输出旁保留一份 SVG
             std::string fallback = base + ".svg";
             writeFile(fallback, svg);
             r.message = "no external converter found (tried inkscape/rsvg-convert/"
@@ -759,9 +782,10 @@ inline ExportResult exportGraph(Graph g, const std::string& to,
     return r;
 }
 
-// ----------------------------------------------------- external editor open --
+// ----------------------------------------------------- 外部编辑器打开 --
 
-// opens a file or URL with the OS default handler / browser
+// 使用系统默认处理器/浏览器打开文件或 URL
+// openExternal: 用系统默认处理器打开 URL 或文件
 inline bool openExternal(const std::string& target) {
 #ifdef _WIN32
     std::string cmd = "start \"\" \"" + target + "\"";
@@ -773,4 +797,4 @@ inline bool openExternal(const std::string& target) {
     return std::system(cmd.c_str()) == 0;
 }
 
-} // namespace ge
+} // 命名空间 ge

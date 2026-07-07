@@ -1,9 +1,8 @@
-// main.cpp - graphmcp CLI entry point
-// A graph design & drawing MCP tool: parse structured diagram descriptions
-// (Mermaid / Markdown outline / CSV / XML / Excalidraw JSON) into a unified
-// graph model; validate, lay out, store with version history; export to
-// drawio / Mermaid / Excalidraw / SVG / PNG / PDF / browser URL; open in
-// external editors; and serve everything over the MCP protocol.
+// main.cpp - graphmcp 命令行入口
+// 这是一个图设计与绘制 MCP 工具：将结构化图描述（Mermaid / Markdown 大纲 /
+// CSV / XML / Excalidraw JSON）解析为统一图模型，再执行校验、自动布局、
+// 带版本历史的存储、导出（drawio / Mermaid / Excalidraw / SVG / PNG / PDF /
+// 浏览器 URL）、外部编辑器打开，以及通过 MCP 协议提供服务。
 #include "parsers.hpp"
 #include "exporters.hpp"
 #include "storage.hpp"
@@ -19,6 +18,7 @@ using gj::Json;
 
 namespace {
 
+// Args: 命令行参数结果（command=主命令，opts=--key value 形式选项表）
 struct Args {
     std::string command;
     std::map<std::string, std::string> opts;
@@ -29,6 +29,8 @@ struct Args {
     }
 };
 
+// parseArgs: 解析命令行参数
+// 关键步骤：读取 command -> 处理 --k=v / --k v / -o 三种参数写法
 Args parseArgs(int argc, char** argv) {
     Args a;
     if (argc >= 2) a.command = argv[1];
@@ -52,6 +54,7 @@ Args parseArgs(int argc, char** argv) {
     return a;
 }
 
+// readInput: 输入源统一入口（input 文件 > content 直传 > stdin）
 std::string readInput(const Args& a) {
     if (a.has("input")) {
         std::string txt = ge::readFile(a.get("input"));
@@ -62,17 +65,19 @@ std::string readInput(const Args& a) {
         return txt;
     }
     if (a.has("content")) return a.get("content");
-    // read stdin
+    // 从标准输入读取内容
     std::ostringstream os;
     os << std::cin.rdbuf();
     return os.str();
 }
 
+// printIssues: 统一打印校验问题列表
 void printIssues(const std::vector<gl::Issue>& issues) {
     for (auto& i : issues)
         std::cout << "  [" << i.severity << "] " << i.message << "\n";
 }
 
+// usage: 输出帮助信息
 int usage() {
     std::cout <<
         "graphmcp " << mcp::SERVER_VERSION << " - graph design & drawing MCP tool\n"
@@ -100,11 +105,12 @@ int usage() {
     return 1;
 }
 
-} // namespace
+} // 匿名命名空间
 
 #ifdef _WIN32
-// Windows delivers argv in the ANSI codepage; re-fetch as UTF-8 so that
-// Chinese names etc. survive into the JSON store.
+// Windows 传入的 argv 使用 ANSI 代码页；这里重新按 UTF-8 获取，
+// 以保证中文名称等内容写入 JSON 存储时不乱码。
+// utf8Args: Windows 下将系统参数转为 UTF-8，避免中文路径/名称乱码
 static std::vector<std::string> utf8Args() {
     int n = 0;
     wchar_t** wargv = CommandLineToArgvW(GetCommandLineW(), &n);
@@ -121,6 +127,8 @@ static std::vector<std::string> utf8Args() {
 }
 #endif
 
+// main: CLI 主入口
+// 关键步骤：参数解析 -> 命令分发 -> 统一异常处理
 int main(int argc, char** argv) {
     srand((unsigned)time(nullptr));
 #ifdef _WIN32

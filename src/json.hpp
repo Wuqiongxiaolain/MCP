@@ -1,5 +1,5 @@
-// json.hpp - minimal self-contained JSON parser/serializer for graphmcp
-// No external dependencies. Preserves object key insertion order.
+// json.hpp - graphmcp 使用的最小自包含 JSON 解析/序列化实现
+// 无外部依赖，并保留对象键的插入顺序。
 #pragma once
 #include <string>
 #include <vector>
@@ -14,6 +14,7 @@ class Json;
 using JArray  = std::vector<Json>;
 using JObject = std::vector<std::pair<std::string, Json>>;
 
+// Json: 轻量 JSON 值类型（命名约定：t=类型，b/n/s=布尔/数字/字符串，a/o=数组/对象）
 class Json {
 public:
     enum Type { NUL, BOOL, NUM, STR, ARR, OBJ };
@@ -31,6 +32,7 @@ public:
     Json(const char* v) : t(STR), s(v) {}
     Json(const std::string& v) : t(STR), s(v) {}
 
+    // arr/obj: 工厂方法，显式创建数组或对象类型，避免调用方手动设置内部字段
     static Json arr() { Json j; j.t = ARR; j.a = std::make_shared<JArray>();  return j; }
     static Json obj() { Json j; j.t = OBJ; j.o = std::make_shared<JObject>(); return j; }
 
@@ -41,24 +43,28 @@ public:
     bool isArr()    const { return t == ARR; }
     bool isObj()    const { return t == OBJ; }
 
-    // ---- object helpers ----
+    // ---- 对象操作辅助 ----
+    // find: 在对象中按 key 查值；找不到返回 nullptr
     const Json* find(const std::string& k) const {
         if (t != OBJ || !o) return nullptr;
         for (auto& kv : *o) if (kv.first == k) return &kv.second;
         return nullptr;
     }
+    // set: 设置对象字段；若 key 已存在则覆盖，保证调用简单直观
     Json& set(const std::string& k, Json v) {
         if (t != OBJ) { t = OBJ; o = std::make_shared<JObject>(); }
         for (auto& kv : *o) if (kv.first == k) { kv.second = std::move(v); return kv.second; }
         o->emplace_back(k, std::move(v));
         return o->back().second;
     }
+    // operator[]: 访问/创建对象字段，便于链式构造 JSON
     Json& operator[](const std::string& k) {
         if (t != OBJ) { t = OBJ; o = std::make_shared<JObject>(); }
         for (auto& kv : *o) if (kv.first == k) return kv.second;
         o->emplace_back(k, Json());
         return o->back().second;
     }
+    // str/num/boolean: 类型安全读取字段；类型不匹配时返回默认值
     std::string str(const std::string& k, const std::string& def = "") const {
         const Json* j = find(k);
         return (j && j->isStr()) ? j->s : def;
@@ -72,7 +78,8 @@ public:
         return (j && j->isBool()) ? j->b : def;
     }
 
-    // ---- array helpers ----
+    // ---- 数组操作辅助 ----
+    // push: 向数组追加元素；当前值不是数组时自动转为数组
     void push(Json v) {
         if (t != ARR) { t = ARR; a = std::make_shared<JArray>(); }
         a->push_back(std::move(v));
@@ -83,7 +90,8 @@ public:
         return 0;
     }
 
-    // ---- serialization ----
+    // ---- 序列化 ----
+    // escape: 序列化前转义控制字符，保证输出是合法 JSON 字符串
     static void escape(const std::string& in, std::string& out) {
         for (unsigned char c : in) {
             switch (c) {
@@ -104,6 +112,8 @@ public:
         }
     }
 
+    // dumpTo: 递归序列化核心函数
+    // 关键步骤：按类型分派 -> 处理嵌套容器 -> 根据 indent 控制格式化
     void dumpTo(std::string& out, int indent, int depth) const {
         auto pad = [&](int d) {
             if (indent >= 0) { out += '\n'; out.append((size_t)(indent * d), ' '); }
@@ -161,13 +171,15 @@ public:
         return out;
     }
 
-    // ---- parsing ----
+    // ---- 解析 ----
+    // Parser: 递归下降解析器（命名上 pos=当前游标，err=首个错误）
     struct Parser {
         const std::string& src;
         size_t pos = 0;
         std::string err;
         explicit Parser(const std::string& s) : src(s) {}
 
+        // skipWs: 跳过空白，确保后续解析从有效 token 开始
         void skipWs() {
             while (pos < src.size()) {
                 char c = src[pos];
@@ -175,6 +187,7 @@ public:
                 else break;
             }
         }
+        // fail: 记录首个错误并携带偏移位置，方便定位问题输入
         bool fail(const std::string& m) {
             if (err.empty()) {
                 std::ostringstream os;
@@ -183,6 +196,7 @@ public:
             }
             return false;
         }
+        // parseValue: JSON 值分发入口（对象/数组/字符串/字面量/数字）
         bool parseValue(Json& out) {
             skipWs();
             if (pos >= src.size()) return fail("unexpected end of input");
@@ -195,6 +209,7 @@ public:
             if (c == 'n') { if (src.compare(pos, 4, "null") == 0)  { pos += 4; out = Json();      return true; } return fail("bad literal"); }
             return parseNumber(out);
         }
+        // parseNumber: 读取数字 token 并交给 stod 转换
         bool parseNumber(Json& out) {
             size_t start = pos;
             if (pos < src.size() && (src[pos] == '-' || src[pos] == '+')) pos++;
@@ -206,6 +221,8 @@ public:
             } catch (...) { return fail("invalid number"); }
             return true;
         }
+        // parseString: 解析字符串，支持常见转义与 \uXXXX（含代理对）
+        // 关键步骤：逐字符扫描 -> 处理反斜杠转义 -> 最终编码为 UTF-8
         bool parseString(std::string& out) {
             if (src[pos] != '"') return fail("expected string");
             pos++;
@@ -237,7 +254,7 @@ public:
                                 else if (h >= 'A' && h <= 'F') cp |= (unsigned)(h - 'A' + 10);
                                 else return fail("bad hex digit");
                             }
-                            // surrogate pair
+                            // 代理对
                             if (cp >= 0xD800 && cp <= 0xDBFF && pos + 6 <= src.size() &&
                                 src[pos] == '\\' && src[pos + 1] == 'u') {
                                 unsigned lo = 0;
@@ -256,7 +273,7 @@ public:
                                     cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
                                 else pos = save;
                             }
-                            // encode UTF-8
+                            // 编码为 UTF-8
                             if (cp < 0x80) out += (char)cp;
                             else if (cp < 0x800) {
                                 out += (char)(0xC0 | (cp >> 6));
@@ -282,8 +299,9 @@ public:
             }
             return fail("unterminated string");
         }
+        // parseArray: 解析数组，循环读取 value 并处理逗号/结束括号
         bool parseArray(Json& out) {
-            pos++; // [
+            pos++; // 读取 '['
             out = Json::arr();
             skipWs();
             if (pos < src.size() && src[pos] == ']') { pos++; return true; }
@@ -298,8 +316,9 @@ public:
                 return fail("expected , or ]");
             }
         }
+        // parseObject: 解析对象，按 "key":value 形式逐项读取
         bool parseObject(Json& out) {
-            pos++; // {
+            pos++; // 读取 '{'
             out = Json::obj();
             skipWs();
             if (pos < src.size() && src[pos] == '}') { pos++; return true; }
@@ -323,6 +342,7 @@ public:
         }
     };
 
+    // parse: 对外解析入口；返回 Json，同时通过 err 输出错误信息
     static Json parse(const std::string& text, std::string* err = nullptr) {
         Parser p(text);
         Json out;
@@ -332,11 +352,11 @@ public:
         }
         p.skipWs();
         if (p.pos != text.size() && err && err->empty()) {
-            // trailing garbage tolerated for robustness, but reported
+            // 为了鲁棒性可容忍尾随内容，但会在 err 中反馈
         }
         if (err) *err = p.err;
         return out;
     }
 };
 
-} // namespace gj
+} // 命名空间 gj

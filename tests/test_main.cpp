@@ -233,6 +233,187 @@ static void testExcalidraw()
     CHECK(bendSvg.find("是") != std::string::npos);
 }
 
+static void testParseAnyAndModel()
+{
+    Graph g1 = gp::parseAny("flowchart TD\nA[One]-->B[Two]\n");
+    CHECK(g1.nodes.size() == 2);
+
+    Graph g2 = gp::parseAny("id,label,parent\nceo,CEO,\ncto,CTO,ceo\n", "auto");
+    CHECK(g2.type == "orgchart");
+
+    Graph g3 = gp::parseAny("from,to\nA,B\n", "csv", "architecture");
+    CHECK(g3.type == "architecture");
+
+    Graph src = gp::parseMermaid("flowchart TD\nA[Alpha]-->B[Beta]\n");
+    src.name  = "roundtrip";
+    std::string err;
+    Graph       dst = gp::parseAny(src.toJson().dump(), "model");
+    CHECK(dst.name == "roundtrip");
+    CHECK(dst.nodes.size() == 2);
+    CHECK(dst.findNode("A")->label == "Alpha");
+
+    Json modelDetect = Json::parse(src.toJson().dump(), &err);
+    CHECK(err.empty());
+    CHECK(gp::detectFormat(modelDetect.dump()) == "model");
+}
+
+static void testValidateWarnings()
+{
+    Graph g;
+    g.type = "flowchart";
+    gm::Node n;
+    n.id    = "solo";
+    n.label = "";
+    g.nodes.push_back(n);
+    g.ensureNode("other", "Other");
+    auto issues = gl::validate(g);
+    CHECK(!gl::hasErrors(issues));
+    bool emptyLabel = false, isolated = false;
+    for (const auto& i : issues) {
+        if (i.message.find("empty label") != std::string::npos)
+            emptyLabel = true;
+        if (i.message.find("isolated") != std::string::npos)
+            isolated = true;
+    }
+    CHECK(emptyLabel);
+    CHECK(isolated);
+}
+
+static void testOrgchartAndMindmapExport()
+{
+    Graph org = gp::parseCSV("id,label,parent\nceo,CEO,\ncto,CTO,ceo\n");
+    gl::layout(org);
+    CHECK(org.laidOut);
+    const gm::Node* ceo = org.findNode("ceo");
+    const gm::Node* cto = org.findNode("cto");
+    CHECK(ceo != nullptr && cto != nullptr && ceo->y < cto->y);
+
+    std::string orgMmd = ge::toMermaid(org);
+    CHECK(orgMmd.find("flowchart TD") != std::string::npos);
+    CHECK(orgMmd.find("CEO") != std::string::npos);
+
+    Graph       mm    = gp::parseMarkdownOutline("# Root\n## Branch\n");
+    std::string mmMmd = ge::toMermaid(mm);
+    CHECK(mmMmd.find("mindmap") != std::string::npos);
+    CHECK(mmMmd.find("Root") != std::string::npos);
+
+    Graph arch = gp::parseXML(
+        "<graph type=\"architecture\"><node id=\"a\" label=\"A\"/>"
+        "<node id=\"b\" label=\"B\"/><edge from=\"a\" to=\"b\"/></graph>");
+    gl::layout(arch);
+    std::string archSvg = ge::toSVG(arch);
+    CHECK(archSvg.find("<svg") != std::string::npos);
+}
+
+static void testExportGraphAndHelpers()
+{
+    Graph g = gp::parseMermaid("flowchart TD\nA[Start]-->B[End]\n");
+
+    ge::ExportResult bad = ge::exportGraph(g, "unknown");
+    CHECK(!bad.ok);
+    CHECK(bad.message.find("unknown export format") != std::string::npos);
+
+    ge::ExportResult url = ge::exportGraph(g, "url");
+    CHECK(url.ok);
+    CHECK(url.content.find("mermaid.live") != std::string::npos);
+
+    ge::ExportResult model = ge::exportGraph(g, "model");
+    CHECK(model.ok);
+    CHECK(model.content.find("\"nodes\"") != std::string::npos);
+
+    std::string      outPath = "test-store-tmp/ci-unit-export.mmd";
+    ge::ExportResult file    = ge::exportGraph(g, "mermaid", outPath);
+    CHECK(file.ok);
+    CHECK(file.path == outPath);
+    std::string saved = ge::readFile(outPath);
+    CHECK(saved.find("flowchart TD") != std::string::npos);
+
+    CHECK(ge::xmlEscape("a<b>&\"'") == "a&lt;b&gt;&amp;&quot;&#39;");
+    CHECK(ge::sanitizeMermaidId("a-b.c") == "a_b_c");
+    CHECK(ge::sanitizeMermaidId("!!!") == "___");
+
+    std::string svg = ge::toSVG(g);
+    CHECK(ge::svgDim(svg, "width") > 0);
+    CHECK(ge::svgDim(svg, "height") > 0);
+    CHECK(ge::fileUrl("C:/tmp/a.svg").find("file://") == 0);
+}
+
+static void testExcalidrawShapes()
+{
+    std::string doc = R"({
+      "type":"excalidraw","version":2,"elements":[
+        {"id":"d1","type":"diamond","x":10,"y":10,"width":80,"height":60},
+        {"id":"e1","type":"ellipse","x":120,"y":10,"width":90,"height":50},
+        {"id":"l1","type":"line","x":0,"y":0,"width":50,"height":50,
+         "points":[[0,0],[50,50]],"strokeStyle":"dashed"}
+      ]})";
+    Graph       g   = gp::parseExcalidraw(doc);
+    std::string svg = ge::toSVG(g);
+    CHECK(svg.find("<polygon") != std::string::npos);
+    CHECK(svg.find("<ellipse") != std::string::npos);
+    CHECK(svg.find("stroke-dasharray") != std::string::npos);
+}
+
+static void testMcpExtended()
+{
+    gs::Store   store("test-store-tmp");
+    std::string err;
+    Json        resp;
+
+    Json convert = Json::parse(
+        R"({"jsonrpc":"2.0","id":10,"method":"tools/call","params":{
+            "name":"graph_convert","arguments":{
+              "content":"flowchart TD\nP-->Q","format":"mermaid","to":"mermaid"}}})",
+        &err);
+    CHECK(mcp::handleMessage(convert, store, resp));
+    CHECK(resp.find("result")->find("content")->a->at(0).str("text").find(
+              "flowchart TD") != std::string::npos);
+
+    Json validate = Json::parse(
+        R"({"jsonrpc":"2.0","id":11,"method":"tools/call","params":{
+            "name":"graph_validate","arguments":{
+              "content":"flowchart TD\nX-->Y","format":"mermaid"}}})",
+        &err);
+    CHECK(mcp::handleMessage(validate, store, resp));
+    std::string vtext =
+        resp.find("result")->find("content")->a->at(0).str("text");
+    Json vj = Json::parse(vtext, &err);
+    CHECK(vj.boolean("valid", false));
+
+    Json create = Json::parse(
+        R"({"jsonrpc":"2.0","id":12,"method":"tools/call","params":{
+            "name":"graph_create","arguments":{
+              "content":"flowchart TD\nM-->N","name":"mcp-ext"}}})",
+        &err);
+    CHECK(mcp::handleMessage(create, store, resp));
+    std::string ctext =
+        resp.find("result")->find("content")->a->at(0).str("text");
+    Json        cj  = Json::parse(ctext, &err);
+    std::string gid = cj.str("id");
+
+    Json list = Json::parse(
+        R"({"jsonrpc":"2.0","id":13,"method":"tools/call","params":{
+            "name":"graph_list","arguments":{}}})",
+        &err);
+    CHECK(mcp::handleMessage(list, store, resp));
+    CHECK(resp.find("result")->find("content")->a->at(0).str("text").find(
+              gid) != std::string::npos);
+
+    Json hist = Json::parse(
+        R"({"jsonrpc":"2.0","id":14,"method":"tools/call","params":{
+            "name":"graph_history","arguments":{"id":")" +
+            gid + R"("}}})",
+        &err);
+    CHECK(mcp::handleMessage(hist, store, resp));
+    CHECK(resp.find("result")->find("content")->a->at(0).str("text").find(
+              "version") != std::string::npos);
+
+    Json ping =
+        Json::parse(R"({"jsonrpc":"2.0","id":15,"method":"ping"})", &err);
+    CHECK(mcp::handleMessage(ping, store, resp));
+    CHECK(resp.find("result") != nullptr);
+}
+
 static void testDetect()
 {
     CHECK(gp::detectFormat("flowchart TD\nA-->B") == "mermaid");
@@ -459,6 +640,11 @@ int runAll()
     testCSV();
     testXML();
     testExcalidraw();
+    testParseAnyAndModel();
+    testValidateWarnings();
+    testOrgchartAndMindmapExport();
+    testExportGraphAndHelpers();
+    testExcalidrawShapes();
     testDetect();
     testValidate();
     testLayout();
@@ -466,6 +652,7 @@ int runAll()
     testBase64();
     testStorage();
     testMcpProtocol();
+    testMcpExtended();
     std::cout << "tests: " << g_passed << " passed, " << g_failed
               << " failed\n";
     return g_failed == 0 ? 0 : 1;

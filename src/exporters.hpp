@@ -19,7 +19,12 @@
 #    endif
 #    include <windows.h>
 #else
+#    include <limits.h>
 #    include <sys/stat.h>
+#    include <unistd.h>
+#    ifndef PATH_MAX
+#        define PATH_MAX 4096
+#    endif
 #endif
 
 namespace ge {
@@ -43,7 +48,7 @@ struct FreedrawStroke
 // ------------------------------------------------------------------ 工具函数
 // --
 
-// xmlEscape: XML 文本转义，避免标签字符破坏导出结构
+// xmlEscape: 通用 XML 转义（文本与属性均安全；含单引号）
 inline std::string xmlEscape(const std::string& s)
 {
     std::string out;
@@ -54,6 +59,36 @@ inline std::string xmlEscape(const std::string& s)
             case '&': out += "&amp;"; break;
             case '"': out += "&quot;"; break;
             case '\'': out += "&#39;"; break;
+            default: out += c;
+        }
+    }
+    return out;
+}
+
+// xmlTextEscape: XML 文本节点转义；保留 CSS 单/双引号语义
+inline std::string xmlTextEscape(const std::string& s)
+{
+    std::string out;
+    for (char c : s) {
+        switch (c) {
+            case '<': out += "&lt;"; break;
+            case '>': out += "&gt;"; break;
+            case '&': out += "&amp;"; break;
+            default: out += c;
+        }
+    }
+    return out;
+}
+
+// xmlAttrEscape: 双引号包裹的 XML 属性值转义（不转义单引号）
+inline std::string xmlAttrEscape(const std::string& s)
+{
+    std::string out;
+    for (char c : s) {
+        switch (c) {
+            case '<': out += "&lt;"; break;
+            case '&': out += "&amp;"; break;
+            case '"': out += "&quot;"; break;
             default: out += c;
         }
     }
@@ -149,16 +184,87 @@ inline std::string readFile(const std::string& path)
     return os.str();
 }
 
-// bundledAssetPath: vendored Excalidraw 资源目录下的文件路径
+// fileReadable: 探测路径是否可打开读取
+inline bool fileReadable(const std::string& path)
+{
+    std::ifstream f(path, std::ios::binary);
+    return static_cast<bool>(f);
+}
+
+// joinPath: 用 / 拼接路径片段（兼容 Windows API 接受正斜杠）
+inline std::string joinPath(const std::string& a, const std::string& b)
+{
+    if (a.empty())
+        return b;
+    if (b.empty())
+        return a;
+    char last = a.back();
+    if (last == '/' || last == '\\')
+        return a + b;
+    return a + "/" + b;
+}
+
+// executableDir: 当前进程可执行文件所在目录（失败返回空）
+inline std::string executableDir()
+{
+#ifdef _WIN32
+    char  buf[MAX_PATH];
+    DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH)
+        return "";
+    std::string path(buf, n);
+#else
+    char    buf[PATH_MAX];
+    ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (n <= 0)
+        return "";
+    buf[n] = '\0';
+    std::string path(buf);
+#endif
+    size_t slash = path.find_last_of("/\\");
+    if (slash == std::string::npos)
+        return "";
+    return path.substr(0, slash);
+}
+
+// bundledAssetPath: 解析 vendored Excalidraw 资源文件
+// 顺序：GRAPHMCP_ASSETS → 可执行文件旁 third_party → CWD 相对路径
 inline std::string bundledAssetPath(const std::string& name)
-{ return "third_party/excalidraw-assets/" + name; }
+{
+    std::vector<std::string> candidates;
+    std::string              env = getEnvVar("GRAPHMCP_ASSETS");
+    if (!env.empty()) {
+        candidates.push_back(joinPath(env, name));
+        candidates.push_back(
+            joinPath(joinPath(env, "excalidraw-assets"), name));
+        candidates.push_back(
+            joinPath(joinPath(env, "third_party/excalidraw-assets"), name));
+    }
+    std::string exeDir = executableDir();
+    if (!exeDir.empty()) {
+        candidates.push_back(
+            joinPath(exeDir, joinPath("third_party/excalidraw-assets", name)));
+        candidates.push_back(joinPath(
+            exeDir, joinPath("../third_party/excalidraw-assets", name)));
+        candidates.push_back(joinPath(
+            exeDir, joinPath("../../third_party/excalidraw-assets", name)));
+    }
+    candidates.push_back(joinPath("third_party/excalidraw-assets", name));
+
+    for (const auto& c : candidates) {
+        if (fileReadable(c))
+            return c;
+    }
+    return candidates.back();
+}
 
 struct ExcalidrawFontMetrics
 {
-    int         unitsPerEm = 1000;
-    int         ascender   = 886;
-    int         descender  = -374;
-    double      lineHeight = 1.25;
+    int    unitsPerEm = 1000;
+    int    ascender   = 886;
+    int    descender  = -374;
+    double lineHeight = 1.25;
+    // 家族名用单引号：写入 font-family="..." 时由 xmlAttrEscape 保留 '
     std::string cssFamily =
         "'Excalifont',sans-serif,'Segoe UI Emoji','Apple Color Emoji'";
 };
@@ -200,61 +306,61 @@ inline std::string excalidrawTextFontFamilyCss(const Json& el)
 
 inline std::string excalidrawEmbeddedFontCss()
 {
-    static const std::string css = []() {
-        auto fontFace = [](const std::string& family, const std::string& file,
-                           const std::string& unicodeRange = "") {
-            std::string data = readFile(bundledAssetPath(file));
-            if (data.empty())
-                return std::string();
-            std::ostringstream os;
-            os << "@font-face{font-family:'" << family
-               << "';src:url(data:font/woff2;base64," << base64Encode(data)
-               << ") format('woff2');font-weight:400;font-style:normal;";
-            if (!unicodeRange.empty())
-                os << "unicode-range:" << unicodeRange << ";";
-            os << "}";
-            return os.str();
-        };
+    // 非空才缓存：首轮若资源未就绪（错误 CWD），后续可重试加载
+    static std::string css;
+    if (!css.empty())
+        return css;
 
+    auto fontFace = [](const std::string& family, const std::string& file,
+                       const std::string& unicodeRange = "") {
+        std::string data = readFile(bundledAssetPath(file));
+        if (data.empty())
+            return std::string();
         std::ostringstream os;
-        os << fontFace("Virgil", "Virgil.woff2");
-        os << fontFace("Cascadia", "Cascadia.woff2");
-        os << fontFace(
-            "Excalifont",
-            "Excalifont-Regular-a88b72a24fb54c9f94e3b5fdaa7481c9.woff2",
-            "U+20-7e,U+a0-a3,U+a5-a6,U+a8-ab,U+ad-b1,U+b4,U+b6-b8,U+ba-ff,"
-            "U+131,U+152-153,U+2bc,U+2c6,U+2da,U+2dc,U+304,U+308,U+2013-2014,"
-            "U+2018-201a,U+201c-201e,U+2020,U+2022,U+2024-2026,U+2030,"
-            "U+2039-203a,U+20ac,U+2122,U+2212");
-        os << fontFace(
-            "Excalifont",
-            "Excalifont-Regular-be310b9bcd4f1a43f571c46df7809174.woff2",
-            "U+100-130,U+132-137,U+139-149,U+14c-151,U+154-17e,U+192,"
-            "U+1fc-1ff,U+218-21b,U+237,U+1e80-1e85,U+1ef2-1ef3,U+2113");
-        os << fontFace(
-            "Excalifont",
-            "Excalifont-Regular-b9dcf9d2e50a1eaf42fc664b50a3fd0d.woff2",
-            "U+400-45f,U+490-491,U+2116");
-        os << fontFace(
-            "Excalifont",
-            "Excalifont-Regular-41b173a47b57366892116a575a43e2b6.woff2",
-            "U+37e,U+384-38a,U+38c,U+38e-393,U+395-3a1,U+3a3-3a8,U+3aa-3cf,"
-            "U+3d7");
-        os << fontFace(
-            "Excalifont",
-            "Excalifont-Regular-3f2c5db56cc93c5a6873b1361d730c16.woff2",
-            "U+2c7,U+2d8-2d9,U+2db,U+2dd,U+302,U+306-307,U+30a-30c,U+326-328,"
-            "U+212e,U+2211,U+fb01-fb02");
-        os << fontFace(
-            "Excalifont",
-            "Excalifont-Regular-349fac6ca4700ffec595a7150a0d1e1d.woff2",
-            "U+462-463,U+472-475,U+4d8-4d9,U+4e2-4e3,U+4e6-4e9,U+4ee-4ef");
-        os << fontFace(
-            "Excalifont",
-            "Excalifont-Regular-623ccf21b21ef6b3a0d87738f77eb071.woff2",
-            "U+300-301,U+303");
+        os << "@font-face{font-family:'" << family
+           << "';src:url(data:font/woff2;base64," << base64Encode(data)
+           << ") format('woff2');font-weight:400;font-style:normal;";
+        if (!unicodeRange.empty())
+            os << "unicode-range:" << unicodeRange << ";";
+        os << "}";
         return os.str();
-    }();
+    };
+
+    std::ostringstream os;
+    os << fontFace("Virgil", "Virgil.woff2");
+    os << fontFace("Cascadia", "Cascadia.woff2");
+    os << fontFace(
+        "Excalifont",
+        "Excalifont-Regular-a88b72a24fb54c9f94e3b5fdaa7481c9.woff2",
+        "U+20-7e,U+a0-a3,U+a5-a6,U+a8-ab,U+ad-b1,U+b4,U+b6-b8,U+ba-ff,"
+        "U+131,U+152-153,U+2bc,U+2c6,U+2da,U+2dc,U+304,U+308,U+2013-2014,"
+        "U+2018-201a,U+201c-201e,U+2020,U+2022,U+2024-2026,U+2030,"
+        "U+2039-203a,U+20ac,U+2122,U+2212");
+    os << fontFace("Excalifont",
+                   "Excalifont-Regular-be310b9bcd4f1a43f571c46df7809174.woff2",
+                   "U+100-130,U+132-137,U+139-149,U+14c-151,U+154-17e,U+192,"
+                   "U+1fc-1ff,U+218-21b,U+237,U+1e80-1e85,U+1ef2-1ef3,U+2113");
+    os << fontFace("Excalifont",
+                   "Excalifont-Regular-b9dcf9d2e50a1eaf42fc664b50a3fd0d.woff2",
+                   "U+400-45f,U+490-491,U+2116");
+    os << fontFace(
+        "Excalifont",
+        "Excalifont-Regular-41b173a47b57366892116a575a43e2b6.woff2",
+        "U+37e,U+384-38a,U+38c,U+38e-393,U+395-3a1,U+3a3-3a8,U+3aa-3cf,"
+        "U+3d7");
+    os << fontFace(
+        "Excalifont",
+        "Excalifont-Regular-3f2c5db56cc93c5a6873b1361d730c16.woff2",
+        "U+2c7,U+2d8-2d9,U+2db,U+2dd,U+302,U+306-307,U+30a-30c,U+326-328,"
+        "U+212e,U+2211,U+fb01-fb02");
+    os << fontFace(
+        "Excalifont",
+        "Excalifont-Regular-349fac6ca4700ffec595a7150a0d1e1d.woff2",
+        "U+462-463,U+472-475,U+4d8-4d9,U+4e2-4e3,U+4e6-4e9,U+4ee-4ef");
+    os << fontFace("Excalifont",
+                   "Excalifont-Regular-623ccf21b21ef6b3a0d87738f77eb071.woff2",
+                   "U+300-301,U+303");
+    css = os.str();
     return css;
 }
 
@@ -752,12 +858,16 @@ inline void excalidrawCanvasBounds(const Graph& g,
     for (const auto& el : g.elements) {
         std::string ty = el.str("type");
         if (ty == "arrow" || ty == "line" || ty == "freedraw") {
-            auto pts = elementAbsolutePoints(el);
+            auto   pts = elementAbsolutePoints(el);
+            double pad = 0.0;
+            // freedraw 轮廓半径约 strokeWidth/2，边界需计入以免 viewBox 裁切
+            if (ty == "freedraw")
+                pad = std::max(0.5, el.num("strokeWidth", 2.0) * 0.5) + 1.0;
             for (const auto& p : pts) {
-                minX = std::min(minX, p.first);
-                minY = std::min(minY, p.second);
-                maxX = std::max(maxX, p.first);
-                maxY = std::max(maxY, p.second);
+                minX = std::min(minX, p.first - pad);
+                minY = std::min(minY, p.second - pad);
+                maxX = std::max(maxX, p.first + pad);
+                maxY = std::max(maxY, p.second + pad);
             }
             continue;
         }
@@ -846,7 +956,7 @@ inline std::string toSVGExcalidraw(const Graph& g)
            << "\" height=\"" << hh << "\" fill=\"#000000\"/>\n";
         os << "    </mask>\n";
     }
-    os << "    <style>" << xmlEscape(excalidrawEmbeddedFontCss())
+    os << "    <style>" << xmlTextEscape(excalidrawEmbeddedFontCss())
        << "</style>\n";
     os << "  </defs>\n";
     os << "  <rect x=\"" << vx << "\" y=\"" << vy << "\" width=\"" << w
@@ -1028,8 +1138,9 @@ inline std::string toSVGExcalidraw(const Graph& g)
         auto lines = splitTextLinesNonEmpty(txt);
         os << "  <text class=\"ex-text\" x=\"" << x << "\" y=\"" << y
            << "\" font-size=\"" << fs << "\" text-anchor=\"" << align
-           << "\" font-family=\"" << xmlEscape(excalidrawTextFontFamilyCss(el))
-           << "\" fill=\"" << xmlEscape(fill) << "\" opacity=\"" << op << "\">";
+           << "\" font-family=\""
+           << xmlAttrEscape(excalidrawTextFontFamilyCss(el)) << "\" fill=\""
+           << xmlEscape(fill) << "\" opacity=\"" << op << "\">";
         for (size_t i = 0; i < lines.size(); i++) {
             double lineY = excalidrawTextSvgYAt(origin.second, el, i);
             os << "<tspan x=\"" << x << "\" y=\"" << lineY << "\">"

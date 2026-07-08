@@ -54,6 +54,8 @@ jobs:
           ./bin/graphmcp convert --input examples/example_input/workflow.drawio --to mermaid -o ci-smoke-workflow.mmd
           ./bin/graphmcp convert --input examples/example_input/outline.md --to mermaid -o ci-smoke-convert.mmd
           ./bin/graphmcp convert --input examples/example_input/whiteboard_freedraw.excalidraw --to svg -o ci-smoke-whiteboard.svg
+          ./bin/graphmcp convert --input examples/example_input/whiteboard_freedraw.excalidraw --to mermaid -o ci-smoke-whiteboard.mmd
+          ./bin/graphmcp convert --input examples/example_input/architecture.xml --to mermaid -o ci-smoke-architecture.mmd
           ./bin/graphmcp validate --input examples/example_input/er.mmd --format mermaid | grep -q "valid: no issues found"
           ./bin/graphmcp validate --input examples/example_input/architecture.xml --format xml | grep -q "valid: no issues found"
           test -s ci-smoke.drawio
@@ -62,6 +64,11 @@ jobs:
           test -s ci-smoke-workflow.mmd
           test -s ci-smoke-convert.mmd
           test -s ci-smoke-whiteboard.svg
+          test -s ci-smoke-whiteboard.mmd
+          test -s ci-smoke-architecture.mmd
+          cmp -s ci-smoke-workflow.mmd examples/example_output/workflow.drawio_out/workflow.drawio.mmd
+          cmp -s ci-smoke-whiteboard.mmd examples/example_output/whiteboard_freedraw.excalidraw_out/whiteboard_freedraw.excalidraw.mmd
+          cmp -s ci-smoke-architecture.mmd examples/example_output/architecture.xml_out/architecture.xml.mmd
 
           # serve: tools/list + tools/call graph_create
           printf '%s\n%s\n%s\n' \

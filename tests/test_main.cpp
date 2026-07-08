@@ -236,6 +236,31 @@ static void testExcalidraw()
     CHECK(imageSvg.find("transform=\"matrix(") != std::string::npos);
     CHECK(imageSvg.find("overflow=\"hidden\"") != std::string::npos);
     CHECK(imageSvg.find("clipPath id=\"clip-img1\"") == std::string::npos);
+    // 无 crop 应对走到 <image x=...> 直接输出；drawio/mermaid 不应崩溃
+    std::string imageNoCropDoc = R"({
+      "type":"excalidraw","version":2,"elements":[
+        {"id":"img2","type":"image","x":5,"y":6,"width":30,"height":15,
+         "fileId":"f1","opacity":100}
+      ],
+      "files":{
+        "f1":{
+          "mimeType":"image/png",
+          "id":"f1",
+          "dataURL":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2+2b8AAAAASUVORK5CYII=",
+          "created":1,
+          "lastRetrieved":1
+        }
+      }
+    })";
+    Graph       gImgNc         = gp::parseExcalidraw(imageNoCropDoc);
+    std::string imgNcSvg       = ge::toSVG(gImgNc);
+    CHECK(imgNcSvg.find("<image x=\"5\"") != std::string::npos ||
+          imgNcSvg.find("<image x=\"5.0") != std::string::npos);
+    CHECK(imgNcSvg.find("overflow=\"hidden\"") == std::string::npos);
+    std::string imgDrawio = ge::toDrawio(gImg);
+    CHECK(imgDrawio.find("<mxfile") != std::string::npos);
+    std::string imgMmd = ge::toMermaid(gImg);
+    CHECK(imgMmd.find("flowchart") != std::string::npos);
 
     // freedraw 在 Excalidraw 往返中应原样保留
     std::string withFreedraw = R"({
@@ -288,8 +313,13 @@ static void testExcalidraw()
     CHECK(gs.edges.size() == 1);
     CHECK(gs.edges[0].from == "t");
     CHECK(gs.edges[0].to == "s");
+    std::string startOnlySvg = ge::toSVG(gs);
+    // 白板 SVG 仍按元素几何保留 startArrowhead -> marker-start
+    CHECK(startOnlySvg.find("marker-start=\"url(#arrow)\"") !=
+          std::string::npos);
+    CHECK(startOnlySvg.find("marker-end=\"url(#arrow)\"") == std::string::npos);
 
-    // 多行彩色文本应保留颜色、透明度与 Excalifont
+    // 多行彩色文本应保留颜色、透明度与 Excalifont；CSS 单引号不得被 &#39; 化
     std::string multiText = R"({
       "type":"excalidraw","version":2,"elements":[
         {"id":"e1","type":"ellipse","x":120,"y":10,"width":90,"height":50,"opacity":50},
@@ -302,6 +332,23 @@ static void testExcalidraw()
     CHECK(multiSvg.find("<tspan") != std::string::npos);
     CHECK(multiSvg.find("opacity=\"0.5\"") != std::string::npos);
     CHECK(multiSvg.find("Excalifont") != std::string::npos);
+    CHECK(multiSvg.find("font-family=\"'Excalifont'") != std::string::npos);
+    CHECK(multiSvg.find("font-family=\"&#39;") == std::string::npos);
+    CHECK(multiSvg.find("@font-face{font-family:'Excalifont'") !=
+          std::string::npos);
+    size_t b64pos = multiSvg.find("base64,");
+    CHECK(b64pos != std::string::npos);
+    if (b64pos != std::string::npos) {
+        size_t payload = b64pos + 7;
+        // 须在索引前确认载荷字节存在，避免 CHECK 宏不构成运行时门控
+        if (payload < multiSvg.size()) {
+            char c = multiSvg[payload];
+            CHECK(c != '\'' && c != '\"' && c != ')');
+        }
+        else {
+            CHECK(false);
+        }
+    }
 
     // 不均匀折线的嵌字位置应按路径长度中点而不是按点序号取中
     std::string unevenArrow = R"({
@@ -338,6 +385,13 @@ static void testExcalidraw()
         scanPos = p + 1;
     }
     CHECK(matrixCount >= 4);
+    // scale=[-1,1] 的矩形：旋转后 matrix a 分量应为负（镜像）
+    size_t rMat = transformedSvg.find("transform=\"matrix(");
+    CHECK(rMat != std::string::npos);
+    if (rMat != std::string::npos) {
+        size_t numStart = rMat + std::string("transform=\"matrix(").size();
+        CHECK(transformedSvg[numStart] == '-');
+    }
 }
 
 static void testParseAnyAndModel()

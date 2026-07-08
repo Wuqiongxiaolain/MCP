@@ -3,7 +3,6 @@
 #include "../src/mcp.hpp"
 #include "../src/parsers.hpp"
 #include "../src/storage.hpp"
-#include <cstdio>
 #include <iostream>
 
 static int g_failed = 0;
@@ -231,6 +230,23 @@ static void testExcalidraw()
     CHECK(bendSvg.find("x=\"110\"") != std::string::npos);
     CHECK(bendSvg.find("mask id=\"mask-arr\"") != std::string::npos);
     CHECK(bendSvg.find("是") != std::string::npos);
+
+    // 多行彩色文本应保留颜色并拆成多行；HTML 路径应具备离线 fallback
+    std::string multiText = R"({
+      "type":"excalidraw","version":2,"elements":[
+        {"id":"e1","type":"ellipse","x":120,"y":10,"width":90,"height":50},
+        {"id":"t2","type":"text","x":120,"y":10,"width":60,"height":40,
+         "text":"红\n蓝","strokeColor":"#ff0000","fontSize":16}
+      ]})";
+    Graph       mt        = gp::parseExcalidraw(multiText);
+    std::string multiSvg  = ge::toSVG(mt);
+    CHECK(multiSvg.find("fill=\"#ff0000\"") != std::string::npos);
+    CHECK(multiSvg.find("<tspan") != std::string::npos);
+
+    std::string roughHtml = ge::toExcalidrawRoughHtml(mt);
+    CHECK(roughHtml.find("const hasRough=") != std::string::npos);
+    CHECK(roughHtml.find("rc.ellipse(el.x+el.width/2,el.y+el.height/2") !=
+          std::string::npos);
 }
 
 static void testParseAnyAndModel()

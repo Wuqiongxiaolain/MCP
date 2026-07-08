@@ -1,0 +1,18 @@
+erDiagram
+  STUDENT ||--o{ ENROLLMENT : enrolls
+  COURSE ||--o{ ENROLLMENT : contains
+  STUDENT {
+    int id
+    string name
+    string major
+  }
+  COURSE {
+    int id
+    string title
+    int credits
+  }
+  ENROLLMENT {
+    int student_id
+    int course_id
+    string grade
+  }

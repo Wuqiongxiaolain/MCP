@@ -343,6 +343,15 @@ excalidrawTextBBoxOrigin(const Json&                        el,
     return {el.num("x"), el.num("y")};
 }
 
+// splitTextLinesNonEmpty: 为 SVG/HTML 文本渲染保留至少一行
+inline std::vector<std::string> splitTextLinesNonEmpty(const std::string& text)
+{
+    std::vector<std::string> lines = gm::splitLines(text);
+    if (lines.empty())
+        lines.push_back(text);
+    return lines;
+}
+
 // collectArrowBoundTexts: 收集带嵌字的箭头及其文本元素
 inline void collectArrowBoundTexts(const Graph&                 g,
                                    std::map<std::string, Json>& arrows,
@@ -420,7 +429,7 @@ inline std::string toSVGExcalidraw(const Graph& g)
     os << "  <rect x=\"" << vx << "\" y=\"" << vy << "\" width=\"" << w
        << "\" height=\"" << h << "\" fill=\"#ffffff\"/>\n";
     os << "  <style>text{font-family:'Segoe UI',Arial,'Xiaolai',sans-serif;}"
-          ".ex-text{fill:#1e1e1e;}</style>\n";
+          ".ex-text{white-space:pre;}</style>\n";
 
     auto emitPolyline = [&](const std::vector<std::pair<double, double>>& pts,
                             const Json& el, bool arrowEnd, bool arrowStart) {
@@ -540,11 +549,19 @@ inline std::string toSVGExcalidraw(const Graph& g)
         double      x      = excalidrawTextSvgXAt(origin.first, el);
         double      y      = excalidrawTextSvgYAt(origin.second, el);
         std::string align  = svgTextAnchor(el.str("textAlign", "left"));
+        std::string fill   = el.str("strokeColor", "#1e1e1e");
         double      op =
             std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+        auto lines = splitTextLinesNonEmpty(txt);
         os << "  <text class=\"ex-text\" x=\"" << x << "\" y=\"" << y
            << "\" font-size=\"" << fs << "\" text-anchor=\"" << align
-           << "\" opacity=\"" << op << "\">" << xmlEscape(txt) << "</text>\n";
+           << "\" fill=\"" << xmlEscape(fill) << "\" opacity=\"" << op << "\">";
+        for (size_t i = 0; i < lines.size(); i++) {
+            double lineY = excalidrawTextSvgYAt(origin.second, el, i);
+            os << "<tspan x=\"" << x << "\" y=\"" << lineY << "\">"
+               << xmlEscape(lines[i]) << "</tspan>";
+        }
+        os << "</text>\n";
     }
     os << "</svg>\n";
     return os.str();
@@ -582,9 +599,23 @@ inline std::string toExcalidrawRoughHtml(const Graph& g)
           "elements=JSON.parse(document.getElementById('excalidraw-data')."
           "textContent);\n"
           "const svg=document.getElementById('scene');\n"
-          "const rc=rough.svg(svg);\n"
+          "const hasRough=!!(window.rough&&window.rough.svg);\n"
+          "const rc=hasRough?rough.svg(svg):null;\n"
           "function absPts(el){return "
           "(el.points||[[0,0]]).map(p=>[el.x+p[0],el.y+p[1]]);}\n"
+          "function textLines(el){const "
+          "t=((el.text===undefined||el.text===null)?'':el.text).replace(/"
+          "\\r\\n?/g,'\\n');"
+          "const lines=t.split('\\n');return lines.length?lines:[''];}\n"
+          "const "
+          "defs=document.createElementNS('http://www.w3.org/2000/"
+          "svg','defs');\n"
+          "defs.innerHTML='<marker id=\"arrow\" viewBox=\"0 0 10 10\" "
+          "refX=\"9\" "
+          "refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" "
+          "orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" "
+          "fill=\"context-stroke\"/></marker>';\n"
+          "svg.appendChild(defs);\n"
           "function arrowBoundOrigin(arrow,text){const pts=absPts(arrow);"
           "if(pts.length<2)return[text.x,text.y];let mx,my;"
           "if(pts.length%2===1){const "
@@ -598,9 +629,7 @@ inline std::string toExcalidrawRoughHtml(const Graph& g)
           "const boundTextByArrow=new Map();for(const el of elements)"
           "if(el.type==='text'&&el.containerId&&el.text)boundTextByArrow.set("
           "el.containerId,el);\n"
-          "const vb=svg.viewBox.baseVal;const "
-          "defs=document.createElementNS('http://www.w3.org/2000/"
-          "svg','defs');\n"
+          "const vb=svg.viewBox.baseVal;\n"
           "const labelPad=4;for(const [aid,text] of boundTextByArrow){const "
           "arrow=arrowById.get(aid);if(!arrow)continue;"
           "const [bx,by]=arrowBoundOrigin(arrow,text);const "
@@ -624,36 +653,79 @@ inline std::string toExcalidrawRoughHtml(const Graph& g)
           "function "
           "dash(st){if(st==='dashed')return[6,4];if(st==='dotted')return[1,4];"
           "return undefined;}\n"
+          "function plainPath(el,pts){const p=document.createElementNS("
+          "'http://www.w3.org/2000/svg','polyline');"
+          "p.setAttribute('fill','none');p.setAttribute('stroke',el."
+          "strokeColor||'#1e1e1e');"
+          "p.setAttribute('stroke-width',el.strokeWidth||2);"
+          "p.setAttribute('stroke-linecap','round');"
+          "p.setAttribute('stroke-linejoin','round');"
+          "p.setAttribute('opacity',(((el.opacity===undefined||el.opacity==="
+          "null)?100:el.opacity)/100).toString());"
+          "p.setAttribute('points',pts.map(p=>`${p[0]},${p[1]}`).join(' '));"
+          "if(el.strokeStyle==='dashed')p.setAttribute('stroke-dasharray','6,4'"
+          ");"
+          "else "
+          "if(el.strokeStyle==='dotted')p.setAttribute('stroke-dasharray','1,4'"
+          ");"
+          "if(el.endArrowhead)p.setAttribute('marker-end','url(#arrow)');"
+          "if(el.startArrowhead)p.setAttribute('marker-start','url(#arrow)');"
+          "return p;}\n"
           "function "
-          "baseOpts(el){return{roughness:el.roughness??1,seed:el.seed??1,"
+          "baseOpts(el){return{roughness:(el.roughness===undefined||el."
+          "roughness===null)?1:el.roughness,seed:(el.seed===undefined||el.seed="
+          "==null)?1:el.seed,"
           "stroke:el.strokeColor||'#1e1e1e',strokeWidth:el.strokeWidth||2,"
           "strokeLineDash:dash(el.strokeStyle),fill:(!el.backgroundColor||el."
           "backgroundColor==='transparent')?undefined:el.backgroundColor};}\n"
           "for(const el of elements){\n"
           "  const o=baseOpts(el);\n"
           "  "
-          "if(el.type==='rectangle'){svg.appendChild(rc.rectangle(el.x,el.y,el."
-          "width,el.height,o));}\n"
+          "if(el.type==='rectangle'){svg.appendChild(hasRough?"
+          "rc.rectangle(el.x,el.y,el.width,el.height,o):(()=>{const n=document."
+          "createElementNS('http://www.w3.org/2000/svg','rect');"
+          "n.setAttribute('x',el.x);n.setAttribute('y',el.y);n.setAttribute("
+          "'width',el.width);n.setAttribute('height',el.height);"
+          "n.setAttribute('fill',o.fill||'none');n.setAttribute('stroke',o."
+          "stroke);"
+          "n.setAttribute('stroke-width',o.strokeWidth);return n;})());}\n"
           "  else "
-          "if(el.type==='ellipse'){svg.appendChild(rc.ellipse(el.x,el.y,el."
-          "width,el.height,o));}\n"
+          "if(el.type==='ellipse'){svg.appendChild(hasRough?"
+          "rc.ellipse(el.x+el.width/2,el.y+el.height/2,el.width,el.height,o):"
+          "(()=>{const n=document.createElementNS('http://www.w3.org/2000/svg',"
+          "'ellipse');n.setAttribute('cx',el.x+el.width/2);"
+          "n.setAttribute('cy',el.y+el.height/2);n.setAttribute('rx',el.width/"
+          "2);"
+          "n.setAttribute('ry',el.height/"
+          "2);n.setAttribute('fill',o.fill||'none');"
+          "n.setAttribute('stroke',o.stroke);n.setAttribute('stroke-width',"
+          "o.strokeWidth);return n;})());}\n"
           "  else if(el.type==='diamond'){const "
           "cx=el.x+el.width/2,cy=el.y+el.height/2;"
-          "svg.appendChild(rc.polygon([[cx,el.y],[el.x+el.width,cy],[cx,el.y+"
-          "el.height],[el.x,cy]],o));}\n"
+          "svg.appendChild(hasRough?rc.polygon([[cx,el.y],[el.x+el.width,cy],["
+          "cx,el.y+"
+          "el.height],[el.x,cy]],o):(()=>{const n=document.createElementNS("
+          "'http://www.w3.org/2000/svg','polygon');n.setAttribute('points',"
+          "[[cx,el.y],[el.x+el.width,cy],[cx,el.y+el.height],[el.x,cy]].map("
+          "p=>`${p[0]},${p[1]}`).join(' "
+          "'));n.setAttribute('fill',o.fill||'none');"
+          "n.setAttribute('stroke',o.stroke);"
+          "n.setAttribute('stroke-width',o.strokeWidth);return n;})());}\n"
           "  else if(el.type==='arrow'||el.type==='line'){const pts=absPts(el);"
           "if(pts.length>=2){const lo=Object.assign({},o,{fill:undefined});"
           "if(el.endArrowhead)lo.arrowEnd='triangle';if(el.startArrowhead)lo."
           "arrowStart='triangle';"
-          "const path=rc.linearPath(pts,lo);let node=path;"
+          "const path=hasRough?rc.linearPath(pts,lo):plainPath(el,pts);let "
+          "node=path;"
           "if(el.type==='arrow'&&boundTextByArrow.has(el.id)){const "
           "g=document.createElementNS('http://www.w3.org/2000/svg','g');"
           "g.setAttribute('mask','url(#mask-'+el.id+')');g.appendChild(path);"
           "node=g;}"
           "svg.appendChild(node);}}\n"
           "  else if(el.type==='freedraw'){const pts=absPts(el);"
-          "if(pts.length>=2)svg.appendChild(rc.linearPath(pts,Object.assign({},"
-          "o,{fill:undefined})));}\n"
+          "if(pts.length>=2)svg.appendChild(hasRough?rc.linearPath(pts,Object."
+          "assign({},"
+          "o,{fill:undefined})):plainPath(el,pts));}\n"
           "}\n"
           "for(const el of elements){\n"
           "  if(el.type!=='text'||!el.text)continue;\n"
@@ -675,8 +747,12 @@ inline std::string toExcalidrawRoughHtml(const Graph& g)
           "  "
           "t.setAttribute('text-anchor',ta==='center'?'middle':(ta==='right'?'"
           "end':'start'));\n"
-          "  t.textContent=el.text;svg.appendChild(t);\n"
+          "  const lines=textLines(el);for(let i=0;i<lines.length;i++){const "
+          "sp=document.createElementNS('http://www.w3.org/2000/svg','tspan');"
+          "sp.setAttribute('x',tx);sp.setAttribute('y',by+vy+i*lhp);"
+          "sp.textContent=lines[i];t.appendChild(sp);}svg.appendChild(t);\n"
           "}\n"
+          "window.__graphmcp_render_ok=true;\n"
           "</script></body></html>\n";
     return os.str();
 }
@@ -1575,7 +1651,7 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
                     r.ok      = true;
                     r.path    = base;
                     r.message = "png written via " + tool +
-                                " (excalidraw rough style): " + base;
+                                " (whiteboard html renderer): " + base;
                     return r;
                 }
             }

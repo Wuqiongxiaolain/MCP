@@ -727,6 +727,10 @@ inline Graph parseExcalidraw(const std::string& text)
         throw ParseError("excalidraw: missing 'elements' array");
     Graph g;
     g.type = "whiteboard";
+    if (const Json* fs = j.find("files")) {
+        if (fs->isObj())
+            g.files = *fs;
+    }
     // 保留原始 elements，支持无损往返转换
     for (auto& el : *els->a) {
         if (el.boolean("isDeleted", false))

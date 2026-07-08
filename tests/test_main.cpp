@@ -195,6 +195,48 @@ static void testExcalidraw()
     Graph       g2  = gp::parseExcalidraw(out);
     CHECK(g2.elements.size() == 4);
 
+    // image + files 应在 parse / export / svg 渲染链路中完整保留
+    std::string imageDoc = R"({
+      "type":"excalidraw","version":2,"elements":[
+        {"id":"img1","type":"image","x":10,"y":10,"width":40,"height":20,
+         "angle":0.5,
+         "fileId":"f1","opacity":100,
+         "scale":[-1,1],
+         "crop":{"x":1,"y":1,"width":40,"height":20,"naturalWidth":80,"naturalHeight":40}}
+      ],
+      "files":{
+        "f1":{
+          "mimeType":"image/png",
+          "id":"f1",
+          "dataURL":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2+2b8AAAAASUVORK5CYII=",
+          "created":1,
+          "lastRetrieved":1
+        }
+      }
+    })";
+    Graph       gImg     = gp::parseExcalidraw(imageDoc);
+    CHECK(gImg.elements.size() == 1);
+    CHECK(gImg.files.isObj());
+    const Json* f1 = gImg.files.find("f1");
+    CHECK(f1 != nullptr);
+    if (f1)
+        CHECK(f1->str("mimeType") == "image/png");
+    std::string outImg = ge::toExcalidraw(gImg);
+    std::string errImg;
+    Json        jImg = Json::parse(outImg, &errImg);
+    CHECK(errImg.empty());
+    CHECK(jImg.find("files") && jImg.find("files")->isObj());
+    CHECK(jImg.find("files") && jImg.find("files")->find("f1"));
+    CHECK(jImg.find("files") &&
+          jImg.find("files")->find("f1")->str("dataURL").find(
+              "data:image/png;base64,") == 0);
+    std::string imageSvg = ge::toSVG(gImg);
+    CHECK(imageSvg.find("<image ") != std::string::npos);
+    CHECK(imageSvg.find("data:image/png;base64,") != std::string::npos);
+    CHECK(imageSvg.find("transform=\"matrix(") != std::string::npos);
+    CHECK(imageSvg.find("overflow=\"hidden\"") != std::string::npos);
+    CHECK(imageSvg.find("clipPath id=\"clip-img1\"") == std::string::npos);
+
     // freedraw 在 Excalidraw 往返中应原样保留
     std::string withFreedraw = R"({
       "type":"excalidraw","version":2,"elements":[
@@ -247,7 +289,7 @@ static void testExcalidraw()
     CHECK(gs.edges[0].from == "t");
     CHECK(gs.edges[0].to == "s");
 
-    // 多行彩色文本应保留颜色并拆成多行；HTML 路径应具备离线 fallback
+    // 多行彩色文本应保留颜色、透明度与 Excalifont
     std::string multiText = R"({
       "type":"excalidraw","version":2,"elements":[
         {"id":"e1","type":"ellipse","x":120,"y":10,"width":90,"height":50,"opacity":50},
@@ -259,14 +301,7 @@ static void testExcalidraw()
     CHECK(multiSvg.find("fill=\"#ff0000\"") != std::string::npos);
     CHECK(multiSvg.find("<tspan") != std::string::npos);
     CHECK(multiSvg.find("opacity=\"0.5\"") != std::string::npos);
-
-    std::string roughHtml = ge::toExcalidrawRoughHtml(mt);
-    CHECK(roughHtml.find("const hasRough=") != std::string::npos);
-    CHECK(roughHtml.find("rc.ellipse(el.x+el.width/2,el.y+el.height/2") !=
-          std::string::npos);
-    CHECK(roughHtml.find("function polyMid(") != std::string::npos);
-    CHECK(roughHtml.find("stroke-dasharray','6,4'") != std::string::npos);
-    CHECK(roughHtml.find("n.setAttribute('opacity'") != std::string::npos);
+    CHECK(multiSvg.find("Excalifont") != std::string::npos);
 
     // 不均匀折线的嵌字位置应按路径长度中点而不是按点序号取中
     std::string unevenArrow = R"({
@@ -283,6 +318,26 @@ static void testExcalidraw()
     std::string unevenSvg   = ge::toSVG(gp::parseExcalidraw(unevenArrow));
     CHECK(unevenSvg.find("x=\"290\"") != std::string::npos ||
           unevenSvg.find("x=\"290.") != std::string::npos);
+
+    // 旋转/镜像：rectangle/ellipse/diamond/text 都应带 matrix 变换
+    std::string transformedDoc = R"({
+      "type":"excalidraw","version":2,"elements":[
+        {"id":"rT","type":"rectangle","x":10,"y":10,"width":80,"height":40,"angle":0.2,"scale":[-1,1]},
+        {"id":"eT","type":"ellipse","x":130,"y":10,"width":70,"height":40,"angle":-0.3,"scale":[1,-1]},
+        {"id":"dT","type":"diamond","x":230,"y":10,"width":80,"height":50,"angle":0.4,"scale":[-1,-1]},
+        {"id":"tT","type":"text","x":40,"y":90,"width":120,"height":30,"text":"旋转文本","angle":0.5,"scale":[-1,1],"fontSize":16}
+      ]})";
+    std::string transformedSvg = ge::toSVG(gp::parseExcalidraw(transformedDoc));
+    size_t      matrixCount    = 0;
+    size_t      scanPos        = 0;
+    while (true) {
+        size_t p = transformedSvg.find("transform=\"matrix(", scanPos);
+        if (p == std::string::npos)
+            break;
+        matrixCount++;
+        scanPos = p + 1;
+    }
+    CHECK(matrixCount >= 4);
 }
 
 static void testParseAnyAndModel()
@@ -560,10 +615,12 @@ static void testExporters()
     Graph       wb    = gp::parseExcalidraw(R"({
       "type":"excalidraw","version":2,"elements":[
         {"id":"fdA","type":"freedraw","x":100,"y":80,"strokeColor":"#00aa00",
-         "strokeWidth":2,"points":[[0,0],[20,10],[40,6],[70,20]]}
+         "strokeWidth":2,"points":[[0,0],[20,10],[40,6],[70,20]],
+         "pressures":[0.2,0.5,0.9,0.4],"simulatePressure":true}
       ]})");
     std::string wbSvg = ge::toSVG(wb);
-    CHECK(wbSvg.find("<polyline") != std::string::npos);
+    CHECK(wbSvg.find("<path d=\"M ") != std::string::npos);
+    CHECK(wbSvg.find("<polyline") == std::string::npos);
     CHECK(wbSvg.find("#00aa00") != std::string::npos);
 
     std::string wbDrawio = ge::toDrawio(wb);

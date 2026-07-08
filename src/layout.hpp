@@ -1,7 +1,8 @@
 // layout.hpp - 基础自动布局 + 图结构校验
 #pragma once
-#include "model.hpp"
 #include <queue>
+
+#include "model.hpp"
 
 namespace gl {
 

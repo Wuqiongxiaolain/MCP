@@ -1,10 +1,14 @@
 // test_main.cpp - assertion-based unit tests for graphmcp core modules
-#include "../src/exporters.hpp"
-#include "../src/mcp.hpp"
-#include "../src/parsers.hpp"
-#include "../src/storage.hpp"
 #include <cstdlib>
 #include <iostream>
+
+#include "../src/parsers.hpp"
+
+#include "../src/exporters.hpp"
+
+#include "../src/storage.hpp"
+
+#include "../src/mcp.hpp"
 
 static int g_failed = 0;
 static int g_passed = 0;
@@ -862,15 +866,15 @@ static void testGraphUpdateViaId()
 {
     std::string root = "test-store-tmp";
     gs::Store   store(root);
-    Graph g = gp::parseMermaid("flowchart TD\nA-->B\n");
-    g.name  = "update-test";
-    int v1  = store.save(g, "first");
+    Graph       g = gp::parseMermaid("flowchart TD\nA-->B\n");
+    g.name        = "update-test";
+    int v1        = store.save(g, "first");
     CHECK(v1 == 1);
     std::string gid = g.id;
-    Graph g2 = gp::parseMermaid("flowchart TD\nX-->Y-->Z\n");
-    g2.id    = gid;
-    g2.name  = "update-test";
-    int v2   = store.save(g2, "second");
+    Graph       g2  = gp::parseMermaid("flowchart TD\nX-->Y-->Z\n");
+    g2.id           = gid;
+    g2.name         = "update-test";
+    int v2          = store.save(g2, "second");
     CHECK(v2 == 2);
     Json h = store.history(gid);
     CHECK(h.size() == 2);
@@ -883,7 +887,7 @@ static void testGraphUpdateViaId()
 
 static void testMCPCreateWithId()
 {
-    gs::Store store("test-store-tmp");
+    gs::Store   store("test-store-tmp");
     std::string err;
     Json        call1 = Json::parse(
         R"({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{

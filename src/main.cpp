@@ -3,15 +3,20 @@
 // CSV / XML / Excalidraw JSON）解析为统一图模型，再执行校验、自动布局、
 // 带版本历史的存储、导出（drawio / Mermaid / Excalidraw / SVG / PNG / PDF /
 // 浏览器 URL）、外部编辑器打开，以及通过 MCP 协议提供服务。
-#include "exporters.hpp"
-#include "mcp.hpp"
-#include "parsers.hpp"
-#include "storage.hpp"
 #include <iostream>
 
+#include "parsers.hpp"
+
+#include "exporters.hpp"
+
+#include "storage.hpp"
+
+#include "mcp.hpp"
+
 #ifdef _WIN32
-#    include <shellapi.h>
 #    include <windows.h>
+
+#    include <shellapi.h>
 #endif
 
 using gj::Json;
@@ -103,7 +108,8 @@ int usage()
            "X] [--id X]\n"
            "            parse + validate + layout + save to store; prints "
            "graph id\n"
-           "  update    --id <id> --input <file> [--format auto] [--type X] [--name X]\n"
+           "  update    --id <id> --input <file> [--format auto] [--type X] "
+           "[--name X]\n"
            "            update stored graph from new input (version "
            "auto-increments)\n"
            "  convert   --input <file> --to <fmt> [-o out]     one-shot "
@@ -287,13 +293,14 @@ int main(int argc, char** argv)
             }
             std::string newContent = readInput(a);
             if (newContent.empty()) {
-                std::cerr << "error: no input provided (use --input, --content, "
-                             "or pipe)\n";
+                std::cerr
+                    << "error: no input provided (use --input, --content, "
+                       "or pipe)\n";
                 return 1;
             }
             Graph updated = gp::parseAny(newContent, a.get("format", "auto"),
-                                          a.get("type", g.type));
-            updated.id = g.id;
+                                         a.get("type", g.type));
+            updated.id    = g.id;
             if (a.has("name"))
                 updated.name = a.get("name");
             else
@@ -307,9 +314,10 @@ int main(int argc, char** argv)
             }
             gl::layout(updated);
             int v = store.save(updated, a.get("note", "updated via CLI"));
-            std::cout << "updated graph '" << updated.name << "' id="
-                      << updated.id << " v" << v << " (" << updated.nodes.size()
-                      << " nodes, " << updated.edges.size() << " edges)\n";
+            std::cout << "updated graph '" << updated.name
+                      << "' id=" << updated.id << " v" << v << " ("
+                      << updated.nodes.size() << " nodes, "
+                      << updated.edges.size() << " edges)\n";
             return 0;
         }
         if (a.command == "validate") {

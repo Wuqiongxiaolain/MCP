@@ -1,10 +1,13 @@
 // mcp.hpp - Model Context Protocol 服务端（基于 stdio 的 JSON-RPC 2.0，
 // 按行分隔消息）。对外提供图创建/转换/导出/打开/校验/历史等工具。
 #pragma once
-#include "exporters.hpp"
-#include "parsers.hpp"
-#include "storage.hpp"
 #include <iostream>
+
+#include "parsers.hpp"
+
+#include "exporters.hpp"
+
+#include "storage.hpp"
 
 namespace mcp {
 
@@ -258,9 +261,9 @@ class ToolRunner {
             return textContent(out.dump(2), true);
         }
         gl::layout(g);
-        std::string note = a.str("id").empty() ? "created via MCP" :
-                                                 "updated via MCP";
-        int         v    = store_.save(g, note);
+        std::string note =
+            a.str("id").empty() ? "created via MCP" : "updated via MCP";
+        int  v   = store_.save(g, note);
         Json out = Json::obj();
         out.set("status", v > 1 ? "updated" : "created");
         out.set("id", g.id);
@@ -335,9 +338,8 @@ class ToolRunner {
         out.set("launched", launched);
         std::string hint =
             launched ?
-                (editorPath.empty() ?
-                     "opened with system default handler" :
-                     "opened with editor: " + editorPath) :
+                (editorPath.empty() ? "opened with system default handler" :
+                                      "opened with editor: " + editorPath) :
                 "could not launch automatically; open the target manually";
         if (!ge::findDrawioDesktop().empty())
             hint += " (draw.io Desktop detected)";

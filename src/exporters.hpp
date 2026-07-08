@@ -1,13 +1,15 @@
 // exporters.hpp - 统一图模型导出：drawio XML、Mermaid、Excalidraw JSON、
 // SVG、浏览器 URL；PNG/PDF 在可用时通过外部转换器生成。
 #pragma once
-#include "layout.hpp"
-#include "model.hpp"
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <sstream>
+
+#include "model.hpp"
+
+#include "layout.hpp"
 
 #ifdef _WIN32
 #    include <direct.h>
@@ -18,9 +20,11 @@
 #        define WIN32_LEAN_AND_MEAN
 #    endif
 #    include <windows.h>
+
 #    include <shellapi.h>
 #elif defined(__APPLE__)
 #    include <limits.h>
+
 #    include <mach-o/dyld.h>
 #    include <sys/stat.h>
 #    ifndef PATH_MAX
@@ -28,8 +32,9 @@
 #    endif
 #else
 #    include <limits.h>
-#    include <sys/stat.h>
 #    include <unistd.h>
+
+#    include <sys/stat.h>
 #    ifndef PATH_MAX
 #        define PATH_MAX 4096
 #    endif
@@ -1840,9 +1845,7 @@ inline std::string findBrowser()
 
 // editorFromEnv: 读取 GRAPHMCP_EDITOR 环境变量，允许用户覆盖默认编辑器
 inline std::string editorFromEnv()
-{
-    return getEnvVar("GRAPHMCP_EDITOR");
-}
+{ return getEnvVar("GRAPHMCP_EDITOR"); }
 
 // findExecutable: 从候选路径列表中定位第一个存在的可执行文件
 inline std::string findExecutable(const std::vector<std::string>& cands)
@@ -1882,8 +1885,7 @@ inline std::string findVSCode()
 #ifdef _WIN32
     std::string lad = getEnvVar("LOCALAPPDATA");
     if (!lad.empty())
-        cands.push_back(lad +
-                        "\\Programs\\Microsoft VS Code\\Code.exe");
+        cands.push_back(lad + "\\Programs\\Microsoft VS Code\\Code.exe");
     std::string pf = getEnvVar("ProgramFiles");
     if (!pf.empty())
         cands.push_back(pf + "\\Microsoft VS Code\\Code.exe");
@@ -2205,8 +2207,8 @@ inline bool openExternal(const std::string& target,
     std::wstring wtarget = widen(target);
     if (!editor.empty()) {
         std::wstring weditor = widen(editor);
-        HINSTANCE    h       = ShellExecuteW(nullptr, L"open", weditor.c_str(),
-                                      wtarget.c_str(), nullptr, SW_SHOWNORMAL);
+        HINSTANCE    h = ShellExecuteW(nullptr, L"open", weditor.c_str(),
+                                       wtarget.c_str(), nullptr, SW_SHOWNORMAL);
         return reinterpret_cast<INT_PTR>(h) > 32;
     }
     HINSTANCE h = ShellExecuteW(nullptr, L"open", wtarget.c_str(), nullptr,

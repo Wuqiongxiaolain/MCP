@@ -1,7 +1,6 @@
 // model.hpp - graphmcp 的统一图模型
 // 一个模型同时表示流程图、架构图、ER 图、组织图、思维导图和白板自由场景。
 #pragma once
-#include "json.hpp"
 #include <algorithm>
 #include <cstdlib>
 #include <ctime>
@@ -9,6 +8,8 @@
 #include <set>
 #include <string>
 #include <vector>
+
+#include "json.hpp"
 
 namespace gm {
 

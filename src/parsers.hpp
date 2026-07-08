@@ -2,11 +2,12 @@
 // 支持输入：Mermaid（flowchart / mindmap / erDiagram）、Markdown 大纲、
 // CSV（边列表或层级）、简化 XML、Excalidraw JSON。
 #pragma once
-#include "model.hpp"
 #include <cctype>
 #include <cstring>
 #include <functional>
 #include <stdexcept>
+
+#include "model.hpp"
 
 namespace gp {
 

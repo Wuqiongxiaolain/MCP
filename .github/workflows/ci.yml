@@ -77,8 +77,9 @@ jobs:
             ci-smoke-architecture.mmd \
             examples/example_output/architecture.xml_out/architecture.xml.mmd
           # whiteboard SVG：剥离内嵌字体后比对几何结构，避免字体 base64 抖动掩盖回归
+          # 用 DOTALL 以兼容 <style> 换行（sed [^<]* 无法跨行）
           strip_svg_style() {
-            sed -E 's#<style>[^<]*</style>##g' "$1"
+            python3 -c 'import re,sys; t=open(sys.argv[1],encoding="utf-8",newline="").read(); sys.stdout.write(re.sub(r"<style>.*?</style>", "", t, flags=re.S|re.I))' "$1"
           }
           diff -q --strip-trailing-cr \
             <(strip_svg_style ci-smoke-whiteboard.svg) \

@@ -1,137 +1,130 @@
-# 工作记录（WORKLOG）
+# 更新日志
 
-项目：graphmcp — 图形设计与绘图 MCP 工具
-日期：2026-07-05
-环境：Windows 11 + MinGW-w64 g++ 8.1（C++17）+ Git 2.53
+项目：**graphmcp** — 图形设计与绘图 MCP 工具
+
+本文件记录自项目创建以来的功能与修复变更，按日期归档。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)：按 **新增 / 变更 / 修复 / 移除 / 文档 / 工程** 归类。
 
 ---
 
-## 1. 需求分析与技术决策（开工前）
+## [未发布] — 2026-07-08
 
-| 决策点 | 结论 | 理由 |
-|---|---|---|
-| 依赖策略 | 零第三方库，JSON/XML/Base64 全部手写 | 课程环境不可控（无 CMake、无包管理器）；单文件 g++ 即可构建，CI 最简 |
-| 模块组织 | header-only + 单翻译单元 | 编译命令一条即可；模块边界仍靠命名空间清晰划分 |
-| 数据存储 | JSON 文件（弃 SQLite） | 版本快照天然是文档型数据；避免引入 sqlite3 依赖破坏零依赖原则 |
-| 架构核心 | 统一图模型居中，"N 输入 × M 输出" | 避免写 N×M 个格式转换器，新增格式只加一个函数 |
-| PNG/PDF | 委托外部转换器 + SVG 回退 | 纯 C++ 手写光栅化/PDF 成本过高且偏离课程重点；回退策略保证命令不"硬失败" |
-| URL 生成 | mermaid.live `#base64:`（免压缩） | draw.io URL 需要 deflate 压缩（要 zlib），mermaid.live 支持纯 base64，零依赖可达 |
-| MCP 传输 | stdio + 换行分隔 JSON-RPC 2.0 | MCP 标准 stdio 传输方式，协议版本 2024-11-05 |
+### 新增
 
-## 2. 开发过程记录
+- **Excalidraw `files` 附件保真**：`Graph.files` 贯穿解析、模型往返、SVG 嵌入与存储，image 元素的 `dataURL` 不再丢失。
+- **白板精确 SVG 导出**：rectangle / ellipse / diamond / arrow / line / freedraw / text / image 按几何精确渲染；支持 `angle` / `scale` 仿射变换与 image `crop` 内层裁剪。
+- **freedraw 压力感轮廓**：由折线改为可变宽度闭合 path，viewBox 计入笔宽避免裁切。
+- **离线字体内嵌**：引入 Virgil、Cascadia、Excalifont（`third_party/excalidraw-assets/`），SVG 内嵌 `@font-face` base64。
+- **资源路径探测**：`GRAPHMCP_ASSETS` → 可执行文件旁 `third_party` → CWD；支持 Windows / Linux / macOS（含路径缓冲重试）。
+- **样例体系**：`examples/example_input/` 与 `example_output/` 分离；新增 `whiteboard_freedraw` 等多格式基准输出。
+- **CI 冒烟增强**：workflow / whiteboard / architecture 的 mermaid 全文比对；whiteboard SVG 剥离 `<style>` 后几何比对；`scripts/update-fixtures.sh` 一键重生 fixture。
 
-### 阶段一：环境确认
-- 探测到 MinGW g++ 8.1、mingw32-make、git 2.53；**无 CMake** → 本地用 g++/Makefile 构建，CMakeLists.txt 保留给 CI/IDE。
-- 创建 `D:\MCP` 项目根目录。
+### 变更
 
-### 阶段二：核心库（自底向上）
-1. `src/json.hpp` — 递归下降 JSON 解析器 + 序列化。要点：对象用
-   `vector<pair>` 保持键插入顺序（保证导出文件 diff 友好）；`\uXXXX`
-   含代理对正确解码为 UTF-8。
-2. `src/model.hpp` — 统一图模型 Graph/Node/Edge + JSON 互转；
-   `parent` 字段一字段三用（树/分组/容器）；按 label 的 CJK 宽度估算默认节点尺寸。
-3. `src/parsers.hpp` — 5 个解析器：
-   - Mermaid：手写词法（不用正则），支持 6 种节点形状括号、8 种箭头、
-     边标签 `|x|`、`subgraph…end` 栈式分组；mindmap 按缩进建树；
-     erDiagram 解析关系行与实体属性块。
-   - Markdown：`#` 级别 + 列表缩进混合建树。
-   - CSV：表头驱动双模式（from/to 边表→流程图；id/label/parent→组织图），带引号转义。
-   - XML：手写迷你解析器（标签/属性/文本/实体），`<node>` 嵌套即层级。
-   - Excalidraw：原始元素无损保留 + 派生逻辑节点（containerId 文本绑定、箭头 start/endBinding）。
-   - `detectFormat` 首字符/首行启发式自动识别。
-4. `src/layout.hpp` — 校验（重复 ID、悬空边、层级环、孤立点、空标签）+
-   三种布局（Kahn 分层含环兜底 / 递归子树宽度树布局 / 网格兜底），
-   分组容器最后按成员包围盒回填。
-5. `src/exporters.hpp` — drawio mxGraphModel（子节点相对坐标）、Mermaid
-   回写（label 转义）、Excalidraw（绑定文本+箭头绑定）、SVG（边裁剪到
-   节点边框、菱形/椭圆/分组虚线框、ER 属性表）、mermaid.live URL、
-   PNG/PDF 外部转换器链（inkscape→rsvg-convert→magick）+ SVG 回退。
-6. `src/storage.hpp` — index.json 目录 + latest.json + 不可变版本快照；
-   回滚实现为"旧快照另存新版本"（保留全部历史，非破坏）。
-7. `src/mcp.hpp` — JSON-RPC 分发（initialize/tools/list/tools/call/ping、
-   通知不回包）+ 8 个工具的 schema 与实现。
-8. `src/main.cpp` — 9 个 CLI 子命令 + `serve`。
+- **PNG/PDF 白板路径**：统一为精确 `toSVG` → 栅格化，不再使用近似 rough 叠加或 HTML+rough.js 截图。
+- **箭头嵌字**：折线标签按路径长度中点定位；仅 `startArrowhead` 时交换逻辑边方向。
+- **XML 转义分层**：`xmlTextEscape`（style 文本）、`xmlAttrEscape`（双引号属性）、`xmlEscape`（通用），避免字体 CSS 单引号被 `&#39;` 破坏。
+- **字体 CSS 缓存**：仅 Virgil + Excalifont 主片齐备时永久缓存，部分失败可重试。
+- **`Store::save`**：大 `files` 白板只序列化一次 `toJson()`。
+- **`.gitattributes`**：文本类样例与配置统一 `eol=lf`，配合 CI `--strip-trailing-cr`。
 
-### 阶段三：构建与测试
-- `tests/test_main.cpp`：14 组测试、121 条断言，覆盖 JSON 往返、5 种解析器、
-  格式识别、校验（悬空边/层级环）、布局（层序/树向）、4 种导出器、Base64
-  边界、存储版本/回滚/损坏处理、MCP 协议握手与工具调用。
-- **首次编译即通过（-Wall -Wextra 零警告），121/121 断言通过。**
+### 修复
 
-### 阶段四：端到端验证与缺陷修复
-用 6 个示例文件全链路冒烟，发现并修复 2 个缺陷：
+- 白板文本定位、ER 校验覆盖、箭头语义与导出分支遗漏。
+- 跨平台 `getEnvVar` 替代废弃 `getenv`；Windows UTF-8 命令行与父目录创建等历史问题保持可用。
+- CI mermaid 期望输出与 CRLF 差异；whiteboard 图像边缺失；SVG style 剥离改用 Python `DOTALL` 防换行误报。
 
-| # | 缺陷 | 根因 | 修复 |
-|---|---|---|---|
-| 1 | `export -o out\flow.svg` 报 cannot write file | `ofstream` 不创建父目录 | `writeFile` 前增加 `ensureParentDirs`（逐级 mkdir，跳过盘符） |
-| 2 | `--name 登录流程` 入库后乱码 | Windows argv 是 ANSI(GBK) 编码，而模型按 UTF-8 存储 | `GetCommandLineW + WideCharToMultiByte(CP_UTF8)` 重取 UTF-8 argv；`SetConsoleOutputCP(CP_UTF8)` |
+### 移除
 
-修复后回归：121/121 通过；重跑冒烟全绿。
+- C++ 静态 rough 抖动叠加、`toExcalidrawRoughHtml` 及 rough.js 导出主路径依赖（`rough.js` 不入库）。
 
-### 阶段五补：PNG/PDF 导出增强（接入 Cherry Studio 验证时发现）
+### 测试
 
-用户在 Cherry Studio 里让模型生成 PDF，收到"未安装 PDF/PNG 转换工具"提示。
-排查确认这不是客户端或模型问题，而是本机没装 inkscape/rsvg/magick 光栅化器，
-graphmcp 按设计回退成 SVG。由于用户机器已装 Microsoft Edge（Chromium 内核），
-决定让工具自动复用它，避免额外下载。为此改进 `exporters.hpp::rasterize`，
-过程中连续排掉 4 个坑：
+- 扩充 Excalidraw 单测：files/image、crop、matrix 镜像、字体 base64、startOnly marker、`GRAPHMCP_ASSETS`、转义函数等。
 
-| # | 现象 | 根因 | 修复 |
-|---|---|---|---|
-| 3 | 只找 `chrome` 命令，找不到已装的 Edge | 检测名单太窄 | `findBrowser()` 探测 Chrome/Edge 的标准安装路径 + PATH |
-| 4 | `std::system` 调 Edge 无输出 | Windows `cmd /c` 对"带引号 exe 路径 + 重定向"的组合会错误剥离引号 | 把命令写入临时 `.bat` 再执行（`runQuiet`） |
-| 5 | 相对路径 outPath 时浏览器不产出文件 | 浏览器按自身工作目录解析 `--print-to-pdf`/`--screenshot` | `rasterize` 开头把 svg/out 路径统一转绝对路径（`absPath`） |
-| 6 | 系统已开着 Edge 时无头命令直接返回、跳过任务 | 新无头实例附加到已运行实例 | 加独立 `--user-data-dir`（临时 profile 目录）隔离 |
+---
 
-外加健壮性：`getenv("ProgramFiles(x86)")` 在 MSYS/Git Bash 下取不到（括号名被屏蔽），
-补充硬编码绝对路径兜底。SVG 用 HTML `@page` 包装使 PDF/PNG 尺寸贴合图形。
+## 2026-07-07
 
-验证（Windows 正常环境，等同 Cherry Studio 启动环境）：
-- CLI `export --to pdf/png`：经 Edge 生成，`%PDF-` 头正确、PNG 魔数正确 ✔
-- MCP `graph_export to=pdf`：返回 "pdf written via edge"，67KB 有效 PDF ✔
-- 121/121 单元测试仍全绿 ✔
+### 新增
 
-### 阶段五：验证结果实录
-```
-create  ：6 种格式（mmd/csv/md/er.mmd/xml/excalidraw）全部入库 ✔
-export  ：drawio/svg/excalidraw/mermaid/url 全部成功 ✔
-          png 无转换器 → 按设计回退写出 flow.png.svg 并提示 ✔
-history ：v1(created) → v2(第二版) → v3(rollback to v1) ✔
-validate：er.mmd → valid: no issues found ✔
-MCP     ：initialize 握手 → tools/list 返回 8 工具 →
-          graph_create 中文脑图入库返回 {"status":"created"} ✔
-```
+- **GitHub Actions CI**：构建、单元测试、端到端冒烟、制品打包。
+- **可选流水线**：SonarQube 静态分析（`SONAR_ENABLED`）；GitLab 镜像同步（`GITLAB_MIRROR_ENABLED`）。
+- **Tag 发布流程**：多平台制品构建与发布（含 Windows Make 兼容修复）。
 
-### 阶段六：DevOps 配置
-- **Git**：`.gitignore`（bin/dist/store 等产物），分阶段提交。
-- **GitHub Actions**：`.github/workflows/ci.yml`，构建 → 单元测试 → 冒烟测试
-  → 打包制品。
-- **可选 SonarQube 流水线**：仅在 GitHub Actions 仓库变量
-  `vars.SONAR_ENABLED=true`，且仓库 Secrets 中已配置 `SONAR_TOKEN` 与
-  `SONAR_HOST_URL` 时执行静态分析与质量门禁。
-- **可选 GitLab 镜像同步**：仅在 push 到 `main` 时，且 GitHub Actions
-  仓库变量 `vars.GITLAB_MIRROR_ENABLED=true`、`vars.GITLAB_MIRROR_URL`
-  已配置，并且仓库 Secret `GITLAB_MIRROR_TOKEN` 已配置时执行。
-- **SonarQube**：`sonar-project.properties`（sources/tests 划分、产物目录排除、
-  cfamily build-wrapper 配置）。
+### 变更
 
-## 3. 工时分布（估算）
+- DevOps 主链路由 Jenkins/Ansible 迁移至 GitHub Actions。
+- README 精简，详细说明下沉至 `docs/`。
 
-| 阶段 | 占比 |
-|---|---|
-| 需求分析与技术决策 | 10% |
-| 核心库编码（模型/解析/布局/导出/存储/MCP） | 50% |
-| 测试编写与端到端验证 | 20% |
-| 缺陷修复（目录创建、Windows 编码） | 5% |
-| DevOps 配置（GitHub Actions/Sonar/Git） | 10% |
-| 文档（README/架构/思维导图/工作记录） | 5% |
+### 修复
 
-## 4. 遗留与展望
+- MCP 冒烟日志 JSON 双格式兼容；Sonar CFamily build-wrapper 生成；cppcheck 报错与测试空指针解引用。
+- 发布流程 Tag 删除触发与发布前测试门禁。
 
-- [ ] 可选功能"专属画布实时绘制"：可基于 SVG 导出 + 本地 HTML 页面
-  （WebSocket 或轮询 latest.json）实现局部刷新预览。
-- [ ] Mermaid 支持面扩展：classDiagram、stateDiagram。
-- [ ] draw.io URL 直开：引入 miniz 单头文件库做 deflate 后即可生成
-  `app.diagrams.net/#R…` 链接（会破坏零依赖，故暂缓）。
-- [ ] SQLite 存储后端：当图数量大、需要按类型/时间检索时切换。
-- [ ] 布局质量：分层布局可加 median 启发式减少交叉。
+### 工程
+
+- 启用 **clang-format** 统一 C++ 排版；持续 **cppcheck** 清理。
+
+---
+
+## 2026-07-06
+
+### 文档
+
+- 源码英文注释统一为中文说明（`docs(src)`）。
+
+### 工程
+
+- 合并 `main` 与远程初始分支；`.gitignore` 补充 `out/`、`docs/MiniTasks/`。
+
+---
+
+## 2026-07-05 — 初始版本
+
+### 新增
+
+- **项目脚手架**：Makefile、CMakeLists.txt、`.gitignore`。
+- **核心库（零第三方依赖）**：
+  - `json.hpp` — 手写 JSON 解析/序列化（保序、UTF-8、`\u` 代理对）。
+  - `model.hpp` — 统一图模型 Graph/Node/Edge，支持 flowchart / architecture / er / orgchart / mindmap / whiteboard。
+  - `parsers.hpp` — Mermaid、Markdown 大纲、CSV、XML、Excalidraw 解析与 `detectFormat` 自动识别。
+  - `layout.hpp` — 图校验（重复 ID、悬空边、层级环等）与分层/树形/网格布局。
+  - `exporters.hpp` — drawio、mermaid、excalidraw、SVG、mermaid.live URL、PNG/PDF（外部转换器链 + SVG 回退）。
+  - `storage.hpp` — JSON 文件版本化存储（index + latest + 不可变快照 + 回滚）。
+  - `mcp.hpp` — MCP stdio JSON-RPC 2.0，8 个工具。
+  - `main.cpp` — 9 个 CLI 子命令 + `serve`。
+- **单元测试**：`tests/test_main.cpp` 覆盖解析、布局、导出、存储、MCP 协议。
+- **示例输入**：flowchart、orgchart、outline、er、architecture、excalidraw 等。
+- **浏览器栅格化**：自动探测 Chrome/Edge，经无头模式生成 PNG/PDF（独立 user-data-dir、绝对路径、`.bat` 启动兼容）。
+
+### 修复
+
+- `writeFile` 前 `ensureParentDirs`，避免 `-o` 含子目录时写入失败。
+- Windows 命令行 UTF-8：`GetCommandLineW` 重取 argv，修复中文 `--name` 乱码。
+
+### 文档
+
+- `docs/ARCHITECTURE.md`、`docs/MINDMAP.md`、README 初版。
+- Jenkins 流水线、Ansible 部署、SonarQube 配置（后于 07-07 移除 Jenkins/Ansible）。
+
+---
+
+## 技术决策摘要（常读）
+
+| 决策点 | 结论 |
+|--------|------|
+| 依赖策略 | 零第三方库；JSON/XML/Base64 内置 |
+| 架构核心 | 统一图模型居中，N 输入 × M 输出 |
+| 存储 | JSON 文件版本快照（非 SQLite） |
+| PNG/PDF | 外部转换器 / 浏览器栅格化 + SVG 回退 |
+| URL | mermaid.live `#base64:`（免 deflate） |
+| MCP | stdio + JSON-RPC 2.0（2024-11-05） |
+| 白板导出 | 精确 SVG 栅格化；不追求 rough.js 手绘风对齐 |
+
+## 遗留与展望
+
+- [ ] 可选画布实时预览（SVG + 本地 HTML 轮询 `latest.json`）。
+- [ ] Mermaid：classDiagram、stateDiagram。
+- [ ] draw.io URL（需 deflate，暂缓以保持零依赖）。
+- [ ] 大图检索场景下的可选 SQLite 后端。
+- [ ] 分层布局 median 启发式减交叉。

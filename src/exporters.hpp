@@ -222,11 +222,19 @@ inline std::string executableDir()
         return "";
     path.assign(buf, n);
 #elif defined(__APPLE__)
-    char     buf[PATH_MAX];
-    uint32_t size = sizeof(buf);
-    if (_NSGetExecutablePath(buf, &size) != 0)
-        return "";
-    path = buf;
+    // 缓冲不足时 _NSGetExecutablePath 会写入所需 size 并返回非 0，需按新 size
+    // 重试
+    char     stackBuf[PATH_MAX];
+    uint32_t size = sizeof(stackBuf);
+    if (_NSGetExecutablePath(stackBuf, &size) == 0) {
+        path = stackBuf;
+    }
+    else {
+        std::vector<char> heap(size);
+        if (_NSGetExecutablePath(heap.data(), &size) != 0)
+            return "";
+        path.assign(heap.data());
+    }
 #else
     char    buf[PATH_MAX];
     ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
@@ -320,7 +328,8 @@ inline std::string excalidrawTextFontFamilyCss(const Json& el)
 
 inline std::string excalidrawEmbeddedFontCss()
 {
-    // 非空才缓存：首轮若资源未就绪（错误 CWD），后续可重试加载
+    // 仅在必要字体全部成功时永久缓存；部分成功则本轮返回临时结果、保持
+    // css 为空以便后续（修正 CWD / GRAPHMCP_ASSETS）后重试
     static std::string css;
     if (!css.empty())
         return css;
@@ -340,16 +349,18 @@ inline std::string excalidrawEmbeddedFontCss()
         return os.str();
     };
 
-    std::ostringstream os;
-    os << fontFace("Virgil", "Virgil.woff2");
-    os << fontFace("Cascadia", "Cascadia.woff2");
-    os << fontFace(
+    // 必要：Virgil + Excalifont 主片；Cascadia / 其余子集尽量加载
+    std::string virgil = fontFace("Virgil", "Virgil.woff2");
+    std::string casc   = fontFace("Cascadia", "Cascadia.woff2");
+    std::string exMain = fontFace(
         "Excalifont",
         "Excalifont-Regular-a88b72a24fb54c9f94e3b5fdaa7481c9.woff2",
         "U+20-7e,U+a0-a3,U+a5-a6,U+a8-ab,U+ad-b1,U+b4,U+b6-b8,U+ba-ff,"
         "U+131,U+152-153,U+2bc,U+2c6,U+2da,U+2dc,U+304,U+308,U+2013-2014,"
         "U+2018-201a,U+201c-201e,U+2020,U+2022,U+2024-2026,U+2030,"
         "U+2039-203a,U+20ac,U+2122,U+2212");
+    std::ostringstream os;
+    os << virgil << casc << exMain;
     os << fontFace("Excalifont",
                    "Excalifont-Regular-be310b9bcd4f1a43f571c46df7809174.woff2",
                    "U+100-130,U+132-137,U+139-149,U+14c-151,U+154-17e,U+192,"
@@ -374,8 +385,11 @@ inline std::string excalidrawEmbeddedFontCss()
     os << fontFace("Excalifont",
                    "Excalifont-Regular-623ccf21b21ef6b3a0d87738f77eb071.woff2",
                    "U+300-301,U+303");
-    css = os.str();
-    return css;
+    std::string built = os.str();
+    // Virgil + Excalifont 主片齐备才永久缓存，避免部分成功锁死
+    if (!virgil.empty() && !exMain.empty())
+        css = built;
+    return built;
 }
 
 // collectFreedrawStrokes: 从 g.elements 提取 freedraw 并转换为绝对坐标点列

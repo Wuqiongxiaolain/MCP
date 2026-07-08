@@ -18,6 +18,13 @@
 #        define WIN32_LEAN_AND_MEAN
 #    endif
 #    include <windows.h>
+#elif defined(__APPLE__)
+#    include <limits.h>
+#    include <mach-o/dyld.h>
+#    include <sys/stat.h>
+#    ifndef PATH_MAX
+#        define PATH_MAX 4096
+#    endif
 #else
 #    include <limits.h>
 #    include <sys/stat.h>
@@ -207,19 +214,26 @@ inline std::string joinPath(const std::string& a, const std::string& b)
 // executableDir: 当前进程可执行文件所在目录（失败返回空）
 inline std::string executableDir()
 {
+    std::string path;
 #ifdef _WIN32
     char  buf[MAX_PATH];
     DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
     if (n == 0 || n >= MAX_PATH)
         return "";
-    std::string path(buf, n);
+    path.assign(buf, n);
+#elif defined(__APPLE__)
+    char     buf[PATH_MAX];
+    uint32_t size = sizeof(buf);
+    if (_NSGetExecutablePath(buf, &size) != 0)
+        return "";
+    path = buf;
 #else
     char    buf[PATH_MAX];
     ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
     if (n <= 0)
         return "";
     buf[n] = '\0';
-    std::string path(buf);
+    path   = buf;
 #endif
     size_t slash = path.find_last_of("/\\");
     if (slash == std::string::npos)
@@ -855,6 +869,13 @@ inline void excalidrawCanvasBounds(const Graph& g,
     minY = 1e18;
     maxX = -1e18;
     maxY = -1e18;
+    // 箭头嵌字实际渲染位置取路径中点，bounds 必须用同一来源，不能只用 JSON 的
+    // x/y
+    std::map<std::string, Json> arrows;
+    for (const auto& el : g.elements) {
+        if (el.str("type") == "arrow")
+            arrows[el.str("id")] = el;
+    }
     for (const auto& el : g.elements) {
         std::string ty = el.str("type");
         if (ty == "arrow" || ty == "line" || ty == "freedraw") {
@@ -871,9 +892,17 @@ inline void excalidrawCanvasBounds(const Graph& g,
             }
             continue;
         }
-        ExcalidrawAffine tf = excalidrawElementAffine(el);
-        extendBoundsAffineRect(minX, minY, maxX, maxY, el.num("x"), el.num("y"),
-                               el.num("width"), el.num("height"), tf);
+        double bx = el.num("x");
+        double by = el.num("y");
+        if (ty == "text") {
+            auto origin = excalidrawTextBBoxOrigin(el, arrows);
+            bx          = origin.first;
+            by          = origin.second;
+        }
+        ExcalidrawAffine tf = excalidrawElementAffineByBox(
+            el, bx, by, el.num("width"), el.num("height"));
+        extendBoundsAffineRect(minX, minY, maxX, maxY, bx, by, el.num("width"),
+                               el.num("height"), tf);
     }
     if (minX > maxX) {
         minX = 0;
@@ -1100,7 +1129,7 @@ inline std::string toSVGExcalidraw(const Graph& g)
                    << "\" overflow=\"hidden\" preserveAspectRatio=\"none\">\n";
                 os << "    <image x=\"" << (p.x - p.clipX) << "\" y=\""
                    << (p.y - p.clipY) << "\" width=\"" << p.w << "\" height=\""
-                   << p.h << "\" href=\"" << xmlEscape(dataUrl)
+                   << p.h << "\" href=\"" << xmlAttrEscape(dataUrl)
                    << "\" opacity=\"" << op << "\" preserveAspectRatio=\"none\""
                    << "/>\n";
                 os << "  </svg>\n";
@@ -1108,7 +1137,7 @@ inline std::string toSVGExcalidraw(const Graph& g)
             else {
                 os << "  <image x=\"" << p.x << "\" y=\"" << p.y
                    << "\" width=\"" << p.w << "\" height=\"" << p.h
-                   << "\" href=\"" << xmlEscape(dataUrl) << "\" opacity=\""
+                   << "\" href=\"" << xmlAttrEscape(dataUrl) << "\" opacity=\""
                    << op << "\" preserveAspectRatio=\"none\"/>\n";
             }
             if (!tf.identity)

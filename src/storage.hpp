@@ -110,14 +110,15 @@ class Store {
         if (entry)
             version = (int)entry->num("versions") + 1;
 
-        std::string modelJson = g.toJson().dump(2);
-        ge::writeFile(dir + "/latest.json", modelJson);
+        // 大文件白板含大量 base64，只序列化一次
+        Json model = g.toJson();
+        ge::writeFile(dir + "/latest.json", model.dump(2));
 
         Json snap = Json::obj();
         snap.set("version", version);
         snap.set("savedAt", nowIso());
         snap.set("note", note);
-        snap.set("model", g.toJson());
+        snap.set("model", model);
         ge::writeFile(dir + "/versions/v" + std::to_string(version) + ".json",
                       snap.dump(2));
 

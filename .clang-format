@@ -123,8 +123,26 @@ IncludeCategories:
     Priority: 2
   - Regex: '^<(mach-o|limits|sys|unistd)\.h>'
     Priority: 3
-  - Regex: ".*"
-    Priority: 1
+  # 标准库 / 外部头（无项目内依赖）
+  - Regex: '^<'
+    Priority: 10
+  # 项目头：按依赖深度分层（每层 Regroup 后空一行）
+  - Regex: '^"(\.\./src/)?json\.hpp"$'
+    Priority: 20
+  - Regex: '^"(\.\./src/)?model\.hpp"$'
+    Priority: 21
+  - Regex: '^"(\.\./src/)?(layout|parsers)\.hpp"$'
+    Priority: 22
+  - Regex: '^"(\.\./src/)?exporters\.hpp"$'
+    Priority: 23
+  - Regex: '^"(\.\./src/)?storage\.hpp"$'
+    Priority: 24
+  - Regex: '^"(\.\./src/)?mcp\.hpp"$'
+    Priority: 25
+  - Regex: '^".*\.hpp"$'
+    Priority: 30
+  - Regex: '.*'
+    Priority: 99
 # 缩进case标签
 IndentCaseLabels: true
 

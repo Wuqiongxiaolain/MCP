@@ -2,6 +2,7 @@
 // 按行分隔消息）。对外提供图创建/转换/导出/打开/校验/历史等工具。
 #pragma once
 #include "exporters.hpp"
+#include "cursor.hpp"
 #include "parsers.hpp"
 #include "storage.hpp"
 #include <iostream>
@@ -163,6 +164,42 @@ inline Json toolList()
                            "(non-destructive).",
                            p, req));
     }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "graph id"));
+        p.set("action",
+              prop("string", "open|get|next|prev|update|insert|delete|close"));
+        p.set("target", prop("string", "nodes|edges (required by open)"));
+        p.set("cursor", prop("string", "cursor id (required except open)"));
+        p.set("itemId", prop("string", "item id for insert"));
+        p.set("label", prop("string", "node/edge label"));
+        p.set("shape", prop("string", "node shape"));
+        p.set("parent", prop("string", "node parent id"));
+        p.set("style", prop("string", "node/edge style"));
+        p.set("from", prop("string", "edge from node id"));
+        p.set("to", prop("string", "edge to node id"));
+        p.set("arrow", prop("string", "edge arrow style"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("action"));
+        tools.push(toolDef(
+            "graph_cursor",
+            "Operate draft graph by cursor. action=open needs target; "
+            "action=get/next/prev/update/insert/delete/close need cursor.",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "graph id"));
+        p.set("action", prop("string", "status|commit|discard"));
+        p.set("note", prop("string", "commit note"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("action"));
+        tools.push(toolDef("graph_draft",
+                           "Inspect/commit/discard graph draft changes.", p,
+                           req));
+    }
     return tools;
 }
 
@@ -221,6 +258,10 @@ class ToolRunner {
                 return history(args);
             if (name == "graph_rollback")
                 return rollback(args);
+            if (name == "graph_cursor")
+                return cursor(args);
+            if (name == "graph_draft")
+                return draft(args);
             return textContent("unknown tool: " + name, true);
         }
         catch (const std::exception& e) {
@@ -373,6 +414,64 @@ class ToolRunner {
         out.set("restoredFrom", a.num("version"));
         out.set("newVersion", nv);
         return textContent(out.dump(2));
+    }
+
+    Json cursor(const Json& a)
+    {
+        std::string action = a.str("action");
+        Json        out    = Json::obj();
+        if (action == "open") {
+            out = gc::cursorOpen(store_, a.str("id"), a.str("target"));
+        }
+        else if (action == "get") {
+            out = gc::cursorGet(store_, a.str("id"), a.str("cursor"));
+        }
+        else if (action == "next") {
+            out = gc::cursorMove(store_, a.str("id"), a.str("cursor"), 1);
+        }
+        else if (action == "prev") {
+            out = gc::cursorMove(store_, a.str("id"), a.str("cursor"), -1);
+        }
+        else if (action == "update") {
+            out = gc::cursorUpdate(store_, a.str("id"), a.str("cursor"), a);
+        }
+        else if (action == "insert") {
+            out = gc::cursorInsert(store_, a.str("id"), a.str("cursor"), a);
+        }
+        else if (action == "delete") {
+            out = gc::cursorDelete(store_, a.str("id"), a.str("cursor"));
+        }
+        else if (action == "close") {
+            out = gc::cursorClose(store_, a.str("id"), a.str("cursor"));
+        }
+        else {
+            return textContent("unknown graph_cursor action: " + action, true);
+        }
+        return textContent(out.dump(2));
+    }
+
+    Json draft(const Json& a)
+    {
+        std::string action = a.str("action");
+        if (action == "status")
+            return textContent(gc::draftStatus(store_, a.str("id")).dump(2));
+        if (action == "discard") {
+            store_.discardDraft(a.str("id"));
+            Json out = Json::obj();
+            out.set("status", "discarded");
+            return textContent(out.dump(2));
+        }
+        if (action == "commit") {
+            int         nv = 0;
+            std::string err;
+            if (!store_.commitDraft(a.str("id"), a.str("note"), &nv, &err))
+                return textContent(err, true);
+            Json out = Json::obj();
+            out.set("status", "committed");
+            out.set("newVersion", nv);
+            return textContent(out.dump(2));
+        }
+        return textContent("unknown graph_draft action: " + action, true);
     }
 };
 

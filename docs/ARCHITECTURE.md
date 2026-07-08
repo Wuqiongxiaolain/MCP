@@ -51,7 +51,7 @@ Graph {
 | exporters.hpp | 模型 → 输出 | drawio 子节点相对坐标；Excalidraw 绑定文本 + 箭头绑定；SVG 边裁剪到节点边界；PNG/PDF 自动探测转换器（inkscape/rsvg/magick，或已装的 Chrome/Edge 无头模式），均无则回退 SVG |
 | storage.hpp | 版本化存储 | `index.json` 目录 + 每图 `latest.json` + 不可变 `versions/vN.json` 快照；回滚 = 旧快照另存为新版本（非破坏） |
 | mcp.hpp | MCP 协议 | JSON-RPC 2.0，stdio 换行分隔；initialize 握手、tools/list、tools/call；通知不回包 |
-| main.cpp | CLI | 9 个子命令；Windows 下 argv 转 UTF-8（GetCommandLineW）避免中文乱码 |
+| main.cpp | CLI | 11 个子命令；Windows 下 argv 转 UTF-8（GetCommandLineW）避免中文乱码 |
 
 ## 存储布局
 
@@ -61,6 +61,8 @@ graph-store/
   <graphId>/
     latest.json               # 当前版本模型
     versions/v1.json …        # 不可变历史快照 {version, savedAt, note, model}
+    draft.json                # 可变草稿（存在表示有未提交改动）
+    cursors/<cid>.json        # 游标状态 {graphId,target,index}
     open.drawio / open.svg…   # open 命令生成的临时编辑文件
 ```
 
@@ -76,6 +78,8 @@ graph-store/
 | graph_list | — | 列出库中所有图 |
 | graph_history | id | 版本历史 |
 | graph_rollback | id, version | 回溯到指定版本 |
+| graph_cursor | id, action, target?/cursor? | 在 draft 上做游标式逐项修改 |
+| graph_draft | id, action, note? | 查看草稿状态、提交或丢弃草稿 |
 
 ## 错误处理约定
 

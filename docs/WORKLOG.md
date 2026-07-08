@@ -135,3 +135,14 @@ MCP     ：initialize 握手 → tools/list 返回 8 工具 →
   `app.diagrams.net/#R…` 链接（会破坏零依赖，故暂缓）。
 - [ ] SQLite 存储后端：当图数量大、需要按类型/时间检索时切换。
 - [ ] 布局质量：分层布局可加 median 启发式减少交叉。
+
+---
+
+## 5. 版本管理增强（issue #6）
+
+- 新增 draft-commit 分离：`draft.json` 保存可变草稿，`graph_draft commit`
+  才调用 `Store::save()` 生成正式版本。
+- 新增 cursor 逐项修改：`graph_cursor`（MCP）与 `cursor`（CLI）支持
+  open/get/next/prev/update/insert/delete/close，游标状态持久化到
+  `cursors/<cid>.json`。
+- 保持原行为不变：`graph_create` / `create` 仍直接保存正式版本，不走草稿流程。

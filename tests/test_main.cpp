@@ -351,7 +351,7 @@ static void testMcpProtocol()
     Json tl =
         Json::parse(R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})", &err);
     CHECK(mcp::handleMessage(tl, store, resp));
-    CHECK(resp.find("result")->find("tools")->size() == 8);
+    CHECK(resp.find("result")->find("tools")->size() == 10);
     // tools/call graph_create
     Json call = Json::parse(
         R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
@@ -396,6 +396,76 @@ static void testMcpProtocol()
     CHECK(resp.find("error") != nullptr);
 }
 
+static void testDraftCommit()
+{
+    gs::Store store("test-store-draft-tmp");
+    Graph     g = gp::parseMermaid("flowchart TD\nA[One]-->B[Two]\n");
+    g.id         = "draft-graph";
+    int v1       = store.save(g, "init");
+    CHECK(v1 == 1);
+
+    gc::cursorOpen(store, g.id, "nodes");
+    Json st = gc::draftStatus(store, g.id);
+    CHECK(st.boolean("hasDraft"));
+    CHECK(st.find("nodes")->num("modified") == 0);
+
+    std::string cid = gc::cursorOpen(store, g.id, "nodes").str("cursor");
+    Json        upd = Json::obj();
+    upd.set("label", "One*");
+    CHECK(!gc::cursorUpdate(store, g.id, cid, upd).boolean("atEnd"));
+
+    st = gc::draftStatus(store, g.id);
+    CHECK((int)st.find("nodes")->num("modified") == 1);
+
+    int         nv  = 0;
+    std::string err;
+    CHECK(store.commitDraft(g.id, "draft commit", &nv, &err));
+    CHECK(nv == 2);
+    CHECK(!store.hasDraft(g.id));
+    Json h = store.history(g.id);
+    CHECK(h.size() == 2);
+}
+
+static void testCursor()
+{
+    gs::Store store("test-store-cursor-tmp");
+    Graph     g = gp::parseMermaid("flowchart TD\nA[One]-->B[Two]\n");
+    g.id         = "cursor-graph";
+    CHECK(store.save(g, "init") == 1);
+
+    Json        opened = gc::cursorOpen(store, g.id, "nodes");
+    std::string cid    = opened.str("cursor");
+    CHECK(!cid.empty());
+    CHECK((int)opened.num("index") == 0);
+
+    Json next = gc::cursorMove(store, g.id, cid, 1);
+    CHECK((int)next.num("index") == 1);
+    CHECK(next.find("item")->str("id") == "B");
+
+    Json upd = Json::obj();
+    upd.set("label", "Two+");
+    Json updr = gc::cursorUpdate(store, g.id, cid, upd);
+    CHECK(updr.find("item")->str("label") == "Two+");
+
+    Json ins = Json::obj();
+    ins.set("itemId", "C");
+    ins.set("label", "Three");
+    Json insr = gc::cursorInsert(store, g.id, cid, ins);
+    CHECK(insr.find("item")->str("id") == "C");
+
+    Json del = gc::cursorDelete(store, g.id, cid);
+    CHECK(del.find("item")->str("id") == "B");
+    CHECK(gc::cursorClose(store, g.id, cid).boolean("closed"));
+
+    Graph       draft;
+    std::string err;
+    CHECK(store.loadDraft(g.id, draft, &err));
+    CHECK(draft.findNode("A") != nullptr);
+    CHECK(draft.findNode("B") != nullptr);
+    CHECK(draft.findNode("C") == nullptr);
+    CHECK(draft.findNode("B")->label == "Two+");
+}
+
 int runAll()
 {
     testJson();
@@ -412,6 +482,8 @@ int runAll()
     testBase64();
     testStorage();
     testMcpProtocol();
+    testDraftCommit();
+    testCursor();
     std::cout << "tests: " << g_passed << " passed, " << g_failed
               << " failed\n";
     return g_failed == 0 ? 0 : 1;

@@ -4,6 +4,7 @@
 // 带版本历史的存储、导出（drawio / Mermaid / Excalidraw / SVG / PNG / PDF /
 // 浏览器 URL）、外部编辑器打开，以及通过 MCP 协议提供服务。
 #include "exporters.hpp"
+#include "cursor.hpp"
 #include "mcp.hpp"
 #include "parsers.hpp"
 #include "storage.hpp"
@@ -114,6 +115,11 @@ int usage()
            "history\n"
            "  rollback  --id <id> --version N                 restore old "
            "version\n"
+           "  cursor    --id <id> --action <open|get|next|prev|update|insert|"
+           "delete|close>\n"
+           "            [--target nodes|edges] [--cursor <cid>] [--item-id X] "
+           "[--label X]\n"
+           "  draft     --id <id> --action <status|commit|discard> [--note X]\n"
            "  serve                                           run MCP stdio "
            "server\n"
            "\n"
@@ -332,6 +338,104 @@ int main(int argc, char** argv)
             std::cout << "rolled back " << a.get("id") << " to v"
                       << a.get("version") << " (saved as v" << nv << ")\n";
             return 0;
+        }
+        if (a.command == "cursor") {
+            if (!a.has("id") || !a.has("action"))
+                return usage();
+            Json out = Json::obj();
+            if (a.get("action") == "open") {
+                if (!a.has("target"))
+                    return usage();
+                out = gc::cursorOpen(store, a.get("id"), a.get("target"));
+            }
+            else if (a.get("action") == "get") {
+                out = gc::cursorGet(store, a.get("id"), a.get("cursor"));
+            }
+            else if (a.get("action") == "next") {
+                out = gc::cursorMove(store, a.get("id"), a.get("cursor"), 1);
+            }
+            else if (a.get("action") == "prev") {
+                out = gc::cursorMove(store, a.get("id"), a.get("cursor"), -1);
+            }
+            else if (a.get("action") == "update") {
+                Json fields = Json::obj();
+                if (a.has("label"))
+                    fields.set("label", a.get("label"));
+                if (a.has("shape"))
+                    fields.set("shape", a.get("shape"));
+                if (a.has("parent"))
+                    fields.set("parent", a.get("parent"));
+                if (a.has("style"))
+                    fields.set("style", a.get("style"));
+                if (a.has("from"))
+                    fields.set("from", a.get("from"));
+                if (a.has("to"))
+                    fields.set("to", a.get("to"));
+                if (a.has("arrow"))
+                    fields.set("arrow", a.get("arrow"));
+                out = gc::cursorUpdate(store, a.get("id"), a.get("cursor"),
+                                       fields);
+            }
+            else if (a.get("action") == "insert") {
+                Json fields = Json::obj();
+                if (a.has("item-id"))
+                    fields.set("itemId", a.get("item-id"));
+                if (a.has("label"))
+                    fields.set("label", a.get("label"));
+                if (a.has("shape"))
+                    fields.set("shape", a.get("shape"));
+                if (a.has("parent"))
+                    fields.set("parent", a.get("parent"));
+                if (a.has("style"))
+                    fields.set("style", a.get("style"));
+                if (a.has("from"))
+                    fields.set("from", a.get("from"));
+                if (a.has("to"))
+                    fields.set("to", a.get("to"));
+                if (a.has("arrow"))
+                    fields.set("arrow", a.get("arrow"));
+                out = gc::cursorInsert(store, a.get("id"), a.get("cursor"),
+                                       fields);
+            }
+            else if (a.get("action") == "delete") {
+                out = gc::cursorDelete(store, a.get("id"), a.get("cursor"));
+            }
+            else if (a.get("action") == "close") {
+                out = gc::cursorClose(store, a.get("id"), a.get("cursor"));
+            }
+            else {
+                std::cerr << "error: unknown cursor action\n";
+                return 2;
+            }
+            std::cout << out.dump(2) << "\n";
+            return 0;
+        }
+        if (a.command == "draft") {
+            if (!a.has("id") || !a.has("action"))
+                return usage();
+            if (a.get("action") == "status") {
+                std::cout << gc::draftStatus(store, a.get("id")).dump(2)
+                          << "\n";
+                return 0;
+            }
+            if (a.get("action") == "discard") {
+                store.discardDraft(a.get("id"));
+                std::cout << "{\"status\":\"discarded\"}\n";
+                return 0;
+            }
+            if (a.get("action") == "commit") {
+                int         nv = 0;
+                std::string err;
+                if (!store.commitDraft(a.get("id"), a.get("note"), &nv, &err)) {
+                    std::cerr << "error: " << err << "\n";
+                    return 5;
+                }
+                std::cout << "{\"status\":\"committed\",\"newVersion\":" << nv
+                          << "}\n";
+                return 0;
+            }
+            std::cerr << "error: unknown draft action\n";
+            return 2;
         }
         return usage();
     }

@@ -7,10 +7,14 @@
 #include "exporters.hpp"  // 复用 writeFile / readFile
 #include "model.hpp"
 #include <ctime>
+#include <cstdio>
+#include <vector>
 
 #ifdef _WIN32
 #    include <direct.h>
+#    include <io.h>
 #else
+#    include <dirent.h>
 #    include <sys/stat.h>
 #    include <sys/types.h>
 #endif
@@ -240,8 +244,133 @@ class Store {
         return true;
     }
 
+    // ---- 草稿（draft）----
+    std::string draftPath(const std::string& id) const
+    { return root_ + "/" + id + "/draft.json"; }
+
+    bool hasDraft(const std::string& id) const
+    { return !ge::readFile(draftPath(id)).empty(); }
+
+    bool loadDraft(const std::string& id,
+                   Graph&             out,
+                   std::string*       err = nullptr) const
+    {
+        std::string txt = ge::readFile(draftPath(id));
+        if (txt.empty())
+            return load(id, out, 0, err);
+        std::string perr;
+        Json        j = Json::parse(txt, &perr);
+        if (!perr.empty()) {
+            if (err)
+                *err = "corrupt draft file " + draftPath(id) + ": " + perr;
+            return false;
+        }
+        out = Graph::fromJson(j);
+        if (out.id.empty())
+            out.id = id;
+        return true;
+    }
+
+    void saveDraft(const std::string& id, const Graph& g) const
+    {
+        std::string dir = root_ + "/" + id;
+        makeDir(dir);
+        ge::writeFile(draftPath(id), g.toJson().dump(2));
+    }
+
+    void discardDraft(const std::string& id) const
+    { std::remove(draftPath(id).c_str()); }
+
+    bool commitDraft(const std::string& id,
+                     const std::string& note,
+                     int*               newVersion,
+                     std::string*       err = nullptr)
+    {
+        if (!hasDraft(id)) {
+            if (err)
+                *err = "no draft for graph: " + id;
+            return false;
+        }
+        Graph g;
+        if (!loadDraft(id, g, err))
+            return false;
+        g.id   = id;
+        int nv = save(g, note.empty() ? "draft commit" : note);
+        discardDraft(id);
+        clearCursors(id);
+        if (newVersion)
+            *newVersion = nv;
+        return true;
+    }
+
+    // ---- 游标（cursor）----
+    std::string cursorPath(const std::string& id, const std::string& cid) const
+    { return root_ + "/" + id + "/cursors/" + cid + ".json"; }
+
+    void writeCursor(const std::string& id,
+                     const std::string& cid,
+                     const Json&        cursorState) const
+    {
+        std::string dir = root_ + "/" + id + "/cursors";
+        makeDir(root_ + "/" + id);
+        makeDir(dir);
+        ge::writeFile(cursorPath(id, cid), cursorState.dump(2));
+    }
+
+    bool loadCursorState(const std::string& id,
+                         const std::string& cid,
+                         Json&              out,
+                         std::string*       err = nullptr) const
+    {
+        std::string txt = ge::readFile(cursorPath(id, cid));
+        if (txt.empty()) {
+            if (err)
+                *err = "cursor not found: " + cid;
+            return false;
+        }
+        std::string perr;
+        out = Json::parse(txt, &perr);
+        if (!perr.empty()) {
+            if (err)
+                *err = "corrupt cursor file " + cursorPath(id, cid) + ": " +
+                       perr;
+            return false;
+        }
+        return true;
+    }
+
+    void removeCursor(const std::string& id, const std::string& cid) const
+    { std::remove(cursorPath(id, cid).c_str()); }
+
   private:
     std::string root_;
+
+    void clearCursors(const std::string& id) const
+    {
+        std::string dir = root_ + "/" + id + "/cursors";
+#ifdef _WIN32
+        struct _finddata_t fd;
+        intptr_t           h =
+            _findfirst((dir + "/*.json").c_str(), &fd);
+        if (h == -1)
+            return;
+        do {
+            std::remove((dir + "/" + fd.name).c_str());
+        } while (_findnext(h, &fd) == 0);
+        _findclose(h);
+#else
+        DIR* dp = opendir(dir.c_str());
+        if (!dp)
+            return;
+        for (dirent* de = readdir(dp); de; de = readdir(dp)) {
+            std::string name = de->d_name;
+            if (name == "." || name == "..")
+                continue;
+            std::remove((dir + "/" + name).c_str());
+        }
+        closedir(dp);
+#endif
+    }
 };
 
 }  // namespace gs

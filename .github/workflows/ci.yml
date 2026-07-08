@@ -66,9 +66,16 @@ jobs:
           test -s ci-smoke-whiteboard.svg
           test -s ci-smoke-whiteboard.mmd
           test -s ci-smoke-architecture.mmd
-          cmp -s ci-smoke-workflow.mmd examples/example_output/workflow.drawio_out/workflow.drawio.mmd
-          cmp -s ci-smoke-whiteboard.mmd examples/example_output/whiteboard_freedraw.excalidraw_out/whiteboard_freedraw.excalidraw.mmd
-          cmp -s ci-smoke-architecture.mmd examples/example_output/architecture.xml_out/architecture.xml.mmd
+          # 忽略 CRLF/LF 差异：样例在 Windows 检出可能是 CRLF，工具输出统一为 LF
+          diff -q --strip-trailing-cr \
+            ci-smoke-workflow.mmd \
+            examples/example_output/workflow.drawio_out/workflow.drawio.mmd
+          diff -q --strip-trailing-cr \
+            ci-smoke-whiteboard.mmd \
+            examples/example_output/whiteboard_freedraw.excalidraw_out/whiteboard_freedraw.excalidraw.mmd
+          diff -q --strip-trailing-cr \
+            ci-smoke-architecture.mmd \
+            examples/example_output/architecture.xml_out/architecture.xml.mmd
 
           # serve: tools/list + tools/call graph_create
           printf '%s\n%s\n%s\n' \

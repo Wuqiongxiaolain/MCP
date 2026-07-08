@@ -49,9 +49,10 @@ Graph {
 | parsers.hpp | 输入 → 模型 | 手写 Mermaid 词法（节点形状括号、8 种箭头、subgraph 栈）；迷你 XML 解析器；CSV 引号转义；格式自动识别 |
 | layout.hpp | 校验 + 布局 | 校验：重复 ID/悬空边/层级环/孤立点。布局：Kahn 分层（含环兜底）、递归子树宽度树布局、分组容器包围盒回填 |
 | exporters.hpp | 模型 → 输出 | drawio 子节点相对坐标；Excalidraw 绑定文本 + 箭头绑定；SVG 边裁剪到节点边界；PNG/PDF 自动探测转换器（inkscape/rsvg/magick，或已装的 Chrome/Edge 无头模式），均无则回退 SVG |
-| storage.hpp | 版本化存储 | `index.json` 目录 + 每图 `latest.json` + 不可变 `versions/vN.json` 快照；回滚 = 旧快照另存为新版本（非破坏） |
-| mcp.hpp | MCP 协议 | JSON-RPC 2.0，stdio 换行分隔；initialize 握手、tools/list、tools/call；通知不回包 |
-| main.cpp | CLI | 9 个子命令；Windows 下 argv 转 UTF-8（GetCommandLineW）避免中文乱码 |
+| storage.hpp | 版本化存储 | `index.json` 目录 + 每图 `latest.json` + 不可变 `versions/vN.json` 快照；回滚 = 旧快照另存为新版本（非破坏）；草稿层 `draft.json`（commit 固化）+ 游标状态 `cursors/` |
+| cursor.hpp | 草稿/游标语义 | 类比数据库游标逐项改节点/边（open/get/next/prev/update/insert/delete/close），改动落草稿；draftStatus 汇报相对 latest 的增删改 |
+| mcp.hpp | MCP 协议 | JSON-RPC 2.0，stdio 换行分隔；initialize 握手、tools/list、tools/call（10 个工具）；通知不回包 |
+| main.cpp | CLI | 11 个子命令；Windows 下 argv 转 UTF-8（GetCommandLineW）避免中文乱码 |
 
 ## 存储布局
 
@@ -60,7 +61,9 @@ graph-store/
   index.json                  # 图目录：id/name/type/versions/时间戳
   <graphId>/
     latest.json               # 当前版本模型
+    draft.json                # 可变草稿（未提交改动；commit 后固化为新版本并清除）
     versions/v1.json …        # 不可变历史快照 {version, savedAt, note, model}
+    cursors/<cid>.json        # 游标状态 {graphId, target, index}
     open.drawio / open.svg…   # open 命令生成的临时编辑文件
 ```
 
@@ -76,6 +79,17 @@ graph-store/
 | graph_list | — | 列出库中所有图 |
 | graph_history | id | 版本历史 |
 | graph_rollback | id, version | 回溯到指定版本 |
+| graph_cursor | id, action, target?, cursor?, 字段… | 游标式逐项改节点/边（open/get/next/prev/update/insert/delete/close），改动落草稿 |
+| graph_draft | id, action, note? | 草稿管理：status 看未提交改动 / commit 固化为新版本 / discard 丢弃 |
+
+## 草稿与游标（draft-commit 分离）
+
+- **draft-commit 分离**（类比 git）：`graph_create` 仍直接产生正式版本；`graph_cursor`
+  的逐项修改先落 `draft.json`，显式 `graph_draft commit` 才固化为新版本。
+- **游标语义**（类比数据库）：`open` 指向 nodes/edges 集合，`next/prev` 移动、`get`
+  读、`update/insert/delete` 改当前项。游标状态持久化到 `cursors/`，跨调用可用。
+- 游标有效性由「草稿是否存在」隐式门控：commit/discard 后草稿消失，旧游标操作报错
+  提示重新 open，无需物理清理游标文件。
 
 ## 错误处理约定
 

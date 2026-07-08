@@ -114,6 +114,10 @@ int usage()
            "history\n"
            "  rollback  --id <id> --version N                 restore old "
            "version\n"
+           "  cursor    --id <id> --action <a> [--cursor <cid>] [fields]\n"
+           "            per-item edit into draft "
+           "(open|get|next|prev|update|insert|delete|close)\n"
+           "  draft     --id <id> --action status|commit|discard [--note X]\n"
            "  serve                                           run MCP stdio "
            "server\n"
            "\n"
@@ -332,6 +336,84 @@ int main(int argc, char** argv)
             std::cout << "rolled back " << a.get("id") << " to v"
                       << a.get("version") << " (saved as v" << nv << ")\n";
             return 0;
+        }
+        if (a.command == "cursor") {
+            if (!a.has("id") || !a.has("action"))
+                return usage();
+            std::string id     = a.get("id");
+            std::string action = a.get("action");
+            std::string cid    = a.get("cursor");
+            // 收集项字段（update/insert 使用）
+            Json fields = Json::obj();
+            for (const char* k :
+                 {"newId", "label", "shape", "parent", "style", "from", "to",
+                  "arrow"})
+                if (a.has(k))
+                    fields.set(k, Json(a.get(k)));
+            Json r;
+            if (action == "open")
+                r = gc::cursorOpen(store, id, a.get("target"));
+            else if (action == "get")
+                r = gc::cursorGet(store, id, cid);
+            else if (action == "next")
+                r = gc::cursorMove(store, id, cid, 1);
+            else if (action == "prev")
+                r = gc::cursorMove(store, id, cid, -1);
+            else if (action == "update")
+                r = gc::cursorUpdate(store, id, cid, fields);
+            else if (action == "insert")
+                r = gc::cursorInsert(store, id, cid, fields);
+            else if (action == "delete")
+                r = gc::cursorDelete(store, id, cid);
+            else if (action == "close")
+                r = gc::cursorClose(store, id, cid);
+            else {
+                std::cerr << "error: unknown cursor action '" << action
+                          << "' (open|get|next|prev|update|insert|delete|close)"
+                             "\n";
+                return 4;
+            }
+            if (const Json* e = r.find("error")) {
+                std::cerr << "error: " << e->s << "\n";
+                return 4;
+            }
+            std::cout << r.dump(2) << "\n";
+            return 0;
+        }
+        if (a.command == "draft") {
+            if (!a.has("id"))
+                return usage();
+            std::string id     = a.get("id");
+            std::string action = a.get("action", "status");
+            if (action == "status") {
+                Json r = gc::draftStatus(store, id);
+                if (const Json* e = r.find("error")) {
+                    std::cerr << "error: " << e->s << "\n";
+                    return 4;
+                }
+                std::cout << r.dump(2) << "\n";
+                return 0;
+            }
+            if (action == "commit") {
+                int         nv = 0;
+                std::string err;
+                if (!store.commitDraft(id, a.get("note"), &nv, &err)) {
+                    std::cerr << "error: " << err << "\n";
+                    return 5;
+                }
+                std::cout << "committed " << id << " as v" << nv << "\n";
+                return 0;
+            }
+            if (action == "discard") {
+                bool had = store.hasDraft(id);
+                store.discardDraft(id);
+                std::cout << (had ? "discarded draft for " : "no draft for ")
+                          << id << "\n";
+                return 0;
+            }
+            std::cerr << "error: unknown draft action '" << action
+                      << "' (status|commit|discard)\n";
+            return 4;
         }
         return usage();
     }

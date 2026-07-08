@@ -6,6 +6,7 @@
 #pragma once
 #include "exporters.hpp"  // 复用 writeFile / readFile
 #include "model.hpp"
+#include <cstdio>  // std::remove
 #include <ctime>
 
 #ifdef _WIN32
@@ -239,6 +240,104 @@ class Store {
             *newVersion = nv;
         return true;
     }
+
+    // ---- 草稿（draft）：可变工作副本，不占版本号 ----
+    // 语义类比 git 工作区：改动先落草稿，显式 commit 才固化为正式版本。
+
+    // draftPath: 草稿文件路径 <root>/<id>/draft.json
+    std::string draftPath(const std::string& id) const
+    { return root_ + "/" + id + "/draft.json"; }
+
+    // hasDraft: 是否存在未提交草稿
+    bool hasDraft(const std::string& id) const
+    { return !ge::readFile(draftPath(id)).empty(); }
+
+    // loadDraft: 载入草稿；无草稿时回退到 latest 作为草稿基线
+    // 图不存在（latest 也没有）时返回 false
+    bool loadDraft(const std::string& id,
+                   Graph&             out,
+                   std::string*       err = nullptr) const
+    {
+        std::string txt = ge::readFile(draftPath(id));
+        if (txt.empty())
+            return load(id, out, 0, err);  // 无草稿 -> 从正式版派生基线
+        std::string perr;
+        Json        j = Json::parse(txt, &perr);
+        if (!perr.empty()) {
+            if (err)
+                *err = "corrupt draft file " + draftPath(id) + ": " + perr;
+            return false;
+        }
+        out = Graph::fromJson(j);
+        return true;
+    }
+
+    // saveDraft: 写入草稿（整图），不产生版本快照
+    void saveDraft(const std::string& id, const Graph& g) const
+    {
+        makeDir(root_ + "/" + id);
+        ge::writeFile(draftPath(id), g.toJson().dump(2));
+    }
+
+    // discardDraft: 丢弃草稿（删除 draft.json）
+    void discardDraft(const std::string& id) const
+    { std::remove(draftPath(id).c_str()); }
+
+    // commitDraft: 将草稿固化为新的正式版本，随后清除草稿
+    // 复用 save() 的版本化逻辑；无草稿时报错
+    bool commitDraft(const std::string& id,
+                     const std::string& note,
+                     int*               newVersion,
+                     std::string*       err = nullptr)
+    {
+        if (!hasDraft(id)) {
+            if (err)
+                *err = "nothing to commit: no draft for graph " + id;
+            return false;
+        }
+        Graph g;
+        if (!loadDraft(id, g, err))
+            return false;
+        g.id   = id;
+        int nv = save(g, note.empty() ? "commit draft" : note);
+        discardDraft(id);
+        if (newVersion)
+            *newVersion = nv;
+        return true;
+    }
+
+    // ---- 游标状态文件：<root>/<id>/cursors/<cid>.json ----
+    // CLI 每次调用是独立进程，游标位置必须落盘才能跨调用复用。
+
+    // cursorPath: 游标状态文件路径
+    std::string cursorPath(const std::string& id, const std::string& cid) const
+    { return root_ + "/" + id + "/cursors/" + cid + ".json"; }
+
+    // writeCursor: 持久化游标状态（graphId / target / index）
+    void writeCursor(const std::string& id,
+                     const std::string& cid,
+                     const Json&        state) const
+    {
+        makeDir(root_ + "/" + id + "/cursors");
+        ge::writeFile(cursorPath(id, cid), state.dump(2));
+    }
+
+    // loadCursorState: 读取游标状态；不存在或损坏返回 false
+    bool loadCursorState(const std::string& id,
+                         const std::string& cid,
+                         Json&              out) const
+    {
+        std::string txt = ge::readFile(cursorPath(id, cid));
+        if (txt.empty())
+            return false;
+        std::string perr;
+        out = Json::parse(txt, &perr);
+        return perr.empty();
+    }
+
+    // removeCursor: 删除游标状态文件
+    void removeCursor(const std::string& id, const std::string& cid) const
+    { std::remove(cursorPath(id, cid).c_str()); }
 
   private:
     std::string root_;

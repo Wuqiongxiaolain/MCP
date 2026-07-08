@@ -1,6 +1,7 @@
 // mcp.hpp - Model Context Protocol 服务端（基于 stdio 的 JSON-RPC 2.0，
 // 按行分隔消息）。对外提供图创建/转换/导出/打开/校验/历史等工具。
 #pragma once
+#include "cursor.hpp"
 #include "exporters.hpp"
 #include "parsers.hpp"
 #include "storage.hpp"
@@ -163,6 +164,54 @@ inline Json toolList()
                            "(non-destructive).",
                            p, req));
     }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "graph id to edit"));
+        p.set("action",
+              prop("string", "open|get|next|prev|update|insert|delete|close"));
+        p.set("target",
+              prop("string", "open: collection to traverse: nodes|edges "
+                             "(default nodes)"));
+        p.set("cursor",
+              prop("string", "cursor id from open (required for "
+                             "get/next/prev/update/insert/delete/close)"));
+        p.set("newId",
+              prop("string", "insert: id for the new node/edge (optional; "
+                             "auto-generated when omitted)"));
+        p.set("label", prop("string", "update/insert: node or edge label"));
+        p.set("shape", prop("string", "update/insert: node shape"));
+        p.set("parent", prop("string", "update/insert: node parent id"));
+        p.set("style", prop("string", "update/insert: node or edge style"));
+        p.set("from", prop("string", "update/insert (edges): source node id"));
+        p.set("to", prop("string", "update/insert (edges): target node id"));
+        p.set("arrow",
+              prop("string", "update/insert (edges): arrow|none|both"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("action"));
+        tools.push(toolDef(
+            "graph_cursor",
+            "Database-cursor style per-item editing of a stored graph. Open a "
+            "cursor over nodes or edges, then move (next/prev), read (get), "
+            "and update/insert/delete the current item. All changes land in a "
+            "draft; use graph_draft to commit or discard.",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "graph id"));
+        p.set("action",
+              prop("string", "status|commit|discard (default status)"));
+        p.set("note", prop("string", "commit: version note"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        tools.push(toolDef(
+            "graph_draft",
+            "Draft/commit separation (git-like). status: show uncommitted "
+            "changes vs latest; commit: freeze the draft as a new version; "
+            "discard: drop the draft.",
+            p, req));
+    }
     return tools;
 }
 
@@ -221,6 +270,10 @@ class ToolRunner {
                 return history(args);
             if (name == "graph_rollback")
                 return rollback(args);
+            if (name == "graph_cursor")
+                return cursorTool(args);
+            if (name == "graph_draft")
+                return draftTool(args);
             return textContent("unknown tool: " + name, true);
         }
         catch (const std::exception& e) {
@@ -373,6 +426,76 @@ class ToolRunner {
         out.set("restoredFrom", a.num("version"));
         out.set("newVersion", nv);
         return textContent(out.dump(2));
+    }
+
+    // cursorTool: 游标式逐项修改，所有改动落草稿（graph_cursor）
+    Json cursorTool(const Json& a)
+    {
+        std::string id     = a.str("id");
+        std::string action = a.str("action");
+        std::string cid    = a.str("cursor");
+        if (id.empty())
+            return textContent("cursor: 'id' is required", true);
+        Json r;
+        if (action == "open")
+            r = gc::cursorOpen(store_, id, a.str("target"));
+        else if (action == "get")
+            r = gc::cursorGet(store_, id, cid);
+        else if (action == "next")
+            r = gc::cursorMove(store_, id, cid, 1);
+        else if (action == "prev")
+            r = gc::cursorMove(store_, id, cid, -1);
+        else if (action == "update")
+            r = gc::cursorUpdate(store_, id, cid, a);
+        else if (action == "insert")
+            r = gc::cursorInsert(store_, id, cid, a);
+        else if (action == "delete")
+            r = gc::cursorDelete(store_, id, cid);
+        else if (action == "close")
+            r = gc::cursorClose(store_, id, cid);
+        else
+            return textContent(
+                "cursor: unknown action '" + action +
+                    "' (open|get|next|prev|update|insert|delete|close)",
+                true);
+        const Json* err = r.find("error");
+        return textContent(err ? err->s : r.dump(2), err != nullptr);
+    }
+
+    // draftTool: 草稿状态 / 提交 / 丢弃（graph_draft）
+    Json draftTool(const Json& a)
+    {
+        std::string id     = a.str("id");
+        std::string action = a.str("action", "status");
+        if (id.empty())
+            return textContent("draft: 'id' is required", true);
+        if (action == "status") {
+            Json        r   = gc::draftStatus(store_, id);
+            const Json* err = r.find("error");
+            return textContent(err ? err->s : r.dump(2), err != nullptr);
+        }
+        if (action == "commit") {
+            int         nv = 0;
+            std::string err;
+            if (!store_.commitDraft(id, a.str("note"), &nv, &err))
+                return textContent(err, true);
+            Json out = Json::obj();
+            out.set("status", "committed");
+            out.set("id", id);
+            out.set("newVersion", (double)nv);
+            return textContent(out.dump(2));
+        }
+        if (action == "discard") {
+            bool had = store_.hasDraft(id);
+            store_.discardDraft(id);
+            Json out = Json::obj();
+            out.set("status", had ? "discarded" : "no draft");
+            out.set("id", id);
+            return textContent(out.dump(2));
+        }
+        return textContent("draft: unknown action '" + action +
+                               "' (status|commit|discard)",
+                           true);
     }
 };
 

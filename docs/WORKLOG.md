@@ -115,6 +115,25 @@ MCP     ：initialize 握手 → tools/list 返回 8 工具 →
 - **SonarQube**：`sonar-project.properties`（sources/tests 划分、产物目录排除、
   cfamily build-wrapper 配置）。
 
+### 阶段七：版本管理增强（draft-commit 分离 + cursor 逐项修改，issue #6）
+
+需求："类似 git 的版本管理 + 类似数据库 cursor 的数据修改，从简设计。"
+在不改动现有 8 工具与既有测试语义的前提下叠加两项能力：
+
+- **草稿层（storage.hpp）**：新增可变 `draft.json`；`commitDraft` 复用 `save()`
+  把草稿固化为新版本，`discardDraft` 丢弃。`graph_create` 行为不变。
+- **游标语义（cursor.hpp，新增）**：类比数据库游标 open/get/next/prev/update/
+  insert/delete/close 逐项改节点/边，改动落草稿；`draftStatus` 汇报相对 latest
+  的增删改。游标状态持久化到 `cursors/`（CLI 每次独立进程，需跨调用复用）。
+- **双接口对等**：MCP 新增 `graph_cursor` / `graph_draft`（工具 8→10）；CLI 新增
+  `cursor` / `draft` 子命令（9→11）。
+- **从简取舍**：游标有效性由「草稿是否存在」隐式门控，commit/discard 后旧游标
+  操作报错重开，省去跨平台目录遍历清理。
+
+验证：单元测试新增 testDraftCommit / testCursor（合计 168 断言全绿）；CLI 冒烟
+create → cursor open/update → draft status(modified=1) → commit(v2) → history 通过；
+MCP serve tools/list=10、graph_cursor / graph_draft 调用返回正常。
+
 ## 3. 工时分布（估算）
 
 | 阶段 | 占比 |

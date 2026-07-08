@@ -351,7 +351,7 @@ static void testMcpProtocol()
     Json tl =
         Json::parse(R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})", &err);
     CHECK(mcp::handleMessage(tl, store, resp));
-    CHECK(resp.find("result")->find("tools")->size() == 8);
+    CHECK(resp.find("result")->find("tools")->size() == 10);
     // tools/call graph_create
     Json call = Json::parse(
         R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
@@ -396,6 +396,106 @@ static void testMcpProtocol()
     CHECK(resp.find("error") != nullptr);
 }
 
+static void testDraftCommit()
+{
+    gs::Store store("test-store-tmp");
+    Graph     g  = gp::parseMermaid("flowchart TD\nA[Alpha]-->B[Beta]\n");
+    g.name       = "draft graph";
+    int v1       = store.save(g, "v1");
+    CHECK(v1 == 1);
+    std::string id = g.id;
+    store.discardDraft(id);  // 从干净状态开始
+
+    // 初始无草稿：clean
+    Json st0 = gc::draftStatus(store, id);
+    CHECK(st0.boolean("clean"));
+    CHECK(!store.hasDraft(id));
+
+    // 打开游标（派生草稿），改第一个节点 label
+    Json        op  = gc::cursorOpen(store, id, "nodes");
+    std::string cid = op.str("cursor");
+    CHECK(!cid.empty());
+    CHECK(store.hasDraft(id));
+    Json up = gc::cursorUpdate(store, id, cid, Json::parse(R"({"label":"A2"})"));
+    CHECK(up.boolean("updated"));
+
+    // status 显示 modified=1，且 latest 尚未变化
+    Json st1 = gc::draftStatus(store, id);
+    CHECK(!st1.boolean("clean"));
+    CHECK((int)st1.find("nodes")->num("modified") == 1);
+    Graph latest;
+    CHECK(store.load(id, latest, 0));
+    CHECK(latest.findNode("A")->label == "Alpha");
+
+    // commit -> v2，草稿清除，latest 生效
+    int         nv = 0;
+    std::string cerr;
+    CHECK(store.commitDraft(id, "rename A", &nv, &cerr));
+    CHECK(nv == 2);
+    CHECK(!store.hasDraft(id));
+    CHECK(store.load(id, latest, 0));
+    CHECK(latest.findNode("A")->label == "A2");
+    CHECK(store.history(id).size() == 2);
+
+    // 无草稿时 commit 失败
+    CHECK(!store.commitDraft(id, "noop", &nv, &cerr));
+}
+
+static void testCursor()
+{
+    gs::Store store("test-store-tmp");
+    Graph     g = gp::parseMermaid("flowchart TD\nN1[One]-->N2[Two]\n");
+    g.name      = "cursor graph";
+    store.save(g, "v1");
+    std::string id = g.id;
+    store.discardDraft(id);
+
+    Json        op  = gc::cursorOpen(store, id, "nodes");
+    std::string cid = op.str("cursor");
+    CHECK(op.str("target") == "nodes");
+    CHECK((int)op.num("count") == 2);
+    CHECK(op.find("item")->str("id") == "N1");
+
+    // next -> 第二个节点
+    Json nx = gc::cursorMove(store, id, cid, 1);
+    CHECK((int)nx.num("index") == 1);
+    CHECK(nx.find("item")->str("id") == "N2");
+
+    // insert 在当前项之后插入 N3
+    Json ins = gc::cursorInsert(store, id, cid,
+                                Json::parse(R"({"newId":"N3","label":"Three"})"));
+    CHECK(ins.boolean("inserted"));
+    CHECK((int)ins.num("count") == 3);
+    CHECK(ins.find("item")->str("id") == "N3");
+
+    // update 当前项(N3) label
+    Json up = gc::cursorUpdate(store, id, cid,
+                               Json::parse(R"({"label":"Three-mod"})"));
+    CHECK(up.find("item")->str("label") == "Three-mod");
+
+    // 草稿内容校验
+    Graph d;
+    CHECK(store.loadDraft(id, d));
+    CHECK(d.nodes.size() == 3);
+    CHECK(d.findNode("N3") != nullptr);
+    CHECK(d.findNode("N3")->label == "Three-mod");
+
+    // delete 当前项(N3)
+    Json del = gc::cursorDelete(store, id, cid);
+    CHECK(del.boolean("deleted"));
+    CHECK((int)del.num("count") == 2);
+    CHECK(store.loadDraft(id, d));
+    CHECK(d.findNode("N3") == nullptr);
+
+    // close 后游标失效
+    Json cl = gc::cursorClose(store, id, cid);
+    CHECK(cl.boolean("closed"));
+    Json after = gc::cursorGet(store, id, cid);
+    CHECK(after.find("error") != nullptr);
+
+    store.discardDraft(id);
+}
+
 int runAll()
 {
     testJson();
@@ -412,6 +512,8 @@ int runAll()
     testBase64();
     testStorage();
     testMcpProtocol();
+    testDraftCommit();
+    testCursor();
     std::cout << "tests: " << g_passed << " passed, " << g_failed
               << " failed\n";
     return g_failed == 0 ? 0 : 1;

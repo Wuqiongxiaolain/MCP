@@ -18,7 +18,7 @@ STATIC :=
 endif
 
 HDRS := src/json.hpp src/model.hpp src/parsers.hpp src/layout.hpp \
-        src/exporters.hpp src/storage.hpp src/mcp.hpp
+        src/exporters.hpp src/storage.hpp src/cursor.hpp src/mcp.hpp
 
 .PHONY: all test clean
 

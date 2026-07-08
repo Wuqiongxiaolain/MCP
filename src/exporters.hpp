@@ -16,6 +16,7 @@
 #        define WIN32_LEAN_AND_MEAN
 #    endif
 #    include <windows.h>
+#    include <shellapi.h>
 #else
 #    include <sys/stat.h>
 #endif
@@ -702,8 +703,71 @@ inline std::string findBrowser()
     return "";
 }
 
-// 静默执行命令。Windows 下通过临时 .bat 规避 cmd.exe 在“带引号可执行路径
-// + 重定向”场景下的引号剥离问题（该问题会让 std::system 悄悄失败）。
+// editorFromEnv: 读取 GRAPHMCP_EDITOR 环境变量，允许用户覆盖默认编辑器
+inline std::string editorFromEnv()
+{
+    const char* e = getenv("GRAPHMCP_EDITOR");
+    return e ? e : "";
+}
+
+// findExecutable: 从候选路径列表中定位第一个存在的可执行文件
+inline std::string findExecutable(const std::vector<std::string>& cands)
+{
+    for (auto& c : cands) {
+        std::ifstream f(c, std::ios::binary);
+        if (f.good())
+            return c;
+    }
+    return "";
+}
+
+// findDrawioDesktop: 按候选路径探测 draw.io Desktop 安装
+inline std::string findDrawioDesktop()
+{
+    std::vector<std::string> cands;
+#ifdef _WIN32
+    const char* lad = getenv("LOCALAPPDATA");
+    if (lad)
+        cands.push_back(std::string(lad) +
+                        "\\Programs\\draw.io\\draw.io.exe");
+    const char* pf = getenv("ProgramFiles");
+    if (pf)
+        cands.push_back(std::string(pf) + "\\draw.io\\draw.io.exe");
+#elif __APPLE__
+    cands.push_back("/Applications/draw.io.app/Contents/MacOS/draw.io");
+#else
+    cands.push_back("/usr/bin/draw.io");
+    cands.push_back("/usr/local/bin/draw.io");
+#endif
+    return findExecutable(cands);
+}
+
+// findVSCode: 按候选路径探测 VS Code 安装（常用于 SVG 编辑）
+inline std::string findVSCode()
+{
+    std::vector<std::string> cands;
+#ifdef _WIN32
+    const char* lad = getenv("LOCALAPPDATA");
+    if (lad)
+        cands.push_back(std::string(lad) +
+                        "\\Programs\\Microsoft VS Code\\Code.exe");
+    const char* pf = getenv("ProgramFiles");
+    if (pf)
+        cands.push_back(std::string(pf) + "\\Microsoft VS Code\\Code.exe");
+#elif __APPLE__
+    cands.push_back("/usr/local/bin/code");
+    cands.push_back(
+        "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/"
+        "code");
+#else
+    cands.push_back("/usr/bin/code");
+    cands.push_back("/usr/local/bin/code");
+#endif
+    return findExecutable(cands);
+}
+
+// 静默执行命令。Windows 下通过临时 .bat 规避 cmd.exe 在"带引号可执行路径
+// + 重定向"场景下的引号剥离问题（该问题会让 std::system 悄悄失败）。
 // runQuiet: 静默执行命令（Windows 下通过 .bat 规避 system 引号问题）
 inline int runQuiet(const std::string& cmd, const std::string& tmpBase)
 {
@@ -950,17 +1014,39 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
 // ----------------------------------------------------- 外部编辑器打开 --
 
 // 使用系统默认处理器/浏览器打开文件或 URL
-// openExternal: 用系统默认处理器打开 URL 或文件
-inline bool openExternal(const std::string& target)
+// 当 editor 非空时，用指定程序打开，而非系统默认关联。
+// Windows 使用 ShellExecuteW 避免 cmd.exe 依赖和 stdio 继承（MCP
+// 场景下 system() 可能干扰 JSON-RPC 通道）。
+// openExternal: 用系统默认处理器或指定编辑器打开 URL/文件
+inline bool openExternal(const std::string& target,
+                         const std::string& editor = "")
 {
 #ifdef _WIN32
-    std::string cmd = "start \"\" \"" + target + "\"";
+    std::wstring wtarget = widen(target);
+    if (!editor.empty()) {
+        std::wstring weditor = widen(editor);
+        HINSTANCE   h       = ShellExecuteW(nullptr, L"open", weditor.c_str(),
+                                                     wtarget.c_str(), nullptr,
+                                                     SW_SHOWNORMAL);
+        return reinterpret_cast<INT_PTR>(h) > 32;
+    }
+    HINSTANCE h = ShellExecuteW(nullptr, L"open", wtarget.c_str(), nullptr,
+                                nullptr, SW_SHOWNORMAL);
+    return reinterpret_cast<INT_PTR>(h) > 32;
 #elif __APPLE__
-    std::string cmd = "open \"" + target + "\"";
+    if (!editor.empty())
+        return std::system(
+                   ("open -a \"" + editor + "\" \"" + target + "\"").c_str()) ==
+               0;
+    return std::system(("open \"" + target + "\"").c_str()) == 0;
 #else
-    std::string cmd = "xdg-open \"" + target + "\"";
+    std::string quiet = " >/dev/null 2>&1";
+    if (!editor.empty())
+        return std::system(
+                   ("\"" + editor + "\" \"" + target + "\"" + quiet).c_str()) ==
+               0;
+    return std::system(("xdg-open \"" + target + "\"" + quiet).c_str()) == 0;
 #endif
-    return std::system(cmd.c_str()) == 0;
 }
 
 }  // namespace ge

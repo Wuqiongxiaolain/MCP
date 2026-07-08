@@ -1,5 +1,7 @@
 # graphmcp — 图形设计与绘图 MCP 工具
 
+> Gitlab为镜像备份仓，活跃项目管理见Github仓库https://github.com/Wuqiongxiaolain/MCP。
+
 一个用 **C++17** 编写的图形设计与绘图工具，零第三方依赖，单可执行文件。
 既可作为 **CLI 工具** 使用，也可作为 **MCP (Model Context Protocol) 服务器**
 接入 Claude Code / Claude Desktop 等 AI 客户端。
@@ -14,7 +16,10 @@
 | [项目思维导图](docs/MINDMAP.md) | 能力总览、输入/输出格式、质量保障与 DevOps 全景 |
 | [工作记录](docs/WORKLOG.md) | 需求分析、技术决策、开发过程与 CI/CD 流水线说明 |
 
-示例输入见 `examples/`；MCP 配置模板见 `mcp-config.example.json`。
+示例输入见 `examples/example_input/`，导出基准与目录说明见 `examples/README.md`；
+旧样例名已迁移，如 `mindmap.md -> outline.md`、
+`whiteboard.excalidraw -> whiteboard_freedraw.excalidraw`。MCP 配置模板见
+`mcp-config.example.json`。
 
 ## 构建
 

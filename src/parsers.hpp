@@ -8,7 +8,6 @@
 #include <functional>
 #include <stdexcept>
 
-
 namespace gp {
 
 using gj::Json;
@@ -728,6 +727,10 @@ inline Graph parseExcalidraw(const std::string& text)
         throw ParseError("excalidraw: missing 'elements' array");
     Graph g;
     g.type = "whiteboard";
+    if (const Json* fs = j.find("files")) {
+        if (fs->isObj())
+            g.files = *fs;
+    }
     // 保留原始 elements，支持无损往返转换
     for (auto& el : *els->a) {
         if (el.boolean("isDeleted", false))
@@ -763,8 +766,25 @@ inline Graph parseExcalidraw(const std::string& text)
             if (const Json* eb = el.find("endBinding"))
                 if (eb->isObj())
                     to = eb->str("elementId");
-            if (!from.empty() && !to.empty())
-                g.addEdge(from, to);
+            if (!from.empty() && !to.empty()) {
+                // 箭头嵌入文字：text.containerId 指向 arrow.id
+                std::string label    = textByContainer.count(el.str("id")) ?
+                                           textByContainer[el.str("id")] :
+                                           "";
+                std::string style    = el.str("strokeStyle", "solid");
+                std::string arrow    = "arrow";
+                bool        hasEnd   = !el.str("endArrowhead").empty() &&
+                                       el.str("endArrowhead") != "null";
+                bool        hasStart = !el.str("startArrowhead").empty() &&
+                                       el.str("startArrowhead") != "null";
+                if (!hasEnd && !hasStart)
+                    arrow = "none";
+                else if (hasEnd && hasStart)
+                    arrow = "both";
+                else if (hasStart && !hasEnd)
+                    std::swap(from, to);
+                g.addEdge(from, to, label, style, arrow);
+            }
         }
     }
     g.laidOut = true;  // 白板场景自带坐标
@@ -821,7 +841,7 @@ inline std::string detectFormat(const std::string& text)
 // 关键步骤：确定格式 -> 调用对应解析器 -> 按需覆盖图类型
 inline Graph parseAny(const std::string& text,
                       std::string        format      = "auto",
-                      std::string        diagramType = "")
+                      const std::string& diagramType = "")
 {
     if (format.empty() || format == "auto")
         format = detectFormat(text);

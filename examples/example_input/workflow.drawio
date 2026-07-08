@@ -1,0 +1,7 @@
+<graph type="flowchart" name="drawio输入样例">
+  <node id="start" label="Start" shape="round"/>
+  <node id="check" label="Check" shape="diamond"/>
+  <node id="done" label="Done" shape="rect"/>
+  <edge from="start" to="check" label="next"/>
+  <edge from="check" to="done" label="ok"/>
+</graph>

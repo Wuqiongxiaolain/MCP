@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="460" height="352" viewBox="0 0 460 352">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <line x1="216.491" y1="84" x2="173.509" y2="154" stroke="#333" stroke-width="1.5"/>
+  <line x1="257.018" y1="84" x2="342.982" y2="154" stroke="#333" stroke-width="1.5"/>
+  <line x1="146.491" y1="198" x2="103.509" y2="268" stroke="#333" stroke-width="1.5"/>
+  <line x1="173.509" y1="198" x2="216.491" y2="268" stroke="#333" stroke-width="1.5"/>
+  <line x1="370" y1="198" x2="370" y2="268" stroke="#333" stroke-width="1.5"/>
+  <rect x="180" y="40" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="230" y="67" text-anchor="middle">CEO</text>
+  <rect x="110" y="154" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="160" y="181" text-anchor="middle">CTO</text>
+  <rect x="320" y="154" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="370" y="181" text-anchor="middle">CFO</text>
+  <rect x="40" y="268" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="90" y="295" text-anchor="middle">工程师A</text>
+  <rect x="180" y="268" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="230" y="295" text-anchor="middle">工程师B</text>
+  <rect x="320" y="268" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="370" y="295" text-anchor="middle">财务专员</text>
+</svg>

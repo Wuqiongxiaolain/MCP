@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-
 namespace gj {
 
 class Json;

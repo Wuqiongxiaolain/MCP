@@ -6,7 +6,6 @@
 #include "storage.hpp"
 #include <iostream>
 
-
 namespace mcp {
 
 using gj::Json;
@@ -31,8 +30,8 @@ inline Json prop(const std::string& type, const std::string& desc)
 // 参数命名：name=工具名，props=参数集合，required=必填参数列表
 inline Json toolDef(const std::string& name,
                     const std::string& desc,
-                    Json               props,
-                    Json               required)
+                    const Json&        props,
+                    const Json&        required)
 {
     Json t = Json::obj();
     t.set("name", name);
@@ -261,7 +260,7 @@ class ToolRunner {
     }
 
     // convert: 一次性格式转换，不进入存储层
-    Json convert(const Json& a)
+    static Json convert(const Json& a)
     {
         Graph g = gp::parseAny(a.str("content"), a.str("format", "auto"));
         ge::ExportResult r = ge::exportGraph(g, a.str("to"));

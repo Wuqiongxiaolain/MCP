@@ -18,3 +18,6 @@ ci-smoke.*
 # 课程小作业草稿，不纳入版本控制
 docs/MiniTasks/
 out/
+
+# 已移除的 HTML/rough 路径残留，勿再提交
+third_party/excalidraw-assets/rough.js

@@ -1,0 +1,11 @@
+<graph type="architecture" name="微服务示例">
+  <node id="gateway" label="API Gateway" shape="round"/>
+  <node id="cluster" label="Service Cluster">
+    <node id="order" label="Order Service" shape="rect"/>
+    <node id="payment" label="Payment Service" shape="rect"/>
+  </node>
+  <node id="db" label="MySQL" shape="ellipse"/>
+  <edge from="gateway" to="order" label="http"/>
+  <edge from="order" to="payment" label="rpc"/>
+  <edge from="payment" to="db" label="sql"/>
+</graph>

@@ -3,9 +3,11 @@
 #pragma once
 #include "layout.hpp"
 #include "model.hpp"
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <functional>
+#include <sstream>
 
 #ifdef _WIN32
 #    include <direct.h>
@@ -16,8 +18,20 @@
 #        define WIN32_LEAN_AND_MEAN
 #    endif
 #    include <windows.h>
-#else
+#elif defined(__APPLE__)
+#    include <limits.h>
+#    include <mach-o/dyld.h>
 #    include <sys/stat.h>
+#    ifndef PATH_MAX
+#        define PATH_MAX 4096
+#    endif
+#else
+#    include <limits.h>
+#    include <sys/stat.h>
+#    include <unistd.h>
+#    ifndef PATH_MAX
+#        define PATH_MAX 4096
+#    endif
 #endif
 
 namespace ge {
@@ -27,10 +41,21 @@ using gm::Edge;
 using gm::Graph;
 using gm::Node;
 
+// FreedrawStroke: 从 Excalidraw freedraw 提取出的矢量笔迹
+struct FreedrawStroke
+{
+    std::string                            id;
+    std::string                            strokeColor = "#1e1e1e";
+    std::string                            strokeStyle = "solid";
+    double                                 strokeWidth = 2.0;
+    double                                 opacity     = 1.0;
+    std::vector<std::pair<double, double>> points;  // 绝对坐标点列
+};
+
 // ------------------------------------------------------------------ 工具函数
 // --
 
-// xmlEscape: XML 文本转义，避免标签字符破坏导出结构
+// xmlEscape: 通用 XML 转义（文本与属性均安全；含单引号）
 inline std::string xmlEscape(const std::string& s)
 {
     std::string out;
@@ -41,6 +66,36 @@ inline std::string xmlEscape(const std::string& s)
             case '&': out += "&amp;"; break;
             case '"': out += "&quot;"; break;
             case '\'': out += "&#39;"; break;
+            default: out += c;
+        }
+    }
+    return out;
+}
+
+// xmlTextEscape: XML 文本节点转义；保留 CSS 单/双引号语义
+inline std::string xmlTextEscape(const std::string& s)
+{
+    std::string out;
+    for (char c : s) {
+        switch (c) {
+            case '<': out += "&lt;"; break;
+            case '>': out += "&gt;"; break;
+            case '&': out += "&amp;"; break;
+            default: out += c;
+        }
+    }
+    return out;
+}
+
+// xmlAttrEscape: 双引号包裹的 XML 属性值转义（不转义单引号）
+inline std::string xmlAttrEscape(const std::string& s)
+{
+    std::string out;
+    for (char c : s) {
+        switch (c) {
+            case '<': out += "&lt;"; break;
+            case '&': out += "&amp;"; break;
+            case '"': out += "&quot;"; break;
             default: out += c;
         }
     }
@@ -78,6 +133,23 @@ inline std::string base64Encode(const std::string& in)
         out += '=';
     }
     return out;
+}
+
+// getEnvVar: 跨平台读取环境变量；Windows 下避免直接使用废弃 getenv
+inline std::string getEnvVar(const char* name)
+{
+#ifdef _WIN32
+    char*  value = nullptr;
+    size_t len   = 0;
+    if (_dupenv_s(&value, &len, name) != 0 || !value)
+        return "";
+    std::string out(value);
+    std::free(value);
+    return out;
+#else
+    const char* value = std::getenv(name);
+    return value ? value : "";
+#endif
 }
 
 // 创建文件路径的所有父目录（尽力而为）
@@ -119,7 +191,1011 @@ inline std::string readFile(const std::string& path)
     return os.str();
 }
 
-// ---------------------------------------------------------------- Mermaid --
+// fileReadable: 探测路径是否可打开读取
+inline bool fileReadable(const std::string& path)
+{
+    std::ifstream f(path, std::ios::binary);
+    return static_cast<bool>(f);
+}
+
+// joinPath: 用 / 拼接路径片段（兼容 Windows API 接受正斜杠）
+inline std::string joinPath(const std::string& a, const std::string& b)
+{
+    if (a.empty())
+        return b;
+    if (b.empty())
+        return a;
+    char last = a.back();
+    if (last == '/' || last == '\\')
+        return a + b;
+    return a + "/" + b;
+}
+
+// executableDir: 当前进程可执行文件所在目录（失败返回空）
+inline std::string executableDir()
+{
+    std::string path;
+#ifdef _WIN32
+    char  buf[MAX_PATH];
+    DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH)
+        return "";
+    path.assign(buf, n);
+#elif defined(__APPLE__)
+    // 缓冲不足时 _NSGetExecutablePath 会写入所需 size 并返回非 0，需按新 size
+    // 重试
+    char     stackBuf[PATH_MAX];
+    uint32_t size = sizeof(stackBuf);
+    if (_NSGetExecutablePath(stackBuf, &size) == 0) {
+        path = stackBuf;
+    }
+    else {
+        std::vector<char> heap(size);
+        if (_NSGetExecutablePath(heap.data(), &size) != 0)
+            return "";
+        path.assign(heap.data());
+    }
+#else
+    char    buf[PATH_MAX];
+    ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (n <= 0)
+        return "";
+    buf[n] = '\0';
+    path   = buf;
+#endif
+    size_t slash = path.find_last_of("/\\");
+    if (slash == std::string::npos)
+        return "";
+    return path.substr(0, slash);
+}
+
+// bundledAssetPath: 解析 vendored Excalidraw 资源文件
+// 顺序：GRAPHMCP_ASSETS → 可执行文件旁 third_party → CWD 相对路径
+inline std::string bundledAssetPath(const std::string& name)
+{
+    std::vector<std::string> candidates;
+    std::string              env = getEnvVar("GRAPHMCP_ASSETS");
+    if (!env.empty()) {
+        candidates.push_back(joinPath(env, name));
+        candidates.push_back(
+            joinPath(joinPath(env, "excalidraw-assets"), name));
+        candidates.push_back(
+            joinPath(joinPath(env, "third_party/excalidraw-assets"), name));
+    }
+    std::string exeDir = executableDir();
+    if (!exeDir.empty()) {
+        candidates.push_back(
+            joinPath(exeDir, joinPath("third_party/excalidraw-assets", name)));
+        candidates.push_back(joinPath(
+            exeDir, joinPath("../third_party/excalidraw-assets", name)));
+        candidates.push_back(joinPath(
+            exeDir, joinPath("../../third_party/excalidraw-assets", name)));
+    }
+    candidates.push_back(joinPath("third_party/excalidraw-assets", name));
+
+    for (const auto& c : candidates) {
+        if (fileReadable(c))
+            return c;
+    }
+    return candidates.back();
+}
+
+struct ExcalidrawFontMetrics
+{
+    int    unitsPerEm = 1000;
+    int    ascender   = 886;
+    int    descender  = -374;
+    double lineHeight = 1.25;
+    // 家族名用单引号：写入 font-family="..." 时由 xmlAttrEscape 保留 '
+    std::string cssFamily =
+        "'Excalifont',sans-serif,'Segoe UI Emoji','Apple Color Emoji'";
+};
+
+inline ExcalidrawFontMetrics excalidrawFontMetricsByFamily(int fontFamily)
+{
+    switch (fontFamily) {
+        case 1:
+            return {1000, 886, -374, 1.25,
+                    "'Virgil',sans-serif,'Segoe UI Emoji','Apple Color Emoji'"};
+        case 2:
+            return {2048, 1577, -471, 1.15,
+                    "'Helvetica Neue',Arial,sans-serif,'Segoe UI "
+                    "Emoji','Apple Color Emoji'"};
+        case 3:
+            return {2048, 1900, -480, 1.2,
+                    "'Cascadia',Consolas,monospace,'Segoe UI Emoji','Apple "
+                    "Color Emoji'"};
+        case 5:
+            return {1000, 886, -374, 1.25,
+                    "'Excalifont',sans-serif,'Segoe UI Emoji','Apple Color "
+                    "Emoji'"};
+        default: return {};
+    }
+}
+
+inline int excalidrawFontFamily(const Json& el)
+{ return (int)std::llround(el.num("fontFamily", 5)); }
+
+inline double excalidrawLineHeight(const Json& el)
+{
+    if (const Json* lh = el.find("lineHeight"))
+        return lh->isNum() ? lh->n : 1.25;
+    return excalidrawFontMetricsByFamily(excalidrawFontFamily(el)).lineHeight;
+}
+
+inline std::string excalidrawTextFontFamilyCss(const Json& el)
+{ return excalidrawFontMetricsByFamily(excalidrawFontFamily(el)).cssFamily; }
+
+inline std::string excalidrawEmbeddedFontCss()
+{
+    // 仅在必要字体全部成功时永久缓存；部分成功则本轮返回临时结果、保持
+    // css 为空以便后续（修正 CWD / GRAPHMCP_ASSETS）后重试
+    static std::string css;
+    if (!css.empty())
+        return css;
+
+    auto fontFace = [](const std::string& family, const std::string& file,
+                       const std::string& unicodeRange = "") {
+        std::string data = readFile(bundledAssetPath(file));
+        if (data.empty())
+            return std::string();
+        std::ostringstream os;
+        os << "@font-face{font-family:'" << family
+           << "';src:url(data:font/woff2;base64," << base64Encode(data)
+           << ") format('woff2');font-weight:400;font-style:normal;";
+        if (!unicodeRange.empty())
+            os << "unicode-range:" << unicodeRange << ";";
+        os << "}";
+        return os.str();
+    };
+
+    // 必要：Virgil + Excalifont 主片；Cascadia / 其余子集尽量加载
+    std::string virgil = fontFace("Virgil", "Virgil.woff2");
+    std::string casc   = fontFace("Cascadia", "Cascadia.woff2");
+    std::string exMain = fontFace(
+        "Excalifont",
+        "Excalifont-Regular-a88b72a24fb54c9f94e3b5fdaa7481c9.woff2",
+        "U+20-7e,U+a0-a3,U+a5-a6,U+a8-ab,U+ad-b1,U+b4,U+b6-b8,U+ba-ff,"
+        "U+131,U+152-153,U+2bc,U+2c6,U+2da,U+2dc,U+304,U+308,U+2013-2014,"
+        "U+2018-201a,U+201c-201e,U+2020,U+2022,U+2024-2026,U+2030,"
+        "U+2039-203a,U+20ac,U+2122,U+2212");
+    std::ostringstream os;
+    os << virgil << casc << exMain;
+    os << fontFace("Excalifont",
+                   "Excalifont-Regular-be310b9bcd4f1a43f571c46df7809174.woff2",
+                   "U+100-130,U+132-137,U+139-149,U+14c-151,U+154-17e,U+192,"
+                   "U+1fc-1ff,U+218-21b,U+237,U+1e80-1e85,U+1ef2-1ef3,U+2113");
+    os << fontFace("Excalifont",
+                   "Excalifont-Regular-b9dcf9d2e50a1eaf42fc664b50a3fd0d.woff2",
+                   "U+400-45f,U+490-491,U+2116");
+    os << fontFace(
+        "Excalifont",
+        "Excalifont-Regular-41b173a47b57366892116a575a43e2b6.woff2",
+        "U+37e,U+384-38a,U+38c,U+38e-393,U+395-3a1,U+3a3-3a8,U+3aa-3cf,"
+        "U+3d7");
+    os << fontFace(
+        "Excalifont",
+        "Excalifont-Regular-3f2c5db56cc93c5a6873b1361d730c16.woff2",
+        "U+2c7,U+2d8-2d9,U+2db,U+2dd,U+302,U+306-307,U+30a-30c,U+326-328,"
+        "U+212e,U+2211,U+fb01-fb02");
+    os << fontFace(
+        "Excalifont",
+        "Excalifont-Regular-349fac6ca4700ffec595a7150a0d1e1d.woff2",
+        "U+462-463,U+472-475,U+4d8-4d9,U+4e2-4e3,U+4e6-4e9,U+4ee-4ef");
+    os << fontFace("Excalifont",
+                   "Excalifont-Regular-623ccf21b21ef6b3a0d87738f77eb071.woff2",
+                   "U+300-301,U+303");
+    std::string built = os.str();
+    // Virgil + Excalifont 主片齐备才永久缓存，避免部分成功锁死
+    if (!virgil.empty() && !exMain.empty())
+        css = built;
+    return built;
+}
+
+// collectFreedrawStrokes: 从 g.elements 提取 freedraw 并转换为绝对坐标点列
+inline std::vector<FreedrawStroke> collectFreedrawStrokes(const Graph& g)
+{
+    std::vector<FreedrawStroke> out;
+    for (const auto& el : g.elements) {
+        if (el.str("type") != "freedraw")
+            continue;
+        const Json* pts = el.find("points");
+        if (!pts || !pts->isArr() || pts->size() < 2)
+            continue;
+        FreedrawStroke s;
+        s.id          = el.str("id");
+        s.strokeColor = el.str("strokeColor", "#1e1e1e");
+        s.strokeStyle = el.str("strokeStyle", "solid");
+        s.strokeWidth = el.num("strokeWidth", 2);
+        s.opacity =
+            std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+        double bx = el.num("x");
+        double by = el.num("y");
+        for (const auto& p : *pts->a) {
+            if (!p.isArr() || p.size() < 2)
+                continue;
+            const Json& px = p.a->at(0);
+            const Json& py = p.a->at(1);
+            if (!px.isNum() || !py.isNum())
+                continue;
+            s.points.push_back({bx + px.n, by + py.n});
+        }
+        if (s.points.size() >= 2)
+            out.push_back(std::move(s));
+    }
+    return out;
+}
+
+// isWhiteboardElements: 是否应按 Excalidraw 原始 elements 渲染
+inline bool isWhiteboardElements(const Graph& g)
+{ return g.type == "whiteboard" && !g.elements.empty(); }
+
+// elementAbsolutePoints: 将元素局部 points 转为画布绝对坐标
+inline std::vector<std::pair<double, double>>
+elementAbsolutePoints(const Json& el)
+{
+    std::vector<std::pair<double, double>> out;
+    const Json*                            pts = el.find("points");
+    if (!pts || !pts->isArr())
+        return out;
+    double bx = el.num("x");
+    double by = el.num("y");
+    for (const auto& p : *pts->a) {
+        if (!p.isArr() || p.size() < 2)
+            continue;
+        const Json& px = p.a->at(0);
+        const Json& py = p.a->at(1);
+        if (!px.isNum() || !py.isNum())
+            continue;
+        out.push_back({bx + px.n, by + py.n});
+    }
+    return out;
+}
+
+// extendBounds: 用矩形扩展画布边界
+inline void extendBounds(double& minX,
+                         double& minY,
+                         double& maxX,
+                         double& maxY,
+                         double  x,
+                         double  y,
+                         double  w,
+                         double  h)
+{
+    minX = std::min(minX, x);
+    minY = std::min(minY, y);
+    maxX = std::max(maxX, x + w);
+    maxY = std::max(maxY, y + h);
+}
+
+// svgDashAttr: Excalidraw 线型映射为 SVG dash 属性片段
+inline std::string svgDashAttr(const std::string& strokeStyle)
+{
+    if (strokeStyle == "dashed")
+        return " stroke-dasharray=\"6,4\"";
+    if (strokeStyle == "dotted")
+        return " stroke-dasharray=\"1,4\"";
+    return "";
+}
+
+// svgFill: 将 Excalidraw 背景色映射为 SVG fill（transparent -> none）
+inline std::string svgFill(const Json& el)
+{
+    std::string bg = el.str("backgroundColor", "transparent");
+    if (bg.empty() || bg == "transparent")
+        return "none";
+    return bg;
+}
+
+// svgTextAnchor: Excalidraw 文本对齐映射
+inline std::string svgTextAnchor(const std::string& align)
+{
+    if (align == "center")
+        return "middle";
+    if (align == "right")
+        return "end";
+    return "start";
+}
+
+// excalidrawTextSvgXAt: 给定 bbox 左上角计算 SVG 文本锚点 x
+inline double excalidrawTextSvgXAt(double bx, const Json& el)
+{
+    double      w  = el.num("width");
+    std::string ta = el.str("textAlign", "left");
+    if (ta == "center")
+        return bx + w / 2;
+    if (ta == "right")
+        return bx + w;
+    return bx;
+}
+
+// excalidrawTextSvgYAt: 给定 bbox 左上角计算 alphabetic baseline y
+inline double
+excalidrawTextSvgYAt(double by, const Json& el, size_t lineIndex = 0)
+{
+    double                fs = el.num("fontSize", 16);
+    ExcalidrawFontMetrics metrics =
+        excalidrawFontMetricsByFamily(excalidrawFontFamily(el));
+    double lh             = excalidrawLineHeight(el);
+    double lineHeightPx   = fs * lh;
+    double fontSizeEm     = fs / metrics.unitsPerEm;
+    double verticalOffset = fontSizeEm * metrics.ascender +
+                            (lineHeightPx - fontSizeEm * metrics.ascender +
+                             fontSizeEm * metrics.descender) /
+                                2.0;
+    return by + lineIndex * lineHeightPx + verticalOffset;
+}
+
+// excalidrawTextSvgX: Excalidraw 文本 bbox 左上角 + 对齐偏移 → SVG 锚点 x
+inline double excalidrawTextSvgX(const Json& el)
+{ return excalidrawTextSvgXAt(el.num("x"), el); }
+
+// excalidrawTextSvgY: Excalidraw alphabetic baseline（近似 Excalifont 度量）
+inline double excalidrawTextSvgY(const Json& el, size_t lineIndex = 0)
+{ return excalidrawTextSvgYAt(el.num("y"), el, lineIndex); }
+
+inline std::pair<double, double>
+polylineMidpoint(const std::vector<std::pair<double, double>>& pts);
+
+// arrowBoundTextBBoxOrigin: 折线箭头嵌字 bbox 左上角（按路径长度中点）
+inline std::pair<double, double> arrowBoundTextBBoxOrigin(const Json& arrow,
+                                                          const Json& text)
+{
+    auto pts = elementAbsolutePoints(arrow);
+    if (pts.size() < 2)
+        return {text.num("x"), text.num("y")};
+    auto [mx, my] = polylineMidpoint(pts);
+    return {mx - text.num("width") / 2, my - text.num("height") / 2};
+}
+
+// polylineMidpoint: 按折线路径长度取几何中点，避免按点序号取中偏向拐点
+inline std::pair<double, double>
+polylineMidpoint(const std::vector<std::pair<double, double>>& pts)
+{
+    if (pts.empty())
+        return {0, 0};
+    if (pts.size() == 1)
+        return pts.front();
+    double total = 0;
+    for (size_t i = 1; i < pts.size(); i++) {
+        double dx = pts[i].first - pts[i - 1].first;
+        double dy = pts[i].second - pts[i - 1].second;
+        total += std::sqrt(dx * dx + dy * dy);
+    }
+    if (total <= 0)
+        return pts.front();
+    double half = total / 2.0;
+    double acc  = 0;
+    for (size_t i = 1; i < pts.size(); i++) {
+        double x0  = pts[i - 1].first;
+        double y0  = pts[i - 1].second;
+        double dx  = pts[i].first - x0;
+        double dy  = pts[i].second - y0;
+        double seg = std::sqrt(dx * dx + dy * dy);
+        if (acc + seg >= half && seg > 0) {
+            double t = (half - acc) / seg;
+            return {x0 + dx * t, y0 + dy * t};
+        }
+        acc += seg;
+    }
+    return pts.back();
+}
+
+inline std::pair<double, double>
+excalidrawTextBBoxOrigin(const Json&                        el,
+                         const std::map<std::string, Json>& arrows)
+{
+    std::string cid = el.str("containerId");
+    if (!cid.empty()) {
+        auto it = arrows.find(cid);
+        if (it != arrows.end())
+            return arrowBoundTextBBoxOrigin(it->second, el);
+    }
+    return {el.num("x"), el.num("y")};
+}
+
+// splitTextLinesNonEmpty: 为 SVG/HTML 文本渲染保留至少一行
+inline std::vector<std::string> splitTextLinesNonEmpty(const std::string& text)
+{
+    std::vector<std::string> lines = gm::splitLines(text);
+    if (lines.empty())
+        lines.push_back(text);
+    return lines;
+}
+
+// excalidrawFileDataUrl: 按 fileId 从 Excalidraw files 取 dataURL
+inline std::string excalidrawFileDataUrl(const Graph&       g,
+                                         const std::string& fileId)
+{
+    if (fileId.empty() || !g.files.isObj())
+        return "";
+    const Json* f = g.files.find(fileId);
+    if (!f || !f->isObj())
+        return "";
+    return f->str("dataURL");
+}
+
+// excalidrawImagePlacement: image 元素在 SVG 中的最终放置参数
+struct ExcalidrawImagePlacement
+{
+    double x = 0, y = 0, w = 0, h = 0;
+    bool   hasClip = false;
+    double clipX = 0, clipY = 0, clipW = 0, clipH = 0;
+};
+
+// resolveExcalidrawImagePlacement: 计算 image/crop 对应的渲染参数
+inline ExcalidrawImagePlacement resolveExcalidrawImagePlacement(const Json& el)
+{
+    ExcalidrawImagePlacement p;
+    p.x              = el.num("x");
+    p.y              = el.num("y");
+    p.w              = el.num("width");
+    p.h              = el.num("height");
+    const Json* crop = el.find("crop");
+    if (!crop || !crop->isObj())
+        return p;
+    double cx = crop->num("x");
+    double cy = crop->num("y");
+    double cw = crop->num("width");
+    double ch = crop->num("height");
+    double nw = crop->num("naturalWidth");
+    double nh = crop->num("naturalHeight");
+    if (cw <= 0 || ch <= 0 || nw <= 0 || nh <= 0)
+        return p;
+
+    double sx = p.w / cw;
+    double sy = p.h / ch;
+    p.x       = p.x - cx * sx;
+    p.y       = p.y - cy * sy;
+    p.w       = nw * sx;
+    p.h       = nh * sy;
+    p.hasClip = true;
+    p.clipX   = el.num("x");
+    p.clipY   = el.num("y");
+    p.clipW   = el.num("width");
+    p.clipH   = el.num("height");
+    return p;
+}
+
+// ExcalidrawAffine: SVG matrix(a b c d e f) 形式的二维仿射矩阵
+struct ExcalidrawAffine
+{
+    double a = 1, b = 0, c = 0, d = 1, e = 0, f = 0;
+    bool   identity = true;
+};
+
+// clamp01: 将数值限制到 [0,1]
+inline double clamp01(double v)
+{
+    if (v < 0.0)
+        return 0.0;
+    if (v > 1.0)
+        return 1.0;
+    return v;
+}
+
+// excalidrawElementScale: 读取 Excalidraw element.scale（默认 1,1）
+inline void excalidrawElementScale(const Json& el, double& sx, double& sy)
+{
+    sx             = 1.0;
+    sy             = 1.0;
+    const Json* sc = el.find("scale");
+    if (!sc || !sc->isArr() || sc->size() < 2)
+        return;
+    const Json& vx = sc->a->at(0);
+    const Json& vy = sc->a->at(1);
+    if (vx.isNum() && std::fabs(vx.n) > 1e-9)
+        sx = vx.n;
+    if (vy.isNum() && std::fabs(vy.n) > 1e-9)
+        sy = vy.n;
+}
+
+// excalidrawElementAffineByBox: 指定包围盒下的中心旋转+镜像变换
+inline ExcalidrawAffine excalidrawElementAffineByBox(const Json& el,
+                                                     double      x,
+                                                     double      y,
+                                                     double      w,
+                                                     double      h)
+{
+    ExcalidrawAffine t;
+    double           sx, sy;
+    excalidrawElementScale(el, sx, sy);
+    double angle = el.num("angle", 0);
+    if (std::fabs(angle) <= 1e-9 && std::fabs(sx - 1.0) <= 1e-9 &&
+        std::fabs(sy - 1.0) <= 1e-9)
+        return t;
+
+    double cx  = x + w / 2.0;
+    double cy  = y + h / 2.0;
+    double cs  = std::cos(angle);
+    double sn  = std::sin(angle);
+    t.a        = cs * sx;
+    t.b        = sn * sx;
+    t.c        = -sn * sy;
+    t.d        = cs * sy;
+    t.e        = cx - t.a * cx - t.c * cy;
+    t.f        = cy - t.b * cx - t.d * cy;
+    t.identity = false;
+    return t;
+}
+
+// excalidrawElementAffine: 对齐 Excalidraw 的中心点旋转+镜像变换
+inline ExcalidrawAffine excalidrawElementAffine(const Json& el)
+{
+    return excalidrawElementAffineByBox(el, el.num("x"), el.num("y"),
+                                        el.num("width"), el.num("height"));
+}
+
+// applyAffinePoint: 用仿射矩阵变换二维点
+inline void applyAffinePoint(const ExcalidrawAffine& t,
+                             double                  x,
+                             double                  y,
+                             double&                 ox,
+                             double&                 oy)
+{
+    ox = t.a * x + t.c * y + t.e;
+    oy = t.b * x + t.d * y + t.f;
+}
+
+// extendBoundsAffineRect: 用仿射变换后的矩形四角扩展画布边界
+inline void extendBoundsAffineRect(double&                 minX,
+                                   double&                 minY,
+                                   double&                 maxX,
+                                   double&                 maxY,
+                                   double                  x,
+                                   double                  y,
+                                   double                  w,
+                                   double                  h,
+                                   const ExcalidrawAffine& t)
+{
+    if (w <= 0 || h <= 0)
+        return;
+    if (t.identity) {
+        extendBounds(minX, minY, maxX, maxY, x, y, w, h);
+        return;
+    }
+    double tx, ty;
+    applyAffinePoint(t, x, y, tx, ty);
+    minX = std::min(minX, tx);
+    minY = std::min(minY, ty);
+    maxX = std::max(maxX, tx);
+    maxY = std::max(maxY, ty);
+    applyAffinePoint(t, x + w, y, tx, ty);
+    minX = std::min(minX, tx);
+    minY = std::min(minY, ty);
+    maxX = std::max(maxX, tx);
+    maxY = std::max(maxY, ty);
+    applyAffinePoint(t, x + w, y + h, tx, ty);
+    minX = std::min(minX, tx);
+    minY = std::min(minY, ty);
+    maxX = std::max(maxX, tx);
+    maxY = std::max(maxY, ty);
+    applyAffinePoint(t, x, y + h, tx, ty);
+    minX = std::min(minX, tx);
+    minY = std::min(minY, ty);
+    maxX = std::max(maxX, tx);
+    maxY = std::max(maxY, ty);
+}
+
+// FreedrawOutline: pressure 参与计算后的自由画描边轮廓
+struct FreedrawOutline
+{
+    std::vector<std::pair<double, double>> polygon;
+    std::string                            fillColor = "#1e1e1e";
+    double                                 opacity   = 1.0;
+};
+
+// makeFreedrawOutline: 参考 perfect-freehand 思路生成压力可变描边轮廓
+inline FreedrawOutline makeFreedrawOutline(const Json& el)
+{
+    FreedrawOutline out;
+    out.fillColor = el.str("strokeColor", "#1e1e1e");
+    out.opacity = std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+    auto pts    = elementAbsolutePoints(el);
+    if (pts.size() < 2)
+        return out;
+
+    std::vector<double> pressures(pts.size(), 0.5);
+    if (const Json* ps = el.find("pressures")) {
+        if (ps->isArr()) {
+            size_t n = std::min(ps->size(), pts.size());
+            for (size_t i = 0; i < n; i++) {
+                const Json& p = ps->a->at(i);
+                if (p.isNum())
+                    pressures[i] = clamp01(p.n);
+            }
+        }
+    }
+    bool simulatePressure = el.boolean("simulatePressure", true);
+    if (simulatePressure && pts.size() > 2) {
+        for (size_t i = 1; i < pts.size(); i++) {
+            double dx    = pts[i].first - pts[i - 1].first;
+            double dy    = pts[i].second - pts[i - 1].second;
+            double v     = std::sqrt(dx * dx + dy * dy);
+            double vp    = clamp01(1.0 - std::min(1.0, v / 32.0));
+            pressures[i] = std::max(pressures[i], vp);
+        }
+    }
+
+    double thinning = 0.6;
+    if (const Json* so = el.find("strokeOptions")) {
+        if (so->isObj()) {
+            if (const Json* t = so->find("thinning"))
+                if (t->isNum())
+                    thinning = clamp01((t->n + 1.0) * 0.5);
+        }
+    }
+    double baseRadius = std::max(0.5, el.num("strokeWidth", 2.0) * 0.5);
+
+    std::vector<std::pair<double, double>> left, right;
+    left.reserve(pts.size());
+    right.reserve(pts.size());
+    for (size_t i = 0; i < pts.size(); i++) {
+        size_t pi = i > 0 ? i - 1 : i;
+        size_t ni = i + 1 < pts.size() ? i + 1 : i;
+        double tx = pts[ni].first - pts[pi].first;
+        double ty = pts[ni].second - pts[pi].second;
+        double tl = std::sqrt(tx * tx + ty * ty);
+        if (tl <= 1e-9) {
+            tx = 1.0;
+            ty = 0.0;
+            tl = 1.0;
+        }
+        tx /= tl;
+        ty /= tl;
+        double nx = -ty;
+        double ny = tx;
+        double pr = clamp01(pressures[i]);
+        double rw = baseRadius * (1.0 - thinning + thinning * pr);
+        rw        = std::max(0.35, rw);
+        left.push_back({pts[i].first + nx * rw, pts[i].second + ny * rw});
+        right.push_back({pts[i].first - nx * rw, pts[i].second - ny * rw});
+    }
+    for (const auto& p : left)
+        out.polygon.push_back(p);
+    for (size_t i = right.size(); i > 0; --i)
+        out.polygon.push_back(right[i - 1]);
+    return out;
+}
+
+// svgPathFromPolygon: 轮廓点列转闭合 path 字符串
+inline std::string
+svgPathFromPolygon(const std::vector<std::pair<double, double>>& polygon)
+{
+    if (polygon.size() < 3)
+        return "";
+    std::ostringstream os;
+    os << "M " << polygon[0].first << " " << polygon[0].second;
+    for (size_t i = 1; i < polygon.size(); i++)
+        os << " L " << polygon[i].first << " " << polygon[i].second;
+    os << " Z";
+    return os.str();
+}
+
+// excalidrawCanvasBounds: 根据 elements 计算画布边界
+inline void excalidrawCanvasBounds(const Graph& g,
+                                   double&      minX,
+                                   double&      minY,
+                                   double&      maxX,
+                                   double&      maxY)
+{
+    minX = 1e18;
+    minY = 1e18;
+    maxX = -1e18;
+    maxY = -1e18;
+    // 箭头嵌字实际渲染位置取路径中点，bounds 必须用同一来源，不能只用 JSON 的
+    // x/y
+    std::map<std::string, Json> arrows;
+    for (const auto& el : g.elements) {
+        if (el.str("type") == "arrow")
+            arrows[el.str("id")] = el;
+    }
+    for (const auto& el : g.elements) {
+        std::string ty = el.str("type");
+        if (ty == "arrow" || ty == "line" || ty == "freedraw") {
+            auto   pts = elementAbsolutePoints(el);
+            double pad = 0.0;
+            // freedraw 轮廓半径约 strokeWidth/2，边界需计入以免 viewBox 裁切
+            if (ty == "freedraw")
+                pad = std::max(0.5, el.num("strokeWidth", 2.0) * 0.5) + 1.0;
+            for (const auto& p : pts) {
+                minX = std::min(minX, p.first - pad);
+                minY = std::min(minY, p.second - pad);
+                maxX = std::max(maxX, p.first + pad);
+                maxY = std::max(maxY, p.second + pad);
+            }
+            continue;
+        }
+        double bx = el.num("x");
+        double by = el.num("y");
+        if (ty == "text") {
+            auto origin = excalidrawTextBBoxOrigin(el, arrows);
+            bx          = origin.first;
+            by          = origin.second;
+        }
+        ExcalidrawAffine tf = excalidrawElementAffineByBox(
+            el, bx, by, el.num("width"), el.num("height"));
+        extendBoundsAffineRect(minX, minY, maxX, maxY, bx, by, el.num("width"),
+                               el.num("height"), tf);
+    }
+    if (minX > maxX) {
+        minX = 0;
+        minY = 0;
+        maxX = 200;
+        maxY = 150;
+    }
+}
+
+// collectArrowBoundTexts: 收集带嵌字的箭头及其文本元素
+inline void collectArrowBoundTexts(const Graph&                 g,
+                                   std::map<std::string, Json>& arrows,
+                                   std::map<std::string, Json>& arrowLabels)
+{
+    arrows.clear();
+    arrowLabels.clear();
+    for (const auto& el : g.elements) {
+        if (el.str("type") == "arrow")
+            arrows[el.str("id")] = el;
+    }
+    for (const auto& el : g.elements) {
+        if (el.str("type") != "text")
+            continue;
+        std::string cid = el.str("containerId");
+        if (!cid.empty() && !el.str("text").empty() && arrows.count(cid))
+            arrowLabels[cid] = el;
+    }
+}
+
+// arrowLabelMaskHole: 箭头嵌字遮罩挖空区域（含少量边距）
+inline void arrowLabelMaskHole(const Json& arrow,
+                               const Json& text,
+                               double      pad,
+                               double&     hx,
+                               double&     hy,
+                               double&     hw,
+                               double&     hh)
+{
+    auto origin = arrowBoundTextBBoxOrigin(arrow, text);
+    hx          = origin.first - pad;
+    hy          = origin.second - pad;
+    hw          = text.num("width") + pad * 2;
+    hh          = text.num("height") + pad * 2;
+}
+
+// toSVGExcalidraw: 按 Excalidraw elements 几何导出精确 SVG
+inline std::string toSVGExcalidraw(const Graph& g)
+{
+    double minX = 0, minY = 0, maxX = 200, maxY = 150;
+    excalidrawCanvasBounds(g, minX, minY, maxX, maxY);
+    double                      pad = 40;
+    double                      w   = maxX - minX + pad * 2;
+    double                      h   = maxY - minY + pad * 2;
+    double                      vx  = minX - pad;
+    double                      vy  = minY - pad;
+    std::map<std::string, Json> arrows, arrowLabels;
+    collectArrowBoundTexts(g, arrows, arrowLabels);
+    constexpr double   kLabelMaskPad = 4.0;
+    std::ostringstream os;
+    os << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << (int)w
+       << "\" height=\"" << (int)h << "\" viewBox=\"" << vx << " " << vy << " "
+       << (int)w << " " << (int)h << "\">\n";
+    os << "  <defs>\n";
+    os << "    <marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"9\" "
+          "refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" "
+          "orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" "
+          "fill=\"context-stroke\"/></marker>\n";
+    for (const auto& kv : arrowLabels) {
+        auto it = arrows.find(kv.first);
+        if (it == arrows.end())
+            continue;
+        double hx, hy, hw, hh;
+        arrowLabelMaskHole(it->second, kv.second, kLabelMaskPad, hx, hy, hw,
+                           hh);
+        os << "    <mask id=\"mask-" << xmlEscape(kv.first)
+           << "\" maskUnits=\"userSpaceOnUse\">\n";
+        os << "      <rect x=\"" << vx << "\" y=\"" << vy << "\" width=\"" << w
+           << "\" height=\"" << h << "\" fill=\"#ffffff\"/>\n";
+        os << "      <rect x=\"" << hx << "\" y=\"" << hy << "\" width=\"" << hw
+           << "\" height=\"" << hh << "\" fill=\"#000000\"/>\n";
+        os << "    </mask>\n";
+    }
+    os << "    <style>" << xmlTextEscape(excalidrawEmbeddedFontCss())
+       << "</style>\n";
+    os << "  </defs>\n";
+    os << "  <rect x=\"" << vx << "\" y=\"" << vy << "\" width=\"" << w
+       << "\" height=\"" << h << "\" fill=\"#ffffff\"/>\n";
+    os << "  <style>.ex-text{white-space:pre;}</style>\n";
+
+    auto emitPolyline = [&](const std::vector<std::pair<double, double>>& pts,
+                            const Json& el, bool arrowEnd, bool arrowStart) {
+        if (pts.size() < 2)
+            return;
+        std::string stroke = el.str("strokeColor", "#1e1e1e");
+        double      sw     = std::max(0.5, el.num("strokeWidth", 2));
+        double      op =
+            std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+        os << "  <polyline fill=\"none\" stroke=\"" << xmlEscape(stroke)
+           << "\" stroke-width=\"" << sw << "\" opacity=\"" << op
+           << "\" stroke-linecap=\"round\" stroke-linejoin=\"round\" points=\"";
+        for (size_t i = 0; i < pts.size(); i++) {
+            if (i)
+                os << " ";
+            os << pts[i].first << "," << pts[i].second;
+        }
+        os << "\"" << svgDashAttr(el.str("strokeStyle", "solid"));
+        if (arrowEnd)
+            os << " marker-end=\"url(#arrow)\"";
+        if (arrowStart)
+            os << " marker-start=\"url(#arrow)\"";
+        os << "/>\n";
+    };
+
+    for (const auto& el : g.elements) {
+        std::string ty = el.str("type");
+        if (ty == "rectangle") {
+            ExcalidrawAffine tf = excalidrawElementAffine(el);
+            if (!tf.identity)
+                os << "  <g transform=\"matrix(" << tf.a << " " << tf.b << " "
+                   << tf.c << " " << tf.d << " " << tf.e << " " << tf.f
+                   << ")\">\n";
+            std::string stroke = el.str("strokeColor", "#1e1e1e");
+            std::string fill   = svgFill(el);
+            double      sw     = std::max(0.5, el.num("strokeWidth", 2));
+            double      op =
+                std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+            double rx = 0;
+            if (const Json* rnd = el.find("roundness"))
+                if (rnd->isObj() && rnd->num("type") >= 2)
+                    rx = 8;
+            os << "  <rect x=\"" << el.num("x") << "\" y=\"" << el.num("y")
+               << "\" width=\"" << el.num("width") << "\" height=\""
+               << el.num("height") << "\" rx=\"" << rx << "\" fill=\"" << fill
+               << "\" stroke=\"" << xmlEscape(stroke) << "\" stroke-width=\""
+               << sw << "\" opacity=\"" << op << "\""
+               << svgDashAttr(el.str("strokeStyle", "solid")) << "/>\n";
+            if (!tf.identity)
+                os << "  </g>\n";
+        }
+        else if (ty == "ellipse") {
+            ExcalidrawAffine tf = excalidrawElementAffine(el);
+            if (!tf.identity)
+                os << "  <g transform=\"matrix(" << tf.a << " " << tf.b << " "
+                   << tf.c << " " << tf.d << " " << tf.e << " " << tf.f
+                   << ")\">\n";
+            double cx = el.num("x") + el.num("width") / 2;
+            double cy = el.num("y") + el.num("height") / 2;
+            double op =
+                std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+            os << "  <ellipse cx=\"" << cx << "\" cy=\"" << cy << "\" rx=\""
+               << el.num("width") / 2 << "\" ry=\"" << el.num("height") / 2
+               << "\" fill=\"" << svgFill(el) << "\" stroke=\""
+               << xmlEscape(el.str("strokeColor", "#1e1e1e"))
+               << "\" stroke-width=\""
+               << std::max(0.5, el.num("strokeWidth", 2)) << "\" opacity=\""
+               << op << "\"" << svgDashAttr(el.str("strokeStyle", "solid"))
+               << "/>\n";
+            if (!tf.identity)
+                os << "  </g>\n";
+        }
+        else if (ty == "diamond") {
+            ExcalidrawAffine tf = excalidrawElementAffine(el);
+            if (!tf.identity)
+                os << "  <g transform=\"matrix(" << tf.a << " " << tf.b << " "
+                   << tf.c << " " << tf.d << " " << tf.e << " " << tf.f
+                   << ")\">\n";
+            double x = el.num("x"), y = el.num("y");
+            double ew = el.num("width"), eh = el.num("height");
+            double cx = x + ew / 2, cy = y + eh / 2;
+            double op =
+                std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+            os << "  <polygon points=\"" << cx << "," << y << " " << x + ew
+               << "," << cy << " " << cx << "," << y + eh << " " << x << ","
+               << cy << "\" fill=\"" << svgFill(el) << "\" stroke=\""
+               << xmlEscape(el.str("strokeColor", "#1e1e1e"))
+               << "\" stroke-width=\""
+               << std::max(0.5, el.num("strokeWidth", 2)) << "\" opacity=\""
+               << op << "\"" << svgDashAttr(el.str("strokeStyle", "solid"))
+               << "/>\n";
+            if (!tf.identity)
+                os << "  </g>\n";
+        }
+        else if (ty == "arrow" || ty == "line") {
+            auto pts      = elementAbsolutePoints(el);
+            bool endArr   = ty == "arrow" && !el.str("endArrowhead").empty() &&
+                            el.str("endArrowhead") != "null";
+            bool startArr = ty == "arrow" &&
+                            !el.str("startArrowhead").empty() &&
+                            el.str("startArrowhead") != "null";
+            std::string aid    = el.str("id");
+            bool        masked = ty == "arrow" && arrowLabels.count(aid);
+            if (masked)
+                os << "  <g mask=\"url(#mask-" << xmlEscape(aid) << ")\">\n";
+            emitPolyline(pts, el, endArr, startArr);
+            if (masked)
+                os << "  </g>\n";
+        }
+        else if (ty == "freedraw") {
+            FreedrawOutline outline = makeFreedrawOutline(el);
+            std::string     path    = svgPathFromPolygon(outline.polygon);
+            if (!path.empty()) {
+                os << "  <path d=\"" << path << "\" fill=\""
+                   << xmlEscape(outline.fillColor) << "\" opacity=\""
+                   << outline.opacity << "\"/>\n";
+            }
+        }
+        else if (ty == "image") {
+            std::string fileId  = el.str("fileId");
+            std::string dataUrl = excalidrawFileDataUrl(g, fileId);
+            if (dataUrl.empty())
+                continue;
+            double op =
+                std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+            ExcalidrawImagePlacement p  = resolveExcalidrawImagePlacement(el);
+            ExcalidrawAffine         tf = excalidrawElementAffine(el);
+            if (!tf.identity) {
+                os << "  <g transform=\"matrix(" << tf.a << " " << tf.b << " "
+                   << tf.c << " " << tf.d << " " << tf.e << " " << tf.f
+                   << ")\">\n";
+            }
+            if (p.hasClip) {
+                os << "  <svg x=\"" << p.clipX << "\" y=\"" << p.clipY
+                   << "\" width=\"" << p.clipW << "\" height=\"" << p.clipH
+                   << "\" overflow=\"hidden\" preserveAspectRatio=\"none\">\n";
+                os << "    <image x=\"" << (p.x - p.clipX) << "\" y=\""
+                   << (p.y - p.clipY) << "\" width=\"" << p.w << "\" height=\""
+                   << p.h << "\" href=\"" << xmlAttrEscape(dataUrl)
+                   << "\" opacity=\"" << op << "\" preserveAspectRatio=\"none\""
+                   << "/>\n";
+                os << "  </svg>\n";
+            }
+            else {
+                os << "  <image x=\"" << p.x << "\" y=\"" << p.y
+                   << "\" width=\"" << p.w << "\" height=\"" << p.h
+                   << "\" href=\"" << xmlAttrEscape(dataUrl) << "\" opacity=\""
+                   << op << "\" preserveAspectRatio=\"none\"/>\n";
+            }
+            if (!tf.identity)
+                os << "  </g>\n";
+        }
+    }
+    // 文本层（形状标签 + 箭头嵌入文字 + 独立标注）
+    for (const auto& el : g.elements) {
+        if (el.str("type") != "text")
+            continue;
+        std::string txt = el.str("text");
+        if (txt.empty())
+            continue;
+        auto        origin = excalidrawTextBBoxOrigin(el, arrows);
+        double      fs     = el.num("fontSize", 16);
+        double      x      = excalidrawTextSvgXAt(origin.first, el);
+        double      y      = excalidrawTextSvgYAt(origin.second, el);
+        std::string align  = svgTextAnchor(el.str("textAlign", "left"));
+        std::string fill   = el.str("strokeColor", "#1e1e1e");
+        double      op =
+            std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+        ExcalidrawAffine tf = excalidrawElementAffineByBox(
+            el, origin.first, origin.second, el.num("width"), el.num("height"));
+        if (!tf.identity)
+            os << "  <g transform=\"matrix(" << tf.a << " " << tf.b << " "
+               << tf.c << " " << tf.d << " " << tf.e << " " << tf.f << ")\">\n";
+        auto lines = splitTextLinesNonEmpty(txt);
+        os << "  <text class=\"ex-text\" x=\"" << x << "\" y=\"" << y
+           << "\" font-size=\"" << fs << "\" text-anchor=\"" << align
+           << "\" font-family=\""
+           << xmlAttrEscape(excalidrawTextFontFamilyCss(el)) << "\" fill=\""
+           << xmlEscape(fill) << "\" opacity=\"" << op << "\">";
+        for (size_t i = 0; i < lines.size(); i++) {
+            double lineY = excalidrawTextSvgYAt(origin.second, el, i);
+            os << "<tspan x=\"" << x << "\" y=\"" << lineY << "\">"
+               << xmlEscape(lines[i]) << "</tspan>";
+        }
+        os << "</text>\n";
+        if (!tf.identity)
+            os << "  </g>\n";
+    }
+    os << "</svg>\n";
+    return os.str();
+}
 
 // sanitizeMermaidId: Mermaid 标识符清洗，规避非法字符导致的渲染失败
 inline std::string sanitizeMermaidId(const std::string& id)
@@ -278,7 +1354,8 @@ inline std::string drawioStyle(const Node& n)
 inline std::string toDrawio(Graph g)
 {
     gl::layout(g);
-    std::ostringstream os;
+    std::vector<FreedrawStroke> strokes = collectFreedrawStrokes(g);
+    std::ostringstream          os;
     os << "<mxfile host=\"graphmcp\" agent=\"graphmcp/1.0\" type=\"device\">\n";
     os << "  <diagram name=\"" << xmlEscape(g.name.empty() ? "Page-1" : g.name)
        << "\" id=\"" << xmlEscape(g.id.empty() ? "d1" : g.id) << "\">\n";
@@ -337,6 +1414,33 @@ inline std::string toDrawio(Graph g)
            << "\" target=\"" << xmlEscape(e.to) << "\">\n";
         os << "          <mxGeometry relative=\"1\" as=\"geometry\"/>\n";
         os << "        </mxCell>\n";
+    }
+    // Excalidraw freedraw -> draw.io 矢量线段（按相邻采样点拆分）
+    int fi = 0;
+    for (const auto& s : strokes) {
+        std::string style =
+            "endArrow=none;startArrow=none;html=1;rounded=0;curved=0;";
+        style += "strokeColor=" + s.strokeColor + ";";
+        style +=
+            "strokeWidth=" + std::to_string(std::max(0.5, s.strokeWidth)) + ";";
+        if (s.strokeStyle == "dashed")
+            style += "dashed=1;";
+        else if (s.strokeStyle == "dotted")
+            style += "dashed=1;dashPattern=1 4;";
+        for (size_t i = 1; i < s.points.size(); i++) {
+            const auto& p0 = s.points[i - 1];
+            const auto& p1 = s.points[i];
+            os << "        <mxCell id=\"freedraw" << (++fi)
+               << "\" value=\"\" style=\"" << style
+               << "\" edge=\"1\" parent=\"1\">\n";
+            os << "          <mxGeometry relative=\"1\" as=\"geometry\">\n";
+            os << "            <mxPoint x=\"" << p0.first << "\" y=\""
+               << p0.second << "\" as=\"sourcePoint\"/>\n";
+            os << "            <mxPoint x=\"" << p1.first << "\" y=\""
+               << p1.second << "\" as=\"targetPoint\"/>\n";
+            os << "          </mxGeometry>\n";
+            os << "        </mxCell>\n";
+        }
     }
     os << "      </root>\n";
     os << "    </mxGraphModel>\n";
@@ -484,21 +1588,34 @@ inline std::string toExcalidraw(Graph g)
     app.set("gridSize", Json());
     app.set("viewBackgroundColor", "#ffffff");
     doc.set("appState", app);
-    doc.set("files", Json::obj());
+    if (g.files.isObj())
+        doc.set("files", g.files);
+    else
+        doc.set("files", Json::obj());
     return doc.dump(2);
 }
 
 // -------------------------------------------------------------------- SVG --
 
 // toSVG: 导出可视化 SVG
-// 关键步骤：布局 -> 先画边后画节点 -> 根据形状选择图元并绘制标签
+// 关键步骤：白板走 elements 原样渲染；其它图走 nodes/edges 布局渲染
 inline std::string toSVG(Graph g)
 {
+    if (isWhiteboardElements(g))
+        return toSVGExcalidraw(g);
+
     gl::layout(g);
-    double maxX = 200, maxY = 150;
+    std::vector<FreedrawStroke> strokes = collectFreedrawStrokes(g);
+    double                      maxX = 200, maxY = 150;
     for (auto& n : g.nodes) {
         maxX = std::max(maxX, n.x + n.w);
         maxY = std::max(maxY, n.y + n.h);
+    }
+    for (const auto& s : strokes) {
+        for (const auto& p : s.points) {
+            maxX = std::max(maxX, p.first);
+            maxY = std::max(maxY, p.second);
+        }
     }
     std::ostringstream os;
     os << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\""
@@ -601,6 +1718,24 @@ inline std::string toSVG(Graph g)
             }
         }
     }
+    // 最后绘制 freedraw，作为白板标注层
+    for (const auto& s : strokes) {
+        os << "  <polyline fill=\"none\" stroke=\"" << xmlEscape(s.strokeColor)
+           << "\" stroke-width=\"" << std::max(0.5, s.strokeWidth)
+           << "\" stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\""
+           << s.opacity << "\" points=\"";
+        for (size_t i = 0; i < s.points.size(); i++) {
+            if (i)
+                os << " ";
+            os << s.points[i].first << "," << s.points[i].second;
+        }
+        os << "\"";
+        if (s.strokeStyle == "dashed")
+            os << " stroke-dasharray=\"6,4\"";
+        else if (s.strokeStyle == "dotted")
+            os << " stroke-dasharray=\"1,4\"";
+        os << "/>\n";
+    }
     os << "</svg>\n";
     return os.str();
 }
@@ -668,12 +1803,12 @@ inline std::string findBrowser()
 {
     std::vector<std::string> cands;
 #ifdef _WIN32
-    const char* pf   = getenv("ProgramFiles");
-    const char* pf86 = getenv("ProgramFiles(x86)");
-    const char* lad  = getenv("LOCALAPPDATA");
-    auto        add  = [&](const char* base, const char* rel) {
-        if (base)
-            cands.push_back(std::string(base) + rel);
+    std::string pf   = getEnvVar("ProgramFiles");
+    std::string pf86 = getEnvVar("ProgramFiles(x86)");
+    std::string lad  = getEnvVar("LOCALAPPDATA");
+    auto        add  = [&](const std::string& base, const char* rel) {
+        if (!base.empty())
+            cands.push_back(base + rel);
     };
     add(pf, "\\Google\\Chrome\\Application\\chrome.exe");
     add(pf86, "\\Google\\Chrome\\Application\\chrome.exe");
@@ -824,15 +1959,15 @@ inline std::string rasterize(const std::string& svgPathIn,
         // 独立 user-data-dir：没有它时，新 headless
         // 进程可能附着到已运行浏览器， 导致任务被静默跳过。若 TEMP 不可用（精简
         // MCP 环境），回退到输出目录旁。
-        const char* tmp = getenv("TEMP");
-        if (!tmp)
-            tmp = getenv("TMP");
-        std::string profile =
-            (tmp ? std::string(tmp) + "/graphmcp-chrome-profile" :
-                   outPath + ".chromeprofile");
-        std::string args = "--headless=new --disable-gpu --no-sandbox "
-                           "--user-data-dir=\"" +
-                           profile + "\" ";
+        std::string tmp = getEnvVar("TEMP");
+        if (tmp.empty())
+            tmp = getEnvVar("TMP");
+        std::string profile = (!tmp.empty() ? tmp + "/graphmcp-chrome-profile" :
+                                              outPath + ".chromeprofile");
+        std::string args    = "--headless=new --disable-gpu --no-sandbox "
+                              "--virtual-time-budget=3000 "
+                              "--user-data-dir=\"" +
+                              profile + "\" ";
         if (fmt == "pdf")
             args += "--no-pdf-header-footer --print-to-pdf=\"" + outPath +
                     "\" \"" + url + "\"";
@@ -851,6 +1986,56 @@ inline std::string rasterize(const std::string& svgPathIn,
             return "chromium";
 #endif
         }
+    }
+    return "";
+}
+
+// rasterizeViaBrowser: 用 headless 浏览器对 HTML 页面截图或打印 PDF
+inline std::string rasterizeViaBrowser(const std::string& htmlPathIn,
+                                       const std::string& outPathIn,
+                                       const std::string& fmt,
+                                       int                width,
+                                       int                height)
+{
+    std::string htmlPath = absPath(htmlPathIn);
+    std::string outPath  = absPath(outPathIn);
+    if (width <= 0)
+        width = 1200;
+    if (height <= 0)
+        height = 800;
+    auto produced = [&]() {
+        std::ifstream check(outPath, std::ios::binary);
+        return check.good() &&
+               check.peek() != std::ifstream::traits_type::eof();
+    };
+    std::string browser = findBrowser();
+    if (browser.empty())
+        return "";
+    std::string url = fileUrl(htmlPath);
+    std::string tmp = getEnvVar("TEMP");
+    if (tmp.empty())
+        tmp = getEnvVar("TMP");
+    std::string profile = (!tmp.empty() ? tmp + "/graphmcp-chrome-profile" :
+                                          outPath + ".chromeprofile");
+    std::string args    = "--headless=new --disable-gpu --no-sandbox "
+                          "--virtual-time-budget=3000 "
+                          "--user-data-dir=\"" +
+                          profile + "\" ";
+    if (fmt == "pdf")
+        args += "--no-pdf-header-footer --print-to-pdf=\"" + outPath + "\" \"" +
+                url + "\"";
+    else
+        args += "--force-device-scale-factor=2 --window-size=" +
+                std::to_string(width) + "," + std::to_string(height) +
+                " --screenshot=\"" + outPath + "\" \"" + url + "\"";
+    std::remove(outPath.c_str());
+    launchBrowser(browser, args);
+    if (produced()) {
+#ifdef _WIN32
+        return browser.find("msedge") != std::string::npos ? "edge" : "chrome";
+#else
+        return "chromium";
+#endif
     }
     return "";
 }
@@ -874,13 +2059,10 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
 {
     ExportResult r;
     std::string  content;
-    std::string  defExt = to;
     if (to == "drawio")
         content = toDrawio(g);
-    else if (to == "mermaid") {
+    else if (to == "mermaid")
         content = toMermaid(g);
-        defExt  = "mmd";
-    }
     else if (to == "excalidraw")
         content = toExcalidraw(g);
     else if (to == "svg")
@@ -888,7 +2070,6 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
     else if (to == "model" || to == "json") {
         gl::layout(g);
         content = g.toJson().dump(2);
-        defExt  = "json";
     }
     else if (to == "url") {
         r.ok      = true;
@@ -897,8 +2078,9 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
         return r;
     }
     else if (to == "png" || to == "pdf") {
-        std::string svg  = toSVG(g);
         std::string base = outPath.empty() ? ("graph_export." + to) : outPath;
+        // PNG/PDF：统一走精确 SVG 再栅格化（不尝试近似 rough 叠加）。
+        std::string svg     = toSVG(g);
         std::string svgPath = base + ".tmp.svg";
         if (!writeFile(svgPath, svg)) {
             r.message = "cannot write temp svg: " + svgPath;

@@ -51,7 +51,8 @@ struct Graph
     std::vector<Node> nodes;
     std::vector<Edge> edges;
     std::vector<Json> elements;  // 原始白板元素（类似 excalidraw）
-    bool              laidOut = false;
+    Json files   = Json::obj();  // Excalidraw 顶层 files（image 附件）
+    bool laidOut = false;
 
     // 通过节点 id 查找可写节点指针；nid = node id
     Node* findNode(const std::string& nid)
@@ -158,6 +159,8 @@ struct Graph
                 els.push(el);
             j.set("elements", els);
         }
+        if (files.isObj())
+            j.set("files", files);
         return j;
     }
 
@@ -210,6 +213,10 @@ struct Graph
             if (els->isArr())
                 for (auto& el : *els->a)
                     g.elements.push_back(el);
+        }
+        if (const Json* fs = j.find("files")) {
+            if (fs->isObj())
+                g.files = *fs;
         }
         return g;
     }

@@ -33,7 +33,7 @@ inline void makeDir(const std::string& path)
 // nowIso: 生成本地时间 ISO 字符串，用于版本时间戳
 inline std::string nowIso()
 {
-    time_t    t = time(nullptr);
+    time_t    t   = time(nullptr);
     struct tm tmv = {};
 #ifdef _WIN32
     localtime_s(&tmv, &t);
@@ -52,8 +52,8 @@ class Store {
     explicit Store(std::string root = "")
     {
         if (root.empty()) {
-            const char* env = getenv("GRAPHMCP_STORE");
-            root            = env ? env : "graph-store";
+            std::string env = ge::getEnvVar("GRAPHMCP_STORE");
+            root            = env.empty() ? "graph-store" : env;
         }
         root_ = root;
         makeDir(root_);
@@ -110,14 +110,15 @@ class Store {
         if (entry)
             version = (int)entry->num("versions") + 1;
 
-        std::string modelJson = g.toJson().dump(2);
-        ge::writeFile(dir + "/latest.json", modelJson);
+        // 大文件白板含大量 base64，只序列化一次
+        Json model = g.toJson();
+        ge::writeFile(dir + "/latest.json", model.dump(2));
 
         Json snap = Json::obj();
         snap.set("version", version);
         snap.set("savedAt", nowIso());
         snap.set("note", note);
-        snap.set("model", g.toJson());
+        snap.set("model", model);
         ge::writeFile(dir + "/versions/v" + std::to_string(version) + ".json",
                       snap.dump(2));
 

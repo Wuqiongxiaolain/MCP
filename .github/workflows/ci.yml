@@ -1,0 +1,209 @@
+# graphmcp 持续集成：构建 → 单元测试 → 冒烟测试 → 打包制品
+name: CI
+on:
+  push:
+    branches: [main, dev, 'feature/**']
+  pull_request:
+    branches: [main, dev]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-package:
+    name: 构建与测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ make
+
+      - name: 编译
+        run: make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
+
+      - name: 单元测试
+        run: make test
+
+      - name: 冒烟测试（CLI + MCP）
+        run: |
+          set -euo pipefail
+          export GRAPHMCP_STORE=ci-store
+          SMOKE_ID="ci-smoke-${GITHUB_RUN_NUMBER}"
+
+          # create/list/history/rollback/validate: 覆盖版本化主链路
+          ./bin/graphmcp create --input examples/flowchart.mmd --id "$SMOKE_ID" --name ci-smoke-flow
+          ./bin/graphmcp create --input examples/orgchart.csv  --id "$SMOKE_ID" --name ci-smoke-org
+          ./bin/graphmcp list | grep -q "$SMOKE_ID"
+          ./bin/graphmcp history --id "$SMOKE_ID" | tee ci-smoke.history
+          grep -q '^v1' ci-smoke.history
+          grep -q '^v2' ci-smoke.history
+          ./bin/graphmcp rollback --id "$SMOKE_ID" --version 1
+          ./bin/graphmcp validate --id "$SMOKE_ID" | grep -q "valid: no issues found"
+
+          # export/convert/validate: 覆盖核心功能输出
+          ./bin/graphmcp export --id "$SMOKE_ID" --to drawio -o ci-smoke.drawio
+          ./bin/graphmcp export --id "$SMOKE_ID" --to svg    -o ci-smoke.svg
+          ./bin/graphmcp export --id "$SMOKE_ID" --to mermaid -o ci-smoke.mmd
+          ./bin/graphmcp convert --input examples/mindmap.md --to mermaid -o ci-smoke-convert.mmd
+          ./bin/graphmcp validate --input examples/er.mmd --format mermaid | grep -q "valid: no issues found"
+          test -s ci-smoke.drawio
+          test -s ci-smoke.svg
+          test -s ci-smoke.mmd
+          test -s ci-smoke-convert.mmd
+
+          # serve: tools/list + tools/call graph_create
+          printf '%s\n%s\n%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"graph_create","arguments":{"content":"flowchart TD\nM[MCP]-->N[Test]","name":"ci-mcp"}}}' \
+            | ./bin/graphmcp serve | tee ci-smoke.mcp.log
+          grep -q graph_create ci-smoke.mcp.log
+          grep -Eq '(\\"status\\"|"status")[[:space:]]*:[[:space:]]*(\\"created\\"|"created")' ci-smoke.mcp.log
+
+      - name: 打包制品
+        run: |
+          mkdir -p dist
+          cp bin/graphmcp dist/
+          cp README.md dist/
+          tar czf "graphmcp-${GITHUB_RUN_NUMBER}.tar.gz" -C dist .
+
+      - name: 上传制品
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphmcp-${{ github.run_number }}
+          path: |
+            bin/graphmcp
+            graphmcp-*.tar.gz
+          retention-days: 30
+
+  sonarqube:
+    name: SonarQube 静态分析
+    needs: build-test-package
+    runs-on: ubuntu-latest
+    # 仅在 push 到 main/dev 且仓库变量启用时启动；缺少 Sonar Secrets 时仅告警并跳过分析步骤
+    if: >-
+      github.event_name == 'push'
+      && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+      && vars.SONAR_ENABLED == 'true'
+    timeout-minutes: 20
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+    steps:
+      - name: 检查 Sonar 配置
+        id: sonar_precheck
+        run: |
+          if [ -z "${SONAR_TOKEN:-}" ] || [ -z "${SONAR_HOST_URL:-}" ]; then
+            echo "::warning::SONAR_ENABLED 已开启，但缺少 SONAR_TOKEN 或 SONAR_HOST_URL，已跳过 SonarQube 分析"
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 检出代码
+        if: steps.sonar_precheck.outputs.should_run == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 安装依赖
+        if: steps.sonar_precheck.outputs.should_run == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl g++ make unzip
+
+      - name: 下载 SonarCFamily build-wrapper
+        if: steps.sonar_precheck.outputs.should_run == 'true'
+        run: |
+          curl -fsSL "${SONAR_HOST_URL}/static/cpp/build-wrapper-linux-x86.zip" -o build-wrapper.zip
+          unzip -q build-wrapper.zip
+
+      - name: 生成 CFamily 编译数据库
+        if: steps.sonar_precheck.outputs.should_run == 'true'
+        run: |
+          rm -rf bw-output
+          ./build-wrapper-linux-x86/build-wrapper-linux-x86-64 --out-dir bw-output \
+            make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
+
+      - name: SonarScanner 分析
+        if: steps.sonar_precheck.outputs.should_run == 'true'
+        uses: SonarSource/sonarqube-scan-action@v5
+
+      - name: 质量门禁
+        if: steps.sonar_precheck.outputs.should_run == 'true'
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 10
+
+  mirror-to-gitlab:
+    name: 同步 main 到 GitLab 备份仓
+    needs: [build-test-package, sonarqube]
+    runs-on: ubuntu-latest
+    if: >-
+      always()
+      && github.event_name == 'push'
+      && github.ref == 'refs/heads/main'
+      && vars.GITLAB_MIRROR_ENABLED == 'true'
+      && vars.GITLAB_MIRROR_URL != ''
+      && needs.build-test-package.result == 'success'
+      && (needs.sonarqube.result == 'success' || needs.sonarqube.result == 'skipped')
+    timeout-minutes: 10
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 同步到 GitLab 仓库
+        env:
+          GITLAB_MIRROR_TOKEN: ${{ secrets.GITLAB_MIRROR_TOKEN }}
+          GITLAB_MIRROR_URL: ${{ vars.GITLAB_MIRROR_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GITLAB_MIRROR_TOKEN:-}" ]; then
+            echo "::warning::缺少 GITLAB_MIRROR_TOKEN，已跳过 GitLab 镜像同步"
+            exit 0
+          fi
+
+          if [ -z "${GITLAB_MIRROR_URL:-}" ]; then
+            echo "::warning::缺少 GITLAB_MIRROR_URL，已跳过 GitLab 镜像同步"
+            exit 0
+          fi
+
+          MIRROR_URL="${GITLAB_MIRROR_URL}"
+          AUTH_URL="${MIRROR_URL}"
+          AUTH_URL="${AUTH_URL/https:\/\//https:\/\/oauth2:${GITLAB_MIRROR_TOKEN}@}"
+          AUTH_URL="${AUTH_URL/http:\/\//http:\/\/oauth2:${GITLAB_MIRROR_TOKEN}@}"
+          echo "::add-mask::${GITLAB_MIRROR_TOKEN}"
+          echo "::add-mask::${AUTH_URL}"
+
+          git remote remove gitlab-backup || true
+          git remote add gitlab-backup "${AUTH_URL}"
+
+          # 镜像同步失败不阻断主流程：最多重试 2 次，仍失败则告警并跳过
+          push_ok=0
+          for attempt in 1 2; do
+            if git push gitlab-backup HEAD:main; then
+              echo "GitLab 镜像同步成功（第 ${attempt} 次）"
+              push_ok=1
+              break
+            fi
+            echo "第 ${attempt} 次镜像同步失败"
+            if [ "${attempt}" -lt 2 ]; then
+              echo "等待 5 秒后重试..."
+              sleep 5
+            fi
+          done
+
+          if [ "${push_ok}" -ne 1 ]; then
+            echo "::warning::GitLab 镜像同步连续 2 次失败，已跳过，不阻断主流程"
+            exit 0
+          fi

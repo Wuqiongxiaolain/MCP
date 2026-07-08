@@ -1,26 +1,35 @@
 // test_main.cpp - assertion-based unit tests for graphmcp core modules
-#include "../src/parsers.hpp"
 #include "../src/exporters.hpp"
-#include "../src/storage.hpp"
 #include "../src/mcp.hpp"
-#include <iostream>
+#include "../src/parsers.hpp"
+#include "../src/storage.hpp"
 #include <cstdio>
+#include <iostream>
+
 
 static int g_failed = 0;
 static int g_passed = 0;
 
-#define CHECK(cond) do { \
-    if (cond) { g_passed++; } \
-    else { g_failed++; \
-        std::cerr << "FAIL " << __FILE__ << ":" << __LINE__ << "  " #cond "\n"; } \
-} while (0)
+#define CHECK(cond)                                                            \
+    do {                                                                       \
+        if (cond) {                                                            \
+            g_passed++;                                                        \
+        }                                                                      \
+        else {                                                                 \
+            g_failed++;                                                        \
+            std::cerr << "FAIL " << __FILE__ << ":" << __LINE__                \
+                      << "  " #cond "\n";                                      \
+        }                                                                      \
+    } while (0)
 
 using gj::Json;
 using gm::Graph;
 
-static void testJson() {
+static void testJson()
+{
     std::string err;
-    Json j = Json::parse(R"({"a":1,"b":[true,null,"x\n中"],"c":{"d":-2.5}})", &err);
+    Json        j =
+        Json::parse(R"({"a":1,"b":[true,null,"x\n中"],"c":{"d":-2.5}})", &err);
     CHECK(err.empty());
     CHECK(j.num("a") == 1);
     CHECK(j.find("b")->isArr());
@@ -35,53 +44,68 @@ static void testJson() {
     CHECK(!err.empty());
 }
 
-static void testMermaidFlowchart() {
-    Graph g = gp::parseMermaid(
-        "flowchart TD\n"
-        "  A[Start] --> B{Check?}\n"
-        "  B -->|yes| C(Done)\n"
-        "  B -.->|no| A\n"
-        "  subgraph S1 [Backend]\n"
-        "    D[API] --> E[(DB)]\n"
-        "  end\n"
-        "  C --> D\n");
+static void testMermaidFlowchart()
+{
+    Graph g = gp::parseMermaid("flowchart TD\n"
+                               "  A[Start] --> B{Check?}\n"
+                               "  B -->|yes| C(Done)\n"
+                               "  B -.->|no| A\n"
+                               "  subgraph S1 [Backend]\n"
+                               "    D[API] --> E[(DB)]\n"
+                               "  end\n"
+                               "  C --> D\n");
     CHECK(g.type == "flowchart");
-    CHECK(g.findNode("A") != nullptr);
-    CHECK(g.findNode("A")->label == "Start");
-    CHECK(g.findNode("B")->shape == "diamond");
-    CHECK(g.findNode("C")->shape == "round");
-    CHECK(g.findNode("S1") != nullptr && g.findNode("S1")->shape == "group");
-    CHECK(g.findNode("D")->parent == "S1");
+    const gm::Node* nodeA  = g.findNode("A");
+    const gm::Node* nodeB  = g.findNode("B");
+    const gm::Node* nodeC  = g.findNode("C");
+    const gm::Node* nodeS1 = g.findNode("S1");
+    const gm::Node* nodeD  = g.findNode("D");
+    CHECK(nodeA != nullptr);
+    CHECK(nodeB != nullptr);
+    CHECK(nodeC != nullptr);
+    CHECK(nodeS1 != nullptr);
+    CHECK(nodeD != nullptr);
+    if (nodeA)
+        CHECK(nodeA->label == "Start");
+    if (nodeB)
+        CHECK(nodeB->shape == "diamond");
+    if (nodeC)
+        CHECK(nodeC->shape == "round");
+    if (nodeS1)
+        CHECK(nodeS1->shape == "group");
+    if (nodeD)
+        CHECK(nodeD->parent == "S1");
     CHECK(g.edges.size() == 5);
     bool foundYes = false, foundDashed = false;
     for (auto& e : g.edges) {
-        if (e.label == "yes") foundYes = true;
-        if (e.style == "dashed" && e.label == "no") foundDashed = true;
+        if (e.label == "yes")
+            foundYes = true;
+        if (e.style == "dashed" && e.label == "no")
+            foundDashed = true;
     }
     CHECK(foundYes);
     CHECK(foundDashed);
 }
 
-static void testMermaidMindmapAndER() {
-    Graph mm = gp::parseMermaid(
-        "mindmap\n"
-        "  root((Project))\n"
-        "    Design\n"
-        "      UI\n"
-        "    Build\n");
+static void testMermaidMindmapAndER()
+{
+    Graph mm = gp::parseMermaid("mindmap\n"
+                                "  root((Project))\n"
+                                "    Design\n"
+                                "      UI\n"
+                                "    Build\n");
     CHECK(mm.type == "mindmap");
     CHECK(mm.nodes.size() == 4);
     CHECK(mm.nodes[0].label == "Project");
     CHECK(mm.nodes[1].parent == mm.nodes[0].id);
     CHECK(mm.nodes[2].parent == mm.nodes[1].id);
 
-    Graph er = gp::parseMermaid(
-        "erDiagram\n"
-        "  CUSTOMER ||--o{ ORDER : places\n"
-        "  CUSTOMER {\n"
-        "    string name\n"
-        "    int id\n"
-        "  }\n");
+    Graph er = gp::parseMermaid("erDiagram\n"
+                                "  CUSTOMER ||--o{ ORDER : places\n"
+                                "  CUSTOMER {\n"
+                                "    string name\n"
+                                "    int id\n"
+                                "  }\n");
     CHECK(er.type == "er");
     CHECK(er.findNode("CUSTOMER") != nullptr);
     CHECK(er.findNode("ORDER") != nullptr);
@@ -90,41 +114,49 @@ static void testMermaidMindmapAndER() {
     CHECK(er.edges[0].label == "places");
 }
 
-static void testMarkdown() {
-    Graph g = gp::parseMarkdownOutline(
-        "# Root\n"
-        "## Alpha\n"
-        "- item1\n"
-        "  - item1a\n"
-        "## Beta\n");
+static void testMarkdown()
+{
+    Graph g = gp::parseMarkdownOutline("# Root\n"
+                                       "## Alpha\n"
+                                       "- item1\n"
+                                       "  - item1a\n"
+                                       "## Beta\n");
     CHECK(g.type == "mindmap");
     CHECK(g.nodes.size() == 5);
     CHECK(g.nodes[0].label == "Root");
     CHECK(g.nodes[1].label == "Alpha");
     CHECK(g.nodes[1].parent == g.nodes[0].id);
-    CHECK(g.nodes[2].parent == g.nodes[1].id); // item1 under Alpha
-    CHECK(g.nodes[3].parent == g.nodes[2].id); // item1a under item1
-    CHECK(g.nodes[4].parent == g.nodes[0].id); // Beta under Root
+    CHECK(g.nodes[2].parent == g.nodes[1].id);  // item1 under Alpha
+    CHECK(g.nodes[3].parent == g.nodes[2].id);  // item1a under item1
+    CHECK(g.nodes[4].parent == g.nodes[0].id);  // Beta under Root
 }
 
-static void testCSV() {
+static void testCSV()
+{
     Graph edges = gp::parseCSV("from,to,label\nA,B,go\nB,C,\n");
     CHECK(edges.type == "flowchart");
     CHECK(edges.nodes.size() == 3);
     CHECK(edges.edges.size() == 2);
     CHECK(edges.edges[0].label == "go");
 
-    Graph tree = gp::parseCSV("id,label,parent\nceo,CEO,\ncto,CTO,ceo\ndev1,\"Dev, One\",cto\n");
+    Graph tree = gp::parseCSV(
+        "id,label,parent\nceo,CEO,\ncto,CTO,ceo\ndev1,\"Dev, One\",cto\n");
     CHECK(tree.type == "orgchart");
-    CHECK(tree.findNode("dev1")->label == "Dev, One"); // quoted comma
+    CHECK(tree.findNode("dev1")->label == "Dev, One");  // quoted comma
     CHECK(tree.findNode("cto")->parent == "ceo");
 
     bool threw = false;
-    try { gp::parseCSV("x,y\n1,2\n"); } catch (gp::ParseError&) { threw = true; }
+    try {
+        gp::parseCSV("x,y\n1,2\n");
+    }
+    catch (gp::ParseError&) {
+        threw = true;
+    }
     CHECK(threw);
 }
 
-static void testXML() {
+static void testXML()
+{
     Graph g = gp::parseXML(
         "<?xml version=\"1.0\"?>\n"
         "<graph type=\"architecture\" name=\"sys\">\n"
@@ -142,7 +174,8 @@ static void testXML() {
     CHECK(g.edges.size() == 1);
 }
 
-static void testExcalidraw() {
+static void testExcalidraw()
+{
     std::string doc = R"({
       "type":"excalidraw","version":2,"elements":[
         {"id":"r1","type":"rectangle","x":10,"y":20,"width":100,"height":50},
@@ -152,7 +185,7 @@ static void testExcalidraw() {
         {"id":"a1","type":"arrow","x":110,"y":45,"width":190,"height":5,
          "startBinding":{"elementId":"r1"},"endBinding":{"elementId":"r2"}}
       ]})";
-    Graph g = gp::parseExcalidraw(doc);
+    Graph       g   = gp::parseExcalidraw(doc);
     CHECK(g.type == "whiteboard");
     CHECK(g.elements.size() == 4);
     CHECK(g.nodes.size() == 2);
@@ -161,20 +194,23 @@ static void testExcalidraw() {
     CHECK(g.edges[0].from == "r1" && g.edges[0].to == "r2");
     // round-trip keeps raw elements
     std::string out = ge::toExcalidraw(g);
-    Graph g2 = gp::parseExcalidraw(out);
+    Graph       g2  = gp::parseExcalidraw(out);
     CHECK(g2.elements.size() == 4);
 }
 
-static void testDetect() {
+static void testDetect()
+{
     CHECK(gp::detectFormat("flowchart TD\nA-->B") == "mermaid");
     CHECK(gp::detectFormat("mindmap\n  root((x))") == "mermaid");
     CHECK(gp::detectFormat("# Title\n- a") == "markdown");
     CHECK(gp::detectFormat("from,to\nA,B") == "csv");
     CHECK(gp::detectFormat("<graph><node id=\"a\"/></graph>") == "xml");
-    CHECK(gp::detectFormat("{\"type\":\"excalidraw\",\"elements\":[]}") == "excalidraw");
+    CHECK(gp::detectFormat("{\"type\":\"excalidraw\",\"elements\":[]}") ==
+          "excalidraw");
 }
 
-static void testValidate() {
+static void testValidate()
+{
     Graph g;
     g.ensureNode("a", "A");
     g.ensureNode("b", "B");
@@ -183,20 +219,23 @@ static void testValidate() {
     CHECK(gl::hasErrors(issues));
     bool dangling = false;
     for (auto& i : issues)
-        if (i.message.find("missing node 'missing'") != std::string::npos) dangling = true;
+        if (i.message.find("missing node 'missing'") != std::string::npos)
+            dangling = true;
     CHECK(dangling);
 
     Graph cyc;
     cyc.ensureNode("x", "X").parent = "y";
     cyc.ensureNode("y", "Y").parent = "x";
-    auto ci = gl::validate(cyc);
-    bool cycle = false;
+    auto ci                         = gl::validate(cyc);
+    bool cycle                      = false;
     for (auto& i : ci)
-        if (i.message.find("cycle") != std::string::npos) cycle = true;
+        if (i.message.find("cycle") != std::string::npos)
+            cycle = true;
     CHECK(cycle);
 }
 
-static void testLayout() {
+static void testLayout()
+{
     Graph g = gp::parseMermaid("flowchart TD\nA[Start]-->B[Mid]\nB-->C[End]\n");
     gl::layout(g);
     CHECK(g.laidOut);
@@ -204,15 +243,16 @@ static void testLayout() {
     const gm::Node* b = g.findNode("B");
     const gm::Node* c = g.findNode("C");
     CHECK(a->w > 0 && a->h > 0);
-    CHECK(a->y < b->y && b->y < c->y); // layered top-down ranks
+    CHECK(a->y < b->y && b->y < c->y);  // layered top-down ranks
 
     Graph mm = gp::parseMarkdownOutline("# R\n## A\n## B\n");
     gl::layout(mm);
     const gm::Node* root = &mm.nodes[0];
-    CHECK(root->x < mm.nodes[1].x); // mindmap grows left->right
+    CHECK(root->x < mm.nodes[1].x);  // mindmap grows left->right
 }
 
-static void testExporters() {
+static void testExporters()
+{
     Graph g = gp::parseMermaid(
         "flowchart TD\nA[Start] --> B{OK?}\nB -->|yes| C[Done]\n");
     std::string drawio = ge::toDrawio(g);
@@ -228,15 +268,15 @@ static void testExporters() {
 
     std::string svg = ge::toSVG(g);
     CHECK(svg.find("<svg") != std::string::npos);
-    CHECK(svg.find("polygon") != std::string::npos); // diamond
+    CHECK(svg.find("polygon") != std::string::npos);  // diamond
     CHECK(svg.find("Start") != std::string::npos);
 
     std::string ex = ge::toExcalidraw(g);
     std::string err;
-    Json j = Json::parse(ex, &err);
+    Json        j = Json::parse(ex, &err);
     CHECK(err.empty());
     CHECK(j.str("type") == "excalidraw");
-    CHECK(j.find("elements")->size() >= 7); // 3 shapes + 3 labels + 2 arrows
+    CHECK(j.find("elements")->size() >= 7);  // 3 shapes + 3 labels + 2 arrows
 
     std::string url = ge::toMermaidLiveUrl(g);
     CHECK(url.find("https://mermaid.live/edit#base64:") == 0);
@@ -249,7 +289,8 @@ static void testExporters() {
     CHECK(ermmd.find("int id") != std::string::npos);
 }
 
-static void testBase64() {
+static void testBase64()
+{
     CHECK(ge::base64Encode("") == "");
     CHECK(ge::base64Encode("f") == "Zg==");
     CHECK(ge::base64Encode("fo") == "Zm8=");
@@ -257,12 +298,13 @@ static void testBase64() {
     CHECK(ge::base64Encode("foobar") == "Zm9vYmFy");
 }
 
-static void testStorage() {
+static void testStorage()
+{
     std::string root = "test-store-tmp";
-    gs::Store store(root);
-    Graph g = gp::parseMermaid("flowchart TD\nA[One]-->B[Two]\n");
-    g.name = "test graph";
-    int v1 = store.save(g, "first");
+    gs::Store   store(root);
+    Graph       g = gp::parseMermaid("flowchart TD\nA[One]-->B[Two]\n");
+    g.name        = "test graph";
+    int v1        = store.save(g, "first");
     CHECK(v1 == 1);
     // second version with an extra node
     g.ensureNode("C", "Three");
@@ -270,12 +312,12 @@ static void testStorage() {
     int v2 = store.save(g, "second");
     CHECK(v2 == 2);
 
-    Graph loaded;
+    Graph       loaded;
     std::string err;
     CHECK(store.load(g.id, loaded, 0, &err));
     CHECK(loaded.nodes.size() == 3);
     CHECK(store.load(g.id, loaded, 1, &err));
-    CHECK(loaded.nodes.size() == 2); // old snapshot
+    CHECK(loaded.nodes.size() == 2);  // old snapshot
 
     Json h = store.history(g.id);
     CHECK(h.size() == 2);
@@ -285,17 +327,18 @@ static void testStorage() {
     CHECK(store.rollback(g.id, 1, &nv, &err));
     CHECK(nv == 3);
     CHECK(store.load(g.id, loaded, 0, &err));
-    CHECK(loaded.nodes.size() == 2); // latest == rolled back content
+    CHECK(loaded.nodes.size() == 2);  // latest == rolled back content
 
     CHECK(!store.load("no-such-graph", loaded, 0, &err));
     CHECK(!err.empty());
 }
 
-static void testMcpProtocol() {
+static void testMcpProtocol()
+{
     gs::Store store("test-store-tmp");
     // initialize
     std::string err;
-    Json init = Json::parse(
+    Json        init = Json::parse(
         R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})", &err);
     Json resp;
     CHECK(mcp::handleMessage(init, store, resp));
@@ -305,19 +348,27 @@ static void testMcpProtocol() {
         R"({"jsonrpc":"2.0","method":"notifications/initialized"})", &err);
     CHECK(!mcp::handleMessage(note, store, resp));
     // tools/list
-    Json tl = Json::parse(R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})", &err);
+    Json tl =
+        Json::parse(R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})", &err);
     CHECK(mcp::handleMessage(tl, store, resp));
     CHECK(resp.find("result")->find("tools")->size() == 8);
     // tools/call graph_create
     Json call = Json::parse(
         R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
             "name":"graph_create","arguments":{
-              "content":"flowchart TD\nX[Hello]-->Y[World]","name":"mcp test"}}})", &err);
+              "content":"flowchart TD\nX[Hello]-->Y[World]","name":"mcp test"}}})",
+        &err);
     CHECK(err.empty());
     CHECK(mcp::handleMessage(call, store, resp));
     const Json* result = resp.find("result");
     CHECK(result != nullptr);
-    std::string text = result->find("content")->a->at(0).str("text");
+    const Json* content = result ? result->find("content") : nullptr;
+    CHECK(content != nullptr);
+    CHECK(content && content->isArr());
+    CHECK(content && content->a && !content->a->empty());
+    std::string text;
+    if (content && content->isArr() && content->a && !content->a->empty())
+        text = content->a->at(0).str("text");
     Json created = Json::parse(text, &err);
     CHECK(created.str("status") == "created");
     std::string gid = created.str("id");
@@ -325,10 +376,18 @@ static void testMcpProtocol() {
     // tools/call graph_export (mermaid inline)
     Json exp = Json::parse(
         R"({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{
-            "name":"graph_export","arguments":{"id":")" + gid +
-        R"(","to":"mermaid"}}})", &err);
+            "name":"graph_export","arguments":{"id":")" +
+            gid + R"(","to":"mermaid"}}})",
+        &err);
     CHECK(mcp::handleMessage(exp, store, resp));
-    text = resp.find("result")->find("content")->a->at(0).str("text");
+    result = resp.find("result");
+    CHECK(result != nullptr);
+    content = result ? result->find("content") : nullptr;
+    CHECK(content != nullptr);
+    CHECK(content && content->isArr());
+    CHECK(content && content->a && !content->a->empty());
+    if (content && content->isArr() && content->a && !content->a->empty())
+        text = content->a->at(0).str("text");
     CHECK(text.find("flowchart TD") != std::string::npos);
     CHECK(text.find("Hello") != std::string::npos);
     // unknown method -> error
@@ -337,7 +396,8 @@ static void testMcpProtocol() {
     CHECK(resp.find("error") != nullptr);
 }
 
-int runAll() {
+int runAll()
+{
     testJson();
     testMermaidFlowchart();
     testMermaidMindmapAndER();
@@ -352,8 +412,10 @@ int runAll() {
     testBase64();
     testStorage();
     testMcpProtocol();
-    std::cout << "tests: " << g_passed << " passed, " << g_failed << " failed\n";
+    std::cout << "tests: " << g_passed << " passed, " << g_failed
+              << " failed\n";
     return g_failed == 0 ? 0 : 1;
 }
 
-int main() { return runAll(); }
+int main()
+{ return runAll(); }

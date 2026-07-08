@@ -3,6 +3,7 @@
 #include "../src/mcp.hpp"
 #include "../src/parsers.hpp"
 #include "../src/storage.hpp"
+#include <cstdlib>
 #include <iostream>
 
 static int g_failed = 0;
@@ -365,6 +366,14 @@ static void testExcalidraw()
     std::string unevenSvg   = ge::toSVG(gp::parseExcalidraw(unevenArrow));
     CHECK(unevenSvg.find("x=\"290\"") != std::string::npos ||
           unevenSvg.find("x=\"290.") != std::string::npos);
+    // 嵌字位于折线中点时，viewBox 应覆盖该区域而非仅 JSON 中的 x/y=0
+    {
+        double vw = ge::svgDim(unevenSvg, "width");
+        double vh = ge::svgDim(unevenSvg, "height");
+        CHECK(vw > 200);
+        CHECK(vh > 150);
+        CHECK(unevenSvg.find("viewBox=\"") != std::string::npos);
+    }
 
     // 旋转/镜像：rectangle/ellipse/diamond/text 都应带 matrix 变换
     std::string transformedDoc = R"({
@@ -490,8 +499,38 @@ static void testExportGraphAndHelpers()
     CHECK(saved.find("flowchart TD") != std::string::npos);
 
     CHECK(ge::xmlEscape("a<b>&\"'") == "a&lt;b&gt;&amp;&quot;&#39;");
+    {
+        // raw = a<'b>&"
+        std::string raw;
+        raw.push_back('a');
+        raw.push_back('<');
+        raw.push_back('\'');
+        raw.push_back('b');
+        raw.push_back('>');
+        raw.push_back('&');
+        raw.push_back('"');
+        CHECK(ge::xmlTextEscape(raw) == "a&lt;'b&gt;&amp;\"");
+        CHECK(ge::xmlAttrEscape(raw) == "a&lt;'b>&amp;&quot;");
+    }
     CHECK(ge::sanitizeMermaidId("a-b.c") == "a_b_c");
     CHECK(ge::sanitizeMermaidId("!!!") == "___");
+
+    // GRAPHMCP_ASSETS 优先于 CWD 相对路径
+    {
+#ifdef _WIN32
+        _putenv_s("GRAPHMCP_ASSETS", "third_party/excalidraw-assets");
+#else
+        setenv("GRAPHMCP_ASSETS", "third_party/excalidraw-assets", 1);
+#endif
+        std::string fontPath = ge::bundledAssetPath("Virgil.woff2");
+        CHECK(fontPath.find("Virgil.woff2") != std::string::npos);
+        CHECK(ge::fileReadable(fontPath));
+#ifdef _WIN32
+        _putenv_s("GRAPHMCP_ASSETS", "");
+#else
+        unsetenv("GRAPHMCP_ASSETS");
+#endif
+    }
 
     std::string svg = ge::toSVG(g);
     CHECK(ge::svgDim(svg, "width") > 0);

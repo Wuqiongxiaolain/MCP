@@ -109,12 +109,19 @@ DisableFormat: false
 ExperimentalAutoDetectBinPacking: false
 # 需要被解读为foreach循环而不是函数调用的宏
 ForEachMacros: [foreach, Q_FOREACH, BOOST_FOREACH]
-# 对#include进行排序，匹配了某正则表达式的#include拥有对应的优先级，匹配不到的则默认优先级为INT_MAX(优先级越小排序越靠前)，
-#   可以定义负数优先级从而保证某些#include永远在最前面
+# Include 分组：不同 Priority 之间自动插入空行（Regroup）
+# 注意：clang-format 不做 #include 依赖图分析，只能按正则手工映射层级。
+IncludeBlocks: Regroup
+# 对#include进行排序：Priority 越小越靠前；同 Priority 内按字母序。
+# 项目头分层（与 src/ 实际依赖一致）：
+#   json(20) → model(21) → layout|parsers(22) → exporters(23) → storage(24) → mcp(25)
 IncludeCategories:
-  - Regex: '^"(llvm|llvm-c|clang|clang-c)/'
+  # 平台头（windows 必须早于 shellapi）
+  - Regex: '^<windows\.h>'
+    Priority: 1
+  - Regex: '^<(shellapi|direct)\.h>'
     Priority: 2
-  - Regex: '^(<|"(gtest|isl|json)/)'
+  - Regex: '^<(mach-o|limits|sys|unistd)\.h>'
     Priority: 3
   - Regex: ".*"
     Priority: 1

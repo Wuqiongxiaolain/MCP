@@ -777,6 +777,8 @@ inline Graph parseExcalidraw(const std::string& text)
                     arrow = "none";
                 else if (hasEnd && hasStart)
                     arrow = "both";
+                else if (hasStart && !hasEnd)
+                    std::swap(from, to);
                 g.addEdge(from, to, label, style, arrow);
             }
         }

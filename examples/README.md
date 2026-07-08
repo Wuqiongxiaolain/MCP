@@ -5,6 +5,12 @@
 - `example_input/`：所有导入源文件
 - `example_output/<原文件名>_out/`：对应输入文件的导出结果
 
+迁移说明：
+
+- `mindmap.md` 已迁移为 `example_input/outline.md`
+- `whiteboard.excalidraw` 已迁移为 `example_input/whiteboard_freedraw.excalidraw`
+- `er.mmd` 为仅用于 `validate` 的输入样例，当前不提供对应 `example_output/er.mmd_out/`
+
 导入格式覆盖：
 
 - `.drawio`

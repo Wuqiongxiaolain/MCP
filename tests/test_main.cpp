@@ -227,26 +227,62 @@ static void testExcalidraw()
     CHECK(gb.edges.size() == 1);
     CHECK(gb.edges[0].label == "是");
     std::string bendSvg = ge::toSVG(gb);
-    CHECK(bendSvg.find("x=\"110\"") != std::string::npos);
+    CHECK(bendSvg.find("x=\"130.0") != std::string::npos ||
+          bendSvg.find("x=\"130.") != std::string::npos);
     CHECK(bendSvg.find("mask id=\"mask-arr\"") != std::string::npos);
     CHECK(bendSvg.find("是") != std::string::npos);
+
+    // 仅 startArrowhead 时应交换逻辑方向，避免导出方向反转
+    std::string startOnlyArrow = R"({
+      "type":"excalidraw","version":2,"elements":[
+        {"id":"s","type":"rectangle","x":10,"y":10,"width":80,"height":40},
+        {"id":"t","type":"rectangle","x":220,"y":10,"width":80,"height":40},
+        {"id":"arr2","type":"arrow","x":90,"y":30,"width":130,"height":0,
+         "points":[[0,0],[130,0]],
+         "startBinding":{"elementId":"s"},"endBinding":{"elementId":"t"},
+         "startArrowhead":"arrow","endArrowhead":null}
+      ]})";
+    Graph       gs             = gp::parseExcalidraw(startOnlyArrow);
+    CHECK(gs.edges.size() == 1);
+    CHECK(gs.edges[0].from == "t");
+    CHECK(gs.edges[0].to == "s");
 
     // 多行彩色文本应保留颜色并拆成多行；HTML 路径应具备离线 fallback
     std::string multiText = R"({
       "type":"excalidraw","version":2,"elements":[
-        {"id":"e1","type":"ellipse","x":120,"y":10,"width":90,"height":50},
+        {"id":"e1","type":"ellipse","x":120,"y":10,"width":90,"height":50,"opacity":50},
         {"id":"t2","type":"text","x":120,"y":10,"width":60,"height":40,
-         "text":"红\n蓝","strokeColor":"#ff0000","fontSize":16}
+         "text":"红\n蓝","strokeColor":"#ff0000","fontSize":16,"opacity":50}
       ]})";
     Graph       mt        = gp::parseExcalidraw(multiText);
     std::string multiSvg  = ge::toSVG(mt);
     CHECK(multiSvg.find("fill=\"#ff0000\"") != std::string::npos);
     CHECK(multiSvg.find("<tspan") != std::string::npos);
+    CHECK(multiSvg.find("opacity=\"0.5\"") != std::string::npos);
 
     std::string roughHtml = ge::toExcalidrawRoughHtml(mt);
     CHECK(roughHtml.find("const hasRough=") != std::string::npos);
     CHECK(roughHtml.find("rc.ellipse(el.x+el.width/2,el.y+el.height/2") !=
           std::string::npos);
+    CHECK(roughHtml.find("function polyMid(") != std::string::npos);
+    CHECK(roughHtml.find("stroke-dasharray','6,4'") != std::string::npos);
+    CHECK(roughHtml.find("n.setAttribute('opacity'") != std::string::npos);
+
+    // 不均匀折线的嵌字位置应按路径长度中点而不是按点序号取中
+    std::string unevenArrow = R"({
+      "type":"excalidraw","version":2,"elements":[
+        {"id":"a3","type":"rectangle","x":10,"y":10,"width":80,"height":40},
+        {"id":"b3","type":"rectangle","x":320,"y":200,"width":80,"height":40},
+        {"id":"arr3","type":"arrow","x":90,"y":30,"width":260,"height":200,
+         "points":[[0,0],[200,0],[200,10],[260,200]],
+         "startBinding":{"elementId":"a3"},"endBinding":{"elementId":"b3"},
+         "endArrowhead":"arrow"},
+        {"id":"lbl3","type":"text","x":0,"y":0,"width":20,"height":20,
+         "text":"X","containerId":"arr3","fontSize":16,"textAlign":"center"}
+      ]})";
+    std::string unevenSvg   = ge::toSVG(gp::parseExcalidraw(unevenArrow));
+    CHECK(unevenSvg.find("x=\"290\"") != std::string::npos ||
+          unevenSvg.find("x=\"290.") != std::string::npos);
 }
 
 static void testParseAnyAndModel()

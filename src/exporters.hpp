@@ -305,31 +305,53 @@ inline double excalidrawTextSvgX(const Json& el)
 inline double excalidrawTextSvgY(const Json& el, size_t lineIndex = 0)
 { return excalidrawTextSvgYAt(el.num("y"), el, lineIndex); }
 
-// arrowBoundTextBBoxOrigin: 折线箭头嵌字 bbox
-// 左上角（奇数点→拐点，偶数点→中间段中点）
+inline std::pair<double, double>
+polylineMidpoint(const std::vector<std::pair<double, double>>& pts);
+
+// arrowBoundTextBBoxOrigin: 折线箭头嵌字 bbox 左上角（按路径长度中点）
 inline std::pair<double, double> arrowBoundTextBBoxOrigin(const Json& arrow,
                                                           const Json& text)
 {
     auto pts = elementAbsolutePoints(arrow);
     if (pts.size() < 2)
         return {text.num("x"), text.num("y")};
-    double mx, my;
-    size_t n = pts.size();
-    if (n % 2 == 1) {
-        const auto& p = pts[n / 2];
-        mx            = p.first;
-        my            = p.second;
-    }
-    else {
-        const auto& a = pts[n / 2 - 1];
-        const auto& b = pts[n / 2];
-        mx            = (a.first + b.first) / 2;
-        my            = (a.second + b.second) / 2;
-    }
+    auto [mx, my] = polylineMidpoint(pts);
     return {mx - text.num("width") / 2, my - text.num("height") / 2};
 }
 
-// excalidrawTextBBoxOrigin: 文本 bbox 左上角（箭头嵌字按折线几何重算）
+// polylineMidpoint: 按折线路径长度取几何中点，避免按点序号取中偏向拐点
+inline std::pair<double, double>
+polylineMidpoint(const std::vector<std::pair<double, double>>& pts)
+{
+    if (pts.empty())
+        return {0, 0};
+    if (pts.size() == 1)
+        return pts.front();
+    double total = 0;
+    for (size_t i = 1; i < pts.size(); i++) {
+        double dx = pts[i].first - pts[i - 1].first;
+        double dy = pts[i].second - pts[i - 1].second;
+        total += std::sqrt(dx * dx + dy * dy);
+    }
+    if (total <= 0)
+        return pts.front();
+    double half = total / 2.0;
+    double acc  = 0;
+    for (size_t i = 1; i < pts.size(); i++) {
+        double x0  = pts[i - 1].first;
+        double y0  = pts[i - 1].second;
+        double dx  = pts[i].first - x0;
+        double dy  = pts[i].second - y0;
+        double seg = std::sqrt(dx * dx + dy * dy);
+        if (acc + seg >= half && seg > 0) {
+            double t = (half - acc) / seg;
+            return {x0 + dx * t, y0 + dy * t};
+        }
+        acc += seg;
+    }
+    return pts.back();
+}
+
 inline std::pair<double, double>
 excalidrawTextBBoxOrigin(const Json&                        el,
                          const std::map<std::string, Json>& arrows)
@@ -477,25 +499,31 @@ inline std::string toSVGExcalidraw(const Graph& g)
         else if (ty == "ellipse") {
             double cx = el.num("x") + el.num("width") / 2;
             double cy = el.num("y") + el.num("height") / 2;
+            double op =
+                std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
             os << "  <ellipse cx=\"" << cx << "\" cy=\"" << cy << "\" rx=\""
                << el.num("width") / 2 << "\" ry=\"" << el.num("height") / 2
                << "\" fill=\"" << svgFill(el) << "\" stroke=\""
                << xmlEscape(el.str("strokeColor", "#1e1e1e"))
                << "\" stroke-width=\""
-               << std::max(0.5, el.num("strokeWidth", 2)) << "\""
-               << svgDashAttr(el.str("strokeStyle", "solid")) << "/>\n";
+               << std::max(0.5, el.num("strokeWidth", 2)) << "\" opacity=\""
+               << op << "\"" << svgDashAttr(el.str("strokeStyle", "solid"))
+               << "/>\n";
         }
         else if (ty == "diamond") {
             double x = el.num("x"), y = el.num("y");
             double ew = el.num("width"), eh = el.num("height");
             double cx = x + ew / 2, cy = y + eh / 2;
+            double op =
+                std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
             os << "  <polygon points=\"" << cx << "," << y << " " << x + ew
                << "," << cy << " " << cx << "," << y + eh << " " << x << ","
                << cy << "\" fill=\"" << svgFill(el) << "\" stroke=\""
                << xmlEscape(el.str("strokeColor", "#1e1e1e"))
                << "\" stroke-width=\""
-               << std::max(0.5, el.num("strokeWidth", 2)) << "\""
-               << svgDashAttr(el.str("strokeStyle", "solid")) << "/>\n";
+               << std::max(0.5, el.num("strokeWidth", 2)) << "\" opacity=\""
+               << op << "\"" << svgDashAttr(el.str("strokeStyle", "solid"))
+               << "/>\n";
         }
         else if (ty == "arrow" || ty == "line") {
             auto pts      = elementAbsolutePoints(el);
@@ -603,6 +631,15 @@ inline std::string toExcalidrawRoughHtml(const Graph& g)
           "const rc=hasRough?rough.svg(svg):null;\n"
           "function absPts(el){return "
           "(el.points||[[0,0]]).map(p=>[el.x+p[0],el.y+p[1]]);}\n"
+          "function polyMid(pts){if(!pts.length)return[0,0];if(pts.length===1)"
+          "return pts[0];let total=0;for(let i=1;i<pts.length;i++){const "
+          "dx=pts[i][0]-pts[i-1][0],dy=pts[i][1]-pts[i-1][1];"
+          "total+=Math.hypot(dx,dy);}if(total<=0)return pts[0];"
+          "const half=total/2;let acc=0;for(let i=1;i<pts.length;i++){"
+          "const a=pts[i-1],b=pts[i],dx=b[0]-a[0],dy=b[1]-a[1],"
+          "seg=Math.hypot(dx,dy);if(acc+seg>=half&&seg>0){"
+          "const t=(half-acc)/seg;return[a[0]+dx*t,a[1]+dy*t];}"
+          "acc+=seg;}return pts[pts.length-1];}\n"
           "function textLines(el){const "
           "t=((el.text===undefined||el.text===null)?'':el.text).replace(/"
           "\\r\\n?/g,'\\n');"
@@ -617,13 +654,8 @@ inline std::string toExcalidrawRoughHtml(const Graph& g)
           "fill=\"context-stroke\"/></marker>';\n"
           "svg.appendChild(defs);\n"
           "function arrowBoundOrigin(arrow,text){const pts=absPts(arrow);"
-          "if(pts.length<2)return[text.x,text.y];let mx,my;"
-          "if(pts.length%2===1){const "
-          "p=pts[Math.floor(pts.length/2)];mx=p[0];my=p[1];}"
-          "else{const "
-          "a=pts[pts.length/2-1],b=pts[pts.length/2];mx=(a[0]+b[0])/"
-          "2;my=(a[1]+b[1])/2;}"
-          "return[mx-(text.width||0)/2,my-(text.height||0)/2];}\n"
+          "if(pts.length<2)return[text.x,text.y];const p=polyMid(pts);"
+          "return[p[0]-(text.width||0)/2,p[1]-(text.height||0)/2];}\n"
           "const arrowById=new Map();for(const el of "
           "elements)if(el.type==='arrow')arrowById.set(el.id,el);\n"
           "const boundTextByArrow=new Map();for(const el of elements)"
@@ -686,9 +718,18 @@ inline std::string toExcalidrawRoughHtml(const Graph& g)
           "createElementNS('http://www.w3.org/2000/svg','rect');"
           "n.setAttribute('x',el.x);n.setAttribute('y',el.y);n.setAttribute("
           "'width',el.width);n.setAttribute('height',el.height);"
+          "if(el.roundness&&el.roundness.type>=2)n.setAttribute('rx',8);"
           "n.setAttribute('fill',o.fill||'none');n.setAttribute('stroke',o."
           "stroke);"
-          "n.setAttribute('stroke-width',o.strokeWidth);return n;})());}\n"
+          "n.setAttribute('stroke-width',o.strokeWidth);"
+          "n.setAttribute('opacity',(((el.opacity===undefined||el.opacity==="
+          "null)?100:el.opacity)/100).toString());"
+          "if(el.strokeStyle==='dashed')n.setAttribute('stroke-dasharray','6,4'"
+          ");"
+          "else "
+          "if(el.strokeStyle==='dotted')n.setAttribute('stroke-dasharray','1,4'"
+          ");"
+          "return n;})());}\n"
           "  else "
           "if(el.type==='ellipse'){svg.appendChild(hasRough?"
           "rc.ellipse(el.x+el.width/2,el.y+el.height/2,el.width,el.height,o):"
@@ -699,7 +740,15 @@ inline std::string toExcalidrawRoughHtml(const Graph& g)
           "n.setAttribute('ry',el.height/"
           "2);n.setAttribute('fill',o.fill||'none');"
           "n.setAttribute('stroke',o.stroke);n.setAttribute('stroke-width',"
-          "o.strokeWidth);return n;})());}\n"
+          "o.strokeWidth);"
+          "n.setAttribute('opacity',(((el.opacity===undefined||el.opacity==="
+          "null)?100:el.opacity)/100).toString());"
+          "if(el.strokeStyle==='dashed')n.setAttribute('stroke-dasharray','6,4'"
+          ");"
+          "else "
+          "if(el.strokeStyle==='dotted')n.setAttribute('stroke-dasharray','1,4'"
+          ");"
+          "return n;})());}\n"
           "  else if(el.type==='diamond'){const "
           "cx=el.x+el.width/2,cy=el.y+el.height/2;"
           "svg.appendChild(hasRough?rc.polygon([[cx,el.y],[el.x+el.width,cy],["
@@ -710,7 +759,15 @@ inline std::string toExcalidrawRoughHtml(const Graph& g)
           "p=>`${p[0]},${p[1]}`).join(' "
           "'));n.setAttribute('fill',o.fill||'none');"
           "n.setAttribute('stroke',o.stroke);"
-          "n.setAttribute('stroke-width',o.strokeWidth);return n;})());}\n"
+          "n.setAttribute('stroke-width',o.strokeWidth);"
+          "n.setAttribute('opacity',(((el.opacity===undefined||el.opacity==="
+          "null)?100:el.opacity)/100).toString());"
+          "if(el.strokeStyle==='dashed')n.setAttribute('stroke-dasharray','6,4'"
+          ");"
+          "else "
+          "if(el.strokeStyle==='dotted')n.setAttribute('stroke-dasharray','1,4'"
+          ");"
+          "return n;})());}\n"
           "  else if(el.type==='arrow'||el.type==='line'){const pts=absPts(el);"
           "if(pts.length>=2){const lo=Object.assign({},o,{fill:undefined});"
           "if(el.endArrowhead)lo.arrowEnd='triangle';if(el.startArrowhead)lo."

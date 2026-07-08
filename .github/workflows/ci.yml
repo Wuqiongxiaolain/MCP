@@ -76,6 +76,19 @@ jobs:
           diff -q --strip-trailing-cr \
             ci-smoke-architecture.mmd \
             examples/example_output/architecture.xml_out/architecture.xml.mmd
+          # whiteboard SVG：剥离内嵌字体后比对几何结构，避免字体 base64 抖动掩盖回归
+          strip_svg_style() {
+            sed -E 's#<style>[^<]*</style>##g' "$1"
+          }
+          diff -q --strip-trailing-cr \
+            <(strip_svg_style ci-smoke-whiteboard.svg) \
+            <(strip_svg_style examples/example_output/whiteboard_freedraw.excalidraw_out/whiteboard_freedraw.excalidraw.svg)
+          grep -q "base64," ci-smoke-whiteboard.svg
+          if grep -q "font-family:&#39;Excalifont&#39;" ci-smoke-whiteboard.svg; then
+            echo "error: font CSS quotes were wrongly xml-escaped"
+            exit 1
+          fi
+          grep -q "font-family:'Excalifont'" ci-smoke-whiteboard.svg
 
           # serve: tools/list + tools/call graph_create
           printf '%s\n%s\n%s\n' \

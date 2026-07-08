@@ -1,5 +1,8 @@
-# 文本统一按 LF 入库，避免 Linux CI 用 cmp 比对时被 CRLF 绊倒
+# 文本统一按 LF 入库，避免 Linux CI 比对被 CRLF 绊倒
 *.mmd text eol=lf
 *.svg text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+*.excalidraw text eol=lf
+*.drawio text eol=lf
+*.json text eol=lf

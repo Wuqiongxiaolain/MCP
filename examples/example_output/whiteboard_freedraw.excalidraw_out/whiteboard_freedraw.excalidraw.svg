@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="663" height="585" viewBox="305.667 121.333 663 585">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+    <mask id="mask-ivh2V_kJjWPL9frEpDg1N" maskUnits="userSpaceOnUse">
+      <rect x="305.667" y="121.333" width="663.333" height="585.333" fill="#ffffff"/>
+      <rect x="710.333" y="458.833" width="28" height="33" fill="#000000"/>
+    </mask>
+    <mask id="mask-v5NlAOdDpeLxc6iuUY0ea" maskUnits="userSpaceOnUse">
+      <rect x="305.667" y="121.333" width="663.333" height="585.333" fill="#ffffff"/>
+      <rect x="485" y="368.167" width="28" height="33" fill="#000000"/>
+    </mask>
+  </defs>
+  <rect x="305.667" y="121.333" width="663.333" height="585.333" fill="#ffffff"/>
+  <style>text{font-family:'Segoe UI',Arial,'Xiaolai',sans-serif;}.ex-text{fill:#1e1e1e;}</style>
+  <rect x="605" y="161.333" width="242.667" height="69.3333" rx="8" fill="none" stroke="#1e1e1e" stroke-width="2" opacity="1"/>
+  <polyline fill="none" stroke="#1e1e1e" stroke-width="2" opacity="1" stroke-linecap="round" stroke-linejoin="round" points="726.358,229.333 726.335,299.625" marker-end="url(#arrow)"/>
+  <rect x="355" y="568" width="257.333" height="77.3333" rx="8" fill="none" stroke="#1e1e1e" stroke-width="2" opacity="1"/>
+  <polygon points="725.667,302 833,359.667 725.667,417.333 618.333,359.667" fill="none" stroke="#1e1e1e" stroke-width="2"/>
+  <g mask="url(#mask-v5NlAOdDpeLxc6iuUY0ea)">
+  <polyline fill="none" stroke="#1e1e1e" stroke-width="2" opacity="1" stroke-linecap="round" stroke-linejoin="round" points="619.159,361.159 499,384.667 484.193,562" marker-end="url(#arrow)"/>
+  </g>
+  <rect x="635.667" y="548.667" width="183.333" height="118" rx="8" fill="none" stroke="#1e1e1e" stroke-width="2" opacity="1"/>
+  <g mask="url(#mask-ivh2V_kJjWPL9frEpDg1N)">
+  <polyline fill="none" stroke="#1e1e1e" stroke-width="2" opacity="1" stroke-linecap="round" stroke-linejoin="round" points="726.139,419.708 724.333,475.333 727.105,542.667" marker-end="url(#arrow)"/>
+  </g>
+  <polyline fill="none" stroke="#1e1e1e" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="1" points="855,592.667 855.667,592.667 857.667,592.667 861,592.667 866.333,592 869.667,592 872.333,592 877,592 881,592 883.667,592 885,592 885.667,592 885.667,592"/>
+  <polyline fill="none" stroke="#1e1e1e" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="1" points="870.333,592 870.333,592.667 870.333,596 870.333,600.667 870.333,607.333 870.333,614 870.333,622 870.333,628.667 871,632 871.667,634.667 871.667,635.333 871.667,635.333"/>
+  <polyline fill="none" stroke="#1e1e1e" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="1" points="906.333,592 907,592 908.333,592 910.333,592 913,592.667 917.667,593.333 921.667,593.333 924.333,594 927,594 928.333,594.667 929,594.667 929,594.667"/>
+  <polyline fill="none" stroke="#1e1e1e" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="1" points="919,594 919,595.333 919,596.667 919,598.667 919,601.333 919,604 919,608.667 919,613.333 919,619.333 919,624 919,626.667 919,627.333 919,627.333"/>
+  <polyline fill="none" stroke="#1e1e1e" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="1" points="888.333,649.333 889,648.667 889.667,647.333 890.333,645.333 893,642 896.333,638.667 899.667,635.333 901.667,634 903,632.667 904.333,631.333 905,630.667 905.667,630.667 906.333,632 907,634.667 908.333,638.667 911,642.667 912.333,646 913.667,648.667 915,650 915,650.667 915,650.667"/>
+  <polyline fill="none" stroke="#1e1e1e" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="1" points="345.667,501.333 345.667,500.667 346.333,500 347,498 348.333,495.333 349,492.667 349.667,490 350.333,488 351,487.333 351,486.667 351.667,486 351.667,485.333 351.667,484.667 352.333,484.667 353,484.667 353.667,484.667 355,484.667 355.667,485.333 357.667,488.667 360.333,492 362.333,494 364.333,496 365.667,497.333 366.333,498 366.333,498"/>
+  <polyline fill="none" stroke="#1e1e1e" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="1" points="376.333,498 377.667,497.333 379,495.333 380.333,493.333 382.333,490 384.333,488.667 384.333,487.333 385,487.333 385.667,487.333 386.333,487.333 387.667,487.333 388.333,486.667 389,486.667 389.667,486.667 390.333,486.667 391.667,487.333 392.333,490 393.667,493.333 394.333,494.667 394.333,496.667 395,498 395,498"/>
+  <polyline fill="none" stroke="#1e1e1e" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="1" points="363,513.333 363,514 364.333,515.333 365.667,518.667 369,521.333 371,524.667 372.333,526.667 373.667,528 374.333,528 375,528.667 375.667,528.667 376.333,528.667 377.667,526 379,520.667 381,516 382.333,513.333 383,512.667 383.667,512.667 383.667,512.667"/>
+  <text class="ex-text" x="726.333" y="201.12" font-size="20" text-anchor="middle" opacity="1">kfc疯狂星期四</text>
+  <text class="ex-text" x="483.667" y="611.787" font-size="20" text-anchor="middle" opacity="1">v我50</text>
+  <text class="ex-text" x="725.5" y="364.953" font-size="20" text-anchor="middle" opacity="1">有群u？</text>
+  <text class="ex-text" x="499" y="389.787" font-size="20" text-anchor="middle" opacity="1">是</text>
+  <text class="ex-text" x="724.333" y="480.453" font-size="20" text-anchor="middle" opacity="1">否</text>
+  <text class="ex-text" x="727.333" y="612.787" font-size="20" text-anchor="middle" opacity="1">哭哭</text>
+</svg>

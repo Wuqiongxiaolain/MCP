@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="577" height="1300" viewBox="0 0 577 1300">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <line x1="115.132" y1="600" x2="268.942" y2="294" stroke="#333" stroke-width="1.5"/>
+  <line x1="299.905" y1="250" x2="450.095" y2="84" stroke="#333" stroke-width="1.5"/>
+  <line x1="313.175" y1="250" x2="436.825" y2="168" stroke="#333" stroke-width="1.5"/>
+  <line x1="330" y1="260.947" x2="420" y2="241.053" stroke="#333" stroke-width="1.5"/>
+  <line x1="330" y1="282.579" x2="420" y2="301.622" stroke="#333" stroke-width="1.5"/>
+  <line x1="313.175" y1="294" x2="436.825" y2="376" stroke="#333" stroke-width="1.5"/>
+  <line x1="299.905" y1="294" x2="450.095" y2="460" stroke="#333" stroke-width="1.5"/>
+  <line x1="140" y1="650" x2="230" y2="650" stroke="#333" stroke-width="1.5"/>
+  <line x1="329.762" y1="628" x2="420.238" y2="588" stroke="#333" stroke-width="1.5"/>
+  <line x1="330" y1="650" x2="420" y2="650" stroke="#333" stroke-width="1.5"/>
+  <line x1="329.762" y1="672" x2="420.238" y2="712" stroke="#333" stroke-width="1.5"/>
+  <line x1="115.132" y1="700" x2="268.942" y2="1006" stroke="#333" stroke-width="1.5"/>
+  <line x1="299.905" y1="1006" x2="450.095" y2="840" stroke="#333" stroke-width="1.5"/>
+  <line x1="313.175" y1="1006" x2="436.825" y2="924" stroke="#333" stroke-width="1.5"/>
+  <line x1="330" y1="1017.42" x2="420" y2="998.378" stroke="#333" stroke-width="1.5"/>
+  <line x1="330" y1="1039.05" x2="420" y2="1058.95" stroke="#333" stroke-width="1.5"/>
+  <line x1="313.175" y1="1050" x2="436.825" y2="1132" stroke="#333" stroke-width="1.5"/>
+  <line x1="299.905" y1="1050" x2="450.095" y2="1216" stroke="#333" stroke-width="1.5"/>
+  <ellipse cx="90" cy="650" rx="50" ry="50" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="90" y="655" text-anchor="middle">项目流程</text>
+  <ellipse cx="280" cy="272" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="280" y="277" text-anchor="middle">输入</text>
+  <ellipse cx="470" cy="62" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="470" y="67" text-anchor="middle">drawio</text>
+  <ellipse cx="470" cy="146" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="470" y="151" text-anchor="middle">mermaid</text>
+  <ellipse cx="470" cy="230" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="470" y="235" text-anchor="middle">markdown</text>
+  <ellipse cx="478.5" cy="314" rx="58.5" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="478.5" y="319" text-anchor="middle">excalidraw</text>
+  <ellipse cx="470" cy="398" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="470" y="403" text-anchor="middle">xml</text>
+  <ellipse cx="470" cy="482" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="470" y="487" text-anchor="middle">csv</text>
+  <ellipse cx="280" cy="650" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="280" y="655" text-anchor="middle">处理</text>
+  <ellipse cx="470" cy="566" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="470" y="571" text-anchor="middle">解析</text>
+  <ellipse cx="470" cy="650" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="470" y="655" text-anchor="middle">校验</text>
+  <ellipse cx="470" cy="734" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="470" y="739" text-anchor="middle">布局</text>
+  <ellipse cx="280" cy="1028" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="280" y="1033" text-anchor="middle">输出</text>
+  <ellipse cx="470" cy="818" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="470" y="823" text-anchor="middle">drawio</text>
+  <ellipse cx="470" cy="902" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="470" y="907" text-anchor="middle">mermaid</text>
+  <ellipse cx="478.5" cy="986" rx="58.5" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="478.5" y="991" text-anchor="middle">excalidraw</text>
+  <ellipse cx="470" cy="1070" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="470" y="1075" text-anchor="middle">svg</text>
+  <ellipse cx="470" cy="1154" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="470" y="1159" text-anchor="middle">png</text>
+  <ellipse cx="470" cy="1238" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="470" y="1243" text-anchor="middle">pdf</text>
+</svg>

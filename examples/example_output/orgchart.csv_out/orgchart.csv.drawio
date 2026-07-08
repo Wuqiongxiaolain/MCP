@@ -1,0 +1,43 @@
+<mxfile host="graphmcp" agent="graphmcp/1.0" type="device">
+  <diagram name="Page-1" id="d1">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="ceo" value="CEO" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="180" y="40" width="100" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="cto" value="CTO" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="110" y="154" width="100" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="cfo" value="CFO" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="320" y="154" width="100" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="eng1" value="工程师A" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="268" width="100" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="eng2" value="工程师B" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="180" y="268" width="100" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="fin1" value="财务专员" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="320" y="268" width="100" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=none;" edge="1" parent="1" source="ceo" target="cto">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=none;" edge="1" parent="1" source="ceo" target="cfo">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=none;" edge="1" parent="1" source="cto" target="eng1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=none;" edge="1" parent="1" source="cto" target="eng2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=none;" edge="1" parent="1" source="cfo" target="fin1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

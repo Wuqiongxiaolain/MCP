@@ -1,0 +1,7 @@
+id,label,parent
+ceo,CEO,
+cto,CTO,ceo
+cfo,CFO,ceo
+eng1,工程师A,cto
+eng2,工程师B,cto
+fin1,财务专员,cfo

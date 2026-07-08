@@ -1,0 +1,10 @@
+flowchart TD
+    subgraph cluster ["Service Cluster"]
+        order["Order Service"]
+        payment["Payment Service"]
+    end
+    gateway("API Gateway")
+    db(["MySQL"])
+    gateway -->|http| order
+    order -->|rpc| payment
+    payment -->|sql| db

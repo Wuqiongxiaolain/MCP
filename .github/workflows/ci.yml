@@ -38,8 +38,8 @@ jobs:
           SMOKE_ID="ci-smoke-${GITHUB_RUN_NUMBER}"
 
           # create/list/history/rollback/validate: 覆盖版本化主链路
-          ./bin/graphmcp create --input examples/flowchart.mmd --id "$SMOKE_ID" --name ci-smoke-flow
-          ./bin/graphmcp create --input examples/orgchart.csv  --id "$SMOKE_ID" --name ci-smoke-org
+          ./bin/graphmcp create --input examples/example_input/flowchart.mmd --id "$SMOKE_ID" --name ci-smoke-flow
+          ./bin/graphmcp create --input examples/example_input/orgchart.csv  --id "$SMOKE_ID" --name ci-smoke-org
           ./bin/graphmcp list | grep -q "$SMOKE_ID"
           ./bin/graphmcp history --id "$SMOKE_ID" | tee ci-smoke.history
           grep -q '^v1' ci-smoke.history
@@ -51,8 +51,8 @@ jobs:
           ./bin/graphmcp export --id "$SMOKE_ID" --to drawio -o ci-smoke.drawio
           ./bin/graphmcp export --id "$SMOKE_ID" --to svg    -o ci-smoke.svg
           ./bin/graphmcp export --id "$SMOKE_ID" --to mermaid -o ci-smoke.mmd
-          ./bin/graphmcp convert --input examples/mindmap.md --to mermaid -o ci-smoke-convert.mmd
-          ./bin/graphmcp validate --input examples/er.mmd --format mermaid | grep -q "valid: no issues found"
+          ./bin/graphmcp convert --input examples/example_input/outline.md --to mermaid -o ci-smoke-convert.mmd
+          ./bin/graphmcp validate --input examples/example_input/architecture.xml --format xml | grep -q "valid: no issues found"
           test -s ci-smoke.drawio
           test -s ci-smoke.svg
           test -s ci-smoke.mmd

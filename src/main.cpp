@@ -48,7 +48,7 @@ Args parseArgs(int argc, char** argv)
             size_t      eq  = key.find('=');
             if (eq != std::string::npos) {
                 val = key.substr(eq + 1);
-                key = key.substr(0, eq);
+                key.resize(eq);
             }
             else if (i + 1 < argc && argv[i + 1][0] != '-') {
                 val = argv[++i];

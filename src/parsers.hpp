@@ -8,7 +8,6 @@
 #include <functional>
 #include <stdexcept>
 
-
 namespace gp {
 
 using gj::Json;
@@ -765,17 +764,15 @@ inline Graph parseExcalidraw(const std::string& text)
                     to = eb->str("elementId");
             if (!from.empty() && !to.empty()) {
                 // 箭头嵌入文字：text.containerId 指向 arrow.id
-                std::string label =
-                    textByContainer.count(el.str("id")) ?
-                        textByContainer[el.str("id")] :
-                        "";
-                std::string style = el.str("strokeStyle", "solid");
-                std::string arrow = "arrow";
-                bool        hasEnd =
-                    !el.str("endArrowhead").empty() &&
-                    el.str("endArrowhead") != "null";
-                bool hasStart = !el.str("startArrowhead").empty() &&
-                                el.str("startArrowhead") != "null";
+                std::string label    = textByContainer.count(el.str("id")) ?
+                                           textByContainer[el.str("id")] :
+                                           "";
+                std::string style    = el.str("strokeStyle", "solid");
+                std::string arrow    = "arrow";
+                bool        hasEnd   = !el.str("endArrowhead").empty() &&
+                                       el.str("endArrowhead") != "null";
+                bool        hasStart = !el.str("startArrowhead").empty() &&
+                                       el.str("startArrowhead") != "null";
                 if (!hasEnd && !hasStart)
                     arrow = "none";
                 else if (hasEnd && hasStart)
@@ -838,7 +835,7 @@ inline std::string detectFormat(const std::string& text)
 // 关键步骤：确定格式 -> 调用对应解析器 -> 按需覆盖图类型
 inline Graph parseAny(const std::string& text,
                       std::string        format      = "auto",
-                      std::string        diagramType = "")
+                      const std::string& diagramType = "")
 {
     if (format.empty() || format == "auto")
         format = detectFormat(text);

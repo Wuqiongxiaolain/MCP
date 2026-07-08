@@ -52,8 +52,8 @@ class Store {
     explicit Store(std::string root = "")
     {
         if (root.empty()) {
-            const char* env = getenv("GRAPHMCP_STORE");
-            root            = env ? env : "graph-store";
+            std::string env = ge::getEnvVar("GRAPHMCP_STORE");
+            root            = env.empty() ? "graph-store" : env;
         }
         root_ = root;
         makeDir(root_);

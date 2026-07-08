@@ -3,9 +3,11 @@
 #pragma once
 #include "layout.hpp"
 #include "model.hpp"
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <functional>
+#include <sstream>
 
 #ifdef _WIN32
 #    include <direct.h>
@@ -26,6 +28,17 @@ using gj::Json;
 using gm::Edge;
 using gm::Graph;
 using gm::Node;
+
+// FreedrawStroke: 从 Excalidraw freedraw 提取出的矢量笔迹
+struct FreedrawStroke
+{
+    std::string                                   id;
+    std::string                                   strokeColor = "#1e1e1e";
+    std::string                                   strokeStyle = "solid";
+    double                                        strokeWidth = 2.0;
+    double                                        opacity     = 1.0;
+    std::vector<std::pair<double, double>> points;  // 绝对坐标点列
+};
 
 // ------------------------------------------------------------------ 工具函数
 // --
@@ -119,7 +132,345 @@ inline std::string readFile(const std::string& path)
     return os.str();
 }
 
-// ---------------------------------------------------------------- Mermaid --
+// collectFreedrawStrokes: 从 g.elements 提取 freedraw 并转换为绝对坐标点列
+inline std::vector<FreedrawStroke> collectFreedrawStrokes(const Graph& g)
+{
+    std::vector<FreedrawStroke> out;
+    for (const auto& el : g.elements) {
+        if (el.str("type") != "freedraw")
+            continue;
+        const Json* pts = el.find("points");
+        if (!pts || !pts->isArr() || pts->size() < 2)
+            continue;
+        FreedrawStroke s;
+        s.id          = el.str("id");
+        s.strokeColor = el.str("strokeColor", "#1e1e1e");
+        s.strokeStyle = el.str("strokeStyle", "solid");
+        s.strokeWidth = el.num("strokeWidth", 2);
+        s.opacity     = std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+        double bx     = el.num("x");
+        double by     = el.num("y");
+        for (const auto& p : *pts->a) {
+            if (!p.isArr() || p.size() < 2)
+                continue;
+            const Json& px = p.a->at(0);
+            const Json& py = p.a->at(1);
+            if (!px.isNum() || !py.isNum())
+                continue;
+            s.points.push_back({bx + px.n, by + py.n});
+        }
+        if (s.points.size() >= 2)
+            out.push_back(std::move(s));
+    }
+    return out;
+}
+
+// isWhiteboardElements: 是否应按 Excalidraw 原始 elements 渲染
+inline bool isWhiteboardElements(const Graph& g)
+{
+    return g.type == "whiteboard" && !g.elements.empty();
+}
+
+// elementAbsolutePoints: 将元素局部 points 转为画布绝对坐标
+inline std::vector<std::pair<double, double>>
+elementAbsolutePoints(const Json& el)
+{
+    std::vector<std::pair<double, double>> out;
+    const Json*                            pts = el.find("points");
+    if (!pts || !pts->isArr())
+        return out;
+    double bx = el.num("x");
+    double by = el.num("y");
+    for (const auto& p : *pts->a) {
+        if (!p.isArr() || p.size() < 2)
+            continue;
+        const Json& px = p.a->at(0);
+        const Json& py = p.a->at(1);
+        if (!px.isNum() || !py.isNum())
+            continue;
+        out.push_back({bx + px.n, by + py.n});
+    }
+    return out;
+}
+
+// extendBounds: 用矩形扩展画布边界
+inline void extendBounds(double& minX,
+                         double& minY,
+                         double& maxX,
+                         double& maxY,
+                         double  x,
+                         double  y,
+                         double  w,
+                         double  h)
+{
+    minX = std::min(minX, x);
+    minY = std::min(minY, y);
+    maxX = std::max(maxX, x + w);
+    maxY = std::max(maxY, y + h);
+}
+
+// excalidrawCanvasBounds: 根据 elements 计算画布边界
+inline void excalidrawCanvasBounds(const Graph& g,
+                                   double&      minX,
+                                   double&      minY,
+                                   double&      maxX,
+                                   double&      maxY)
+{
+    minX = 1e18;
+    minY = 1e18;
+    maxX = -1e18;
+    maxY = -1e18;
+    for (const auto& el : g.elements) {
+        std::string ty = el.str("type");
+        if (ty == "arrow" || ty == "line" || ty == "freedraw") {
+            auto pts = elementAbsolutePoints(el);
+            for (const auto& p : pts) {
+                minX = std::min(minX, p.first);
+                minY = std::min(minY, p.second);
+                maxX = std::max(maxX, p.first);
+                maxY = std::max(maxY, p.second);
+            }
+            continue;
+        }
+        extendBounds(minX, minY, maxX, maxY, el.num("x"), el.num("y"),
+                     el.num("width"), el.num("height"));
+    }
+    if (minX > maxX) {
+        minX = 0;
+        minY = 0;
+        maxX = 200;
+        maxY = 150;
+    }
+}
+
+// svgDashAttr: Excalidraw 线型映射为 SVG dash 属性片段
+inline std::string svgDashAttr(const std::string& strokeStyle)
+{
+    if (strokeStyle == "dashed")
+        return " stroke-dasharray=\"6,4\"";
+    if (strokeStyle == "dotted")
+        return " stroke-dasharray=\"1,4\"";
+    return "";
+}
+
+// svgFill: 将 Excalidraw 背景色映射为 SVG fill（transparent -> none）
+inline std::string svgFill(const Json& el)
+{
+    std::string bg = el.str("backgroundColor", "transparent");
+    if (bg.empty() || bg == "transparent")
+        return "none";
+    return bg;
+}
+
+// svgTextAnchor: Excalidraw 文本对齐映射
+inline std::string svgTextAnchor(const std::string& align)
+{
+    if (align == "center")
+        return "middle";
+    if (align == "right")
+        return "end";
+    return "start";
+}
+
+// toSVGExcalidraw: 按 Excalidraw elements 原样几何导出 SVG（折线箭头/嵌入文字）
+inline std::string toSVGExcalidraw(const Graph& g)
+{
+    double minX = 0, minY = 0, maxX = 200, maxY = 150;
+    excalidrawCanvasBounds(g, minX, minY, maxX, maxY);
+    double pad = 40;
+    double w   = maxX - minX + pad * 2;
+    double h   = maxY - minY + pad * 2;
+    std::ostringstream os;
+    os << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << (int)w
+       << "\" height=\"" << (int)h << "\" viewBox=\"" << (minX - pad) << " "
+       << (minY - pad) << " " << (int)w << " " << (int)h << "\">\n";
+    os << "  <defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"9\" "
+          "refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" "
+          "orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" "
+          "fill=\"context-stroke\"/></marker></defs>\n";
+    os << "  <rect x=\"" << (minX - pad) << "\" y=\"" << (minY - pad)
+       << "\" width=\"" << w << "\" height=\"" << h
+       << "\" fill=\"#ffffff\"/>\n";
+    os << "  <style>text{font-family:'Segoe UI',Arial,'Xiaolai',sans-serif;}"
+          ".ex-text{fill:#1e1e1e;}</style>\n";
+
+    auto emitPolyline = [&](const std::vector<std::pair<double, double>>& pts,
+                            const Json& el, bool arrowEnd, bool arrowStart) {
+        if (pts.size() < 2)
+            return;
+        std::string stroke = el.str("strokeColor", "#1e1e1e");
+        double      sw     = std::max(0.5, el.num("strokeWidth", 2));
+        double      op     = std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+        os << "  <polyline fill=\"none\" stroke=\"" << xmlEscape(stroke)
+           << "\" stroke-width=\"" << sw << "\" opacity=\"" << op
+           << "\" stroke-linecap=\"round\" stroke-linejoin=\"round\" points=\"";
+        for (size_t i = 0; i < pts.size(); i++) {
+            if (i)
+                os << " ";
+            os << pts[i].first << "," << pts[i].second;
+        }
+        os << "\"" << svgDashAttr(el.str("strokeStyle", "solid"));
+        if (arrowEnd)
+            os << " marker-end=\"url(#arrow)\"";
+        if (arrowStart)
+            os << " marker-start=\"url(#arrow)\"";
+        os << "/>\n";
+    };
+
+    for (const auto& el : g.elements) {
+        std::string ty = el.str("type");
+        if (ty == "rectangle") {
+            std::string stroke = el.str("strokeColor", "#1e1e1e");
+            std::string fill   = svgFill(el);
+            double      sw     = std::max(0.5, el.num("strokeWidth", 2));
+            double      op     = std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+            double      rx     = 0;
+            if (const Json* rnd = el.find("roundness"))
+                if (rnd->isObj() && rnd->num("type") >= 2)
+                    rx = 8;
+            os << "  <rect x=\"" << el.num("x") << "\" y=\"" << el.num("y")
+               << "\" width=\"" << el.num("width") << "\" height=\""
+               << el.num("height") << "\" rx=\"" << rx << "\" fill=\"" << fill
+               << "\" stroke=\"" << xmlEscape(stroke) << "\" stroke-width=\""
+               << sw << "\" opacity=\"" << op << "\""
+               << svgDashAttr(el.str("strokeStyle", "solid")) << "/>\n";
+        }
+        else if (ty == "ellipse") {
+            double cx = el.num("x") + el.num("width") / 2;
+            double cy = el.num("y") + el.num("height") / 2;
+            os << "  <ellipse cx=\"" << cx << "\" cy=\"" << cy << "\" rx=\""
+               << el.num("width") / 2 << "\" ry=\"" << el.num("height") / 2
+               << "\" fill=\"" << svgFill(el) << "\" stroke=\""
+               << xmlEscape(el.str("strokeColor", "#1e1e1e")) << "\" stroke-width=\""
+               << std::max(0.5, el.num("strokeWidth", 2)) << "\""
+               << svgDashAttr(el.str("strokeStyle", "solid")) << "/>\n";
+        }
+        else if (ty == "diamond") {
+            double x = el.num("x"), y = el.num("y");
+            double ew = el.num("width"), eh = el.num("height");
+            double cx = x + ew / 2, cy = y + eh / 2;
+            os << "  <polygon points=\"" << cx << "," << y << " " << x + ew
+               << "," << cy << " " << cx << "," << y + eh << " " << x << ","
+               << cy << "\" fill=\"" << svgFill(el) << "\" stroke=\""
+               << xmlEscape(el.str("strokeColor", "#1e1e1e")) << "\" stroke-width=\""
+               << std::max(0.5, el.num("strokeWidth", 2)) << "\""
+               << svgDashAttr(el.str("strokeStyle", "solid")) << "/>\n";
+        }
+        else if (ty == "arrow" || ty == "line") {
+            auto pts = elementAbsolutePoints(el);
+            bool endArr =
+                ty == "arrow" && !el.str("endArrowhead").empty() &&
+                el.str("endArrowhead") != "null";
+            bool startArr =
+                ty == "arrow" && !el.str("startArrowhead").empty() &&
+                el.str("startArrowhead") != "null";
+            emitPolyline(pts, el, endArr, startArr);
+        }
+        else if (ty == "freedraw") {
+            FreedrawStroke s;
+            s.id          = el.str("id");
+            s.strokeColor = el.str("strokeColor", "#1e1e1e");
+            s.strokeStyle = el.str("strokeStyle", "solid");
+            s.strokeWidth = el.num("strokeWidth", 2);
+            s.opacity     = std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+            s.points      = elementAbsolutePoints(el);
+            if (s.points.size() >= 2) {
+                os << "  <polyline fill=\"none\" stroke=\""
+                   << xmlEscape(s.strokeColor) << "\" stroke-width=\""
+                   << std::max(0.5, s.strokeWidth)
+                   << "\" stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\""
+                   << s.opacity << "\" points=\"";
+                for (size_t i = 0; i < s.points.size(); i++) {
+                    if (i)
+                        os << " ";
+                    os << s.points[i].first << "," << s.points[i].second;
+                }
+                os << "\"" << svgDashAttr(s.strokeStyle) << "/>\n";
+            }
+        }
+    }
+    // 文本层（形状标签 + 箭头嵌入文字 + 独立标注）
+    for (const auto& el : g.elements) {
+        if (el.str("type") != "text")
+            continue;
+        std::string txt = el.str("text");
+        if (txt.empty())
+            continue;
+        double      fs    = el.num("fontSize", 16);
+        double      x     = el.num("x");
+        double      y     = el.num("y") + fs * 0.85;
+        std::string align = svgTextAnchor(el.str("textAlign", "left"));
+        double      op    = std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+        os << "  <text class=\"ex-text\" x=\"" << x << "\" y=\"" << y
+           << "\" font-size=\"" << fs << "\" text-anchor=\"" << align
+           << "\" opacity=\"" << op << "\">" << xmlEscape(txt) << "</text>\n";
+    }
+    os << "</svg>\n";
+    return os.str();
+}
+
+// toExcalidrawRoughHtml: 用 rough.js 渲染白板（PNG/PDF 手绘风格）
+inline std::string toExcalidrawRoughHtml(const Graph& g)
+{
+    double minX = 0, minY = 0, maxX = 200, maxY = 150;
+    excalidrawCanvasBounds(g, minX, minY, maxX, maxY);
+    double pad = 40;
+    int    w   = (int)(maxX - minX + pad * 2);
+    int    h   = (int)(maxY - minY + pad * 2);
+    if (w < 200)
+        w = 200;
+    if (h < 150)
+        h = 150;
+    Json arr = Json::arr();
+    for (const auto& el : g.elements)
+        arr.push(el);
+    std::ostringstream os;
+    os << "<!doctype html><html><head><meta charset=\"utf-8\"><style>"
+          "html,body{margin:0;padding:0;background:#fff}"
+          "svg{display:block}</style>"
+          "<script src=\"https://unpkg.com/roughjs@4.6.6/bundled/rough.js\">"
+          "</script></head><body>"
+          "<svg id=\"scene\" xmlns=\"http://www.w3.org/2000/svg\" width=\"" << w
+       << "\" height=\"" << h << "\" viewBox=\"" << (minX - pad) << " "
+       << (minY - pad) << " " << w << " " << h << "\"></svg>"
+          "<script id=\"excalidraw-data\" type=\"application/json\">"
+       << arr.dump() << "</script><script>\n"
+          "const elements=JSON.parse(document.getElementById('excalidraw-data').textContent);\n"
+          "const svg=document.getElementById('scene');\n"
+          "const rc=rough.svg(svg);\n"
+          "function absPts(el){return (el.points||[[0,0]]).map(p=>[el.x+p[0],el.y+p[1]]);}\n"
+          "function dash(st){if(st==='dashed')return[6,4];if(st==='dotted')return[1,4];return undefined;}\n"
+          "function baseOpts(el){return{roughness:el.roughness??1,seed:el.seed??1,"
+          "stroke:el.strokeColor||'#1e1e1e',strokeWidth:el.strokeWidth||2,"
+          "strokeLineDash:dash(el.strokeStyle),fill:(!el.backgroundColor||el.backgroundColor==='transparent')?undefined:el.backgroundColor};}\n"
+          "for(const el of elements){\n"
+          "  const o=baseOpts(el);\n"
+          "  if(el.type==='rectangle'){svg.appendChild(rc.rectangle(el.x,el.y,el.width,el.height,o));}\n"
+          "  else if(el.type==='ellipse'){svg.appendChild(rc.ellipse(el.x,el.y,el.width,el.height,o));}\n"
+          "  else if(el.type==='diamond'){const cx=el.x+el.width/2,cy=el.y+el.height/2;"
+          "svg.appendChild(rc.polygon([[cx,el.y],[el.x+el.width,cy],[cx,el.y+el.height],[el.x,cy]],o));}\n"
+          "  else if(el.type==='arrow'||el.type==='line'){const pts=absPts(el);"
+          "if(pts.length>=2){const lo=Object.assign({},o,{fill:undefined});"
+          "if(el.endArrowhead)lo.arrowEnd='triangle';if(el.startArrowhead)lo.arrowStart='triangle';"
+          "svg.appendChild(rc.linearPath(pts,lo));}}\n"
+          "  else if(el.type==='freedraw'){const pts=absPts(el);"
+          "if(pts.length>=2)svg.appendChild(rc.linearPath(pts,Object.assign({},o,{fill:undefined})));}\n"
+          "}\n"
+          "for(const el of elements){\n"
+          "  if(el.type!=='text'||!el.text)continue;\n"
+          "  const t=document.createElementNS('http://www.w3.org/2000/svg','text');\n"
+          "  t.setAttribute('x',el.x);t.setAttribute('y',el.y+(el.fontSize||16)*0.85);\n"
+          "  t.setAttribute('font-size',el.fontSize||16);\n"
+          "  t.setAttribute('fill',el.strokeColor||'#1e1e1e');\n"
+          "  t.setAttribute('font-family','Segoe UI,Arial,sans-serif');\n"
+          "  const ta=el.textAlign||'left';\n"
+          "  t.setAttribute('text-anchor',ta==='center'?'middle':(ta==='right'?'end':'start'));\n"
+          "  t.textContent=el.text;svg.appendChild(t);\n"
+          "}\n"
+          "</script></body></html>\n";
+    return os.str();
+}
+
 
 // sanitizeMermaidId: Mermaid 标识符清洗，规避非法字符导致的渲染失败
 inline std::string sanitizeMermaidId(const std::string& id)
@@ -278,6 +629,7 @@ inline std::string drawioStyle(const Node& n)
 inline std::string toDrawio(Graph g)
 {
     gl::layout(g);
+    std::vector<FreedrawStroke> strokes = collectFreedrawStrokes(g);
     std::ostringstream os;
     os << "<mxfile host=\"graphmcp\" agent=\"graphmcp/1.0\" type=\"device\">\n";
     os << "  <diagram name=\"" << xmlEscape(g.name.empty() ? "Page-1" : g.name)
@@ -337,6 +689,31 @@ inline std::string toDrawio(Graph g)
            << "\" target=\"" << xmlEscape(e.to) << "\">\n";
         os << "          <mxGeometry relative=\"1\" as=\"geometry\"/>\n";
         os << "        </mxCell>\n";
+    }
+    // Excalidraw freedraw -> draw.io 矢量线段（按相邻采样点拆分）
+    int fi = 0;
+    for (const auto& s : strokes) {
+        std::string style =
+            "endArrow=none;startArrow=none;html=1;rounded=0;curved=0;";
+        style += "strokeColor=" + s.strokeColor + ";";
+        style += "strokeWidth=" + std::to_string(std::max(0.5, s.strokeWidth)) + ";";
+        if (s.strokeStyle == "dashed")
+            style += "dashed=1;";
+        else if (s.strokeStyle == "dotted")
+            style += "dashed=1;dashPattern=1 4;";
+        for (size_t i = 1; i < s.points.size(); i++) {
+            const auto& p0 = s.points[i - 1];
+            const auto& p1 = s.points[i];
+            os << "        <mxCell id=\"freedraw" << (++fi)
+               << "\" value=\"\" style=\"" << style << "\" edge=\"1\" parent=\"1\">\n";
+            os << "          <mxGeometry relative=\"1\" as=\"geometry\">\n";
+            os << "            <mxPoint x=\"" << p0.first << "\" y=\"" << p0.second
+               << "\" as=\"sourcePoint\"/>\n";
+            os << "            <mxPoint x=\"" << p1.first << "\" y=\"" << p1.second
+               << "\" as=\"targetPoint\"/>\n";
+            os << "          </mxGeometry>\n";
+            os << "        </mxCell>\n";
+        }
     }
     os << "      </root>\n";
     os << "    </mxGraphModel>\n";
@@ -491,14 +868,24 @@ inline std::string toExcalidraw(Graph g)
 // -------------------------------------------------------------------- SVG --
 
 // toSVG: 导出可视化 SVG
-// 关键步骤：布局 -> 先画边后画节点 -> 根据形状选择图元并绘制标签
+// 关键步骤：白板走 elements 原样渲染；其它图走 nodes/edges 布局渲染
 inline std::string toSVG(Graph g)
 {
+    if (isWhiteboardElements(g))
+        return toSVGExcalidraw(g);
+
     gl::layout(g);
+    std::vector<FreedrawStroke> strokes = collectFreedrawStrokes(g);
     double maxX = 200, maxY = 150;
     for (auto& n : g.nodes) {
         maxX = std::max(maxX, n.x + n.w);
         maxY = std::max(maxY, n.y + n.h);
+    }
+    for (const auto& s : strokes) {
+        for (const auto& p : s.points) {
+            maxX = std::max(maxX, p.first);
+            maxY = std::max(maxY, p.second);
+        }
     }
     std::ostringstream os;
     os << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\""
@@ -600,6 +987,24 @@ inline std::string toSVG(Graph g)
                 ty += 22;
             }
         }
+    }
+    // 最后绘制 freedraw，作为白板标注层
+    for (const auto& s : strokes) {
+        os << "  <polyline fill=\"none\" stroke=\"" << xmlEscape(s.strokeColor)
+           << "\" stroke-width=\"" << std::max(0.5, s.strokeWidth)
+           << "\" stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\""
+           << s.opacity << "\" points=\"";
+        for (size_t i = 0; i < s.points.size(); i++) {
+            if (i)
+                os << " ";
+            os << s.points[i].first << "," << s.points[i].second;
+        }
+        os << "\"";
+        if (s.strokeStyle == "dashed")
+            os << " stroke-dasharray=\"6,4\"";
+        else if (s.strokeStyle == "dotted")
+            os << " stroke-dasharray=\"1,4\"";
+        os << "/>\n";
     }
     os << "</svg>\n";
     return os.str();
@@ -855,6 +1260,56 @@ inline std::string rasterize(const std::string& svgPathIn,
     return "";
 }
 
+// rasterizeViaBrowser: 用 headless 浏览器对 HTML 页面截图或打印 PDF
+inline std::string rasterizeViaBrowser(const std::string& htmlPathIn,
+                                       const std::string& outPathIn,
+                                       const std::string& fmt,
+                                       int                width,
+                                       int                height)
+{
+    std::string htmlPath = absPath(htmlPathIn);
+    std::string outPath  = absPath(outPathIn);
+    if (width <= 0)
+        width = 1200;
+    if (height <= 0)
+        height = 800;
+    auto produced = [&]() {
+        std::ifstream check(outPath, std::ios::binary);
+        return check.good() &&
+               check.peek() != std::ifstream::traits_type::eof();
+    };
+    std::string browser = findBrowser();
+    if (browser.empty())
+        return "";
+    std::string url = fileUrl(htmlPath);
+    const char* tmp = getenv("TEMP");
+    if (!tmp)
+        tmp = getenv("TMP");
+    std::string profile =
+        (tmp ? std::string(tmp) + "/graphmcp-chrome-profile" :
+               outPath + ".chromeprofile");
+    std::string args = "--headless=new --disable-gpu --no-sandbox "
+                       "--user-data-dir=\"" +
+                       profile + "\" ";
+    if (fmt == "pdf")
+        args += "--no-pdf-header-footer --print-to-pdf=\"" + outPath + "\" \"" +
+                url + "\"";
+    else
+        args += "--force-device-scale-factor=2 --window-size=" +
+                std::to_string(width) + "," + std::to_string(height) +
+                " --screenshot=\"" + outPath + "\" \"" + url + "\"";
+    std::remove(outPath.c_str());
+    launchBrowser(browser, args);
+    if (produced()) {
+#ifdef _WIN32
+        return browser.find("msedge") != std::string::npos ? "edge" : "chrome";
+#else
+        return "chromium";
+#endif
+    }
+    return "";
+}
+
 // --------------------------------------------------------------- 分发入口 --
 
 // ExportResult: 导出结果对象（ok/message/content/path 四元信息）
@@ -874,13 +1329,10 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
 {
     ExportResult r;
     std::string  content;
-    std::string  defExt = to;
     if (to == "drawio")
         content = toDrawio(g);
-    else if (to == "mermaid") {
+    else if (to == "mermaid")
         content = toMermaid(g);
-        defExt  = "mmd";
-    }
     else if (to == "excalidraw")
         content = toExcalidraw(g);
     else if (to == "svg")
@@ -888,7 +1340,6 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
     else if (to == "model" || to == "json") {
         gl::layout(g);
         content = g.toJson().dump(2);
-        defExt  = "json";
     }
     else if (to == "url") {
         r.ok      = true;
@@ -897,8 +1348,29 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
         return r;
     }
     else if (to == "png" || to == "pdf") {
-        std::string svg  = toSVG(g);
         std::string base = outPath.empty() ? ("graph_export." + to) : outPath;
+        // 白板 PNG：优先用 rough.js 还原 Excalidraw 手绘风格
+        if (to == "png" && isWhiteboardElements(g)) {
+            double minX = 0, minY = 0, maxX = 200, maxY = 150;
+            excalidrawCanvasBounds(g, minX, minY, maxX, maxY);
+            int         w        = (int)(maxX - minX + 80);
+            int         h        = (int)(maxY - minY + 80);
+            std::string html     = toExcalidrawRoughHtml(g);
+            std::string htmlPath = base + ".tmp.html";
+            if (writeFile(htmlPath, html)) {
+                std::string tool = rasterizeViaBrowser(htmlPath, base, to, w, h);
+                std::remove(htmlPath.c_str());
+                if (!tool.empty()) {
+                    r.ok      = true;
+                    r.path    = base;
+                    r.message = "png written via " + tool +
+                                " (excalidraw rough style): " + base;
+                    return r;
+                }
+            }
+            // rough 渲染失败时回退到 SVG 栅格化
+        }
+        std::string svg     = toSVG(g);
         std::string svgPath = base + ".tmp.svg";
         if (!writeFile(svgPath, svg)) {
             r.message = "cannot write temp svg: " + svgPath;

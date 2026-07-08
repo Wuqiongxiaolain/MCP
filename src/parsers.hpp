@@ -763,8 +763,25 @@ inline Graph parseExcalidraw(const std::string& text)
             if (const Json* eb = el.find("endBinding"))
                 if (eb->isObj())
                     to = eb->str("elementId");
-            if (!from.empty() && !to.empty())
-                g.addEdge(from, to);
+            if (!from.empty() && !to.empty()) {
+                // 箭头嵌入文字：text.containerId 指向 arrow.id
+                std::string label =
+                    textByContainer.count(el.str("id")) ?
+                        textByContainer[el.str("id")] :
+                        "";
+                std::string style = el.str("strokeStyle", "solid");
+                std::string arrow = "arrow";
+                bool        hasEnd =
+                    !el.str("endArrowhead").empty() &&
+                    el.str("endArrowhead") != "null";
+                bool hasStart = !el.str("startArrowhead").empty() &&
+                                el.str("startArrowhead") != "null";
+                if (!hasEnd && !hasStart)
+                    arrow = "none";
+                else if (hasEnd && hasStart)
+                    arrow = "both";
+                g.addEdge(from, to, label, style, arrow);
+            }
         }
     }
     g.laidOut = true;  // 白板场景自带坐标

@@ -196,6 +196,41 @@ static void testExcalidraw()
     std::string out = ge::toExcalidraw(g);
     Graph       g2  = gp::parseExcalidraw(out);
     CHECK(g2.elements.size() == 4);
+
+    // freedraw 在 Excalidraw 往返中应原样保留
+    std::string withFreedraw = R"({
+      "type":"excalidraw","version":2,"elements":[
+        {"id":"fd1","type":"freedraw","x":50,"y":60,"strokeColor":"#ff0000",
+         "strokeWidth":3,"points":[[0,0],[30,10],[60,20],[90,15]]}
+      ]})";
+    Graph gfd = gp::parseExcalidraw(withFreedraw);
+    CHECK(gfd.elements.size() == 1);
+    std::string outFd = ge::toExcalidraw(gfd);
+    std::string err;
+    Json        jf = Json::parse(outFd, &err);
+    CHECK(err.empty());
+    CHECK(jf.find("elements") && jf.find("elements")->size() == 1);
+    if (jf.find("elements") && jf.find("elements")->size() == 1)
+        CHECK(jf.find("elements")->a->at(0).str("type") == "freedraw");
+
+    // 折线箭头 + 嵌入文字应进入逻辑边
+    std::string bendArrow = R"({
+      "type":"excalidraw","version":2,"elements":[
+        {"id":"a","type":"rectangle","x":10,"y":10,"width":80,"height":40},
+        {"id":"b","type":"rectangle","x":200,"y":120,"width":80,"height":40},
+        {"id":"arr","type":"arrow","x":50,"y":50,"width":120,"height":80,
+         "points":[[0,0],[60,20],[150,90]],
+         "startBinding":{"elementId":"a"},"endBinding":{"elementId":"b"},
+         "endArrowhead":"arrow"},
+        {"id":"lbl","type":"text","x":70,"y":60,"width":20,"height":20,
+         "text":"是","containerId":"arr","fontSize":16}
+      ]})";
+    Graph gb = gp::parseExcalidraw(bendArrow);
+    CHECK(gb.edges.size() == 1);
+    CHECK(gb.edges[0].label == "是");
+    std::string bendSvg = ge::toSVG(gb);
+    CHECK(bendSvg.find("70,60") != std::string::npos || bendSvg.find("是") != std::string::npos);
+    CHECK(bendSvg.find("60,70") != std::string::npos || bendSvg.find("110,70") != std::string::npos);
 }
 
 static void testDetect()
@@ -287,6 +322,25 @@ static void testExporters()
     std::string ermmd = ge::toMermaid(er);
     CHECK(ermmd.find("erDiagram") != std::string::npos);
     CHECK(ermmd.find("int id") != std::string::npos);
+
+    // whiteboard freedraw: SVG/drawio 保留矢量视图，Mermaid 丢弃
+    Graph wb = gp::parseExcalidraw(R"({
+      "type":"excalidraw","version":2,"elements":[
+        {"id":"fdA","type":"freedraw","x":100,"y":80,"strokeColor":"#00aa00",
+         "strokeWidth":2,"points":[[0,0],[20,10],[40,6],[70,20]]}
+      ]})");
+    std::string wbSvg = ge::toSVG(wb);
+    CHECK(wbSvg.find("<polyline") != std::string::npos);
+    CHECK(wbSvg.find("#00aa00") != std::string::npos);
+
+    std::string wbDrawio = ge::toDrawio(wb);
+    CHECK(wbDrawio.find("freedraw") != std::string::npos);
+    CHECK(wbDrawio.find("sourcePoint") != std::string::npos);
+    CHECK(wbDrawio.find("targetPoint") != std::string::npos);
+
+    std::string wbMmd = ge::toMermaid(wb);
+    CHECK(wbMmd.find("flowchart TD") != std::string::npos);
+    CHECK(wbMmd.find("freedraw") == std::string::npos);
 }
 
 static void testBase64()

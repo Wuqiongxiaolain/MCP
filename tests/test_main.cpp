@@ -833,6 +833,111 @@ static void testMcpProtocol()
     CHECK(resp.find("error") != nullptr);
 }
 
+static void testEditorFromEnv()
+{
+#ifdef _WIN32
+    _putenv("GRAPHMCP_EDITOR=C:\\test\\editor.exe");
+#else
+    setenv("GRAPHMCP_EDITOR", "/usr/bin/test-editor", 1);
+#endif
+    std::string e = ge::editorFromEnv();
+    CHECK(!e.empty());
+#ifdef _WIN32
+    _putenv("GRAPHMCP_EDITOR=");
+#else
+    unsetenv("GRAPHMCP_EDITOR");
+#endif
+    CHECK(ge::editorFromEnv().empty());
+}
+
+static void testEditorDiscovery()
+{
+    std::string di = ge::findDrawioDesktop();
+    std::string vs = ge::findVSCode();
+    (void)di;
+    (void)vs;
+}
+
+static void testGraphUpdateViaId()
+{
+    std::string root = "test-store-tmp";
+    gs::Store   store(root);
+    Graph g = gp::parseMermaid("flowchart TD\nA-->B\n");
+    g.name  = "update-test";
+    int v1  = store.save(g, "first");
+    CHECK(v1 == 1);
+    std::string gid = g.id;
+    Graph g2 = gp::parseMermaid("flowchart TD\nX-->Y-->Z\n");
+    g2.id    = gid;
+    g2.name  = "update-test";
+    int v2   = store.save(g2, "second");
+    CHECK(v2 == 2);
+    Json h = store.history(gid);
+    CHECK(h.size() == 2);
+    Graph       loaded;
+    std::string err;
+    CHECK(store.load(gid, loaded, 0, &err));
+    CHECK(loaded.nodes.size() == 3);
+    CHECK(loaded.edges.size() == 2);
+}
+
+static void testMCPCreateWithId()
+{
+    gs::Store store("test-store-tmp");
+    std::string err;
+    Json        call1 = Json::parse(
+        R"({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
+            "name":"graph_create","arguments":{
+              "content":"flowchart TD\nA[First]-->B[Second]","name":"mcp-create-id"}}})",
+        &err);
+    CHECK(err.empty());
+    Json resp1;
+    CHECK(mcp::handleMessage(call1, store, resp1));
+    const Json* res1 = resp1.find("result");
+    CHECK(res1 != nullptr);
+    const Json* ct1 =
+        res1 ? (res1->find("content") ? &res1->find("content")->a->at(0) :
+                                        nullptr) :
+               nullptr;
+    CHECK(ct1 != nullptr);
+    std::string text1;
+    if (ct1)
+        text1 = ct1->str("text");
+    Json j1 = Json::parse(text1, &err);
+    CHECK(j1.str("status") == "created");
+    std::string gid = j1.str("id");
+    CHECK(!gid.empty());
+    int v1 = (int)j1.num("version");
+    CHECK(v1 == 1);
+    Json call2 = Json::parse(
+        R"({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{
+            "name":"graph_create","arguments":{
+              "id":")" +
+            gid +
+            R"(","content":"flowchart TD\nX[Updated]-->Y[New]-->Z[Extra]","name":"mcp-update-test"}}})",
+        &err);
+    CHECK(err.empty());
+    Json resp2;
+    CHECK(mcp::handleMessage(call2, store, resp2));
+    const Json* res2 = resp2.find("result");
+    CHECK(res2 != nullptr);
+    const Json* ct2 =
+        res2 ? (res2->find("content") ? &res2->find("content")->a->at(0) :
+                                        nullptr) :
+               nullptr;
+    CHECK(ct2 != nullptr);
+    std::string text2;
+    if (ct2)
+        text2 = ct2->str("text");
+    Json j2 = Json::parse(text2, &err);
+    CHECK(j2.str("status") == "updated");
+    CHECK(j2.str("id") == gid);
+    int v2 = (int)j2.num("version");
+    CHECK(v2 == 2);
+    CHECK(j2.num("nodes") == 3);
+    CHECK(j2.num("edges") == 2);
+}
+
 int runAll()
 {
     testJson();
@@ -855,6 +960,10 @@ int runAll()
     testStorage();
     testMcpProtocol();
     testMcpExtended();
+    testEditorFromEnv();
+    testEditorDiscovery();
+    testGraphUpdateViaId();
+    testMCPCreateWithId();
     std::cout << "tests: " << g_passed << " passed, " << g_failed
               << " failed\n";
     return g_failed == 0 ? 0 : 1;

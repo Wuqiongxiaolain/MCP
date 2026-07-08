@@ -100,13 +100,17 @@ int usage()
            "\n"
            "commands:\n"
            "  create    --input <file> [--format auto] [--type auto] [--name "
-           "X]\n"
+           "X] [--id X]\n"
            "            parse + validate + layout + save to store; prints "
            "graph id\n"
+           "  update    --id <id> --input <file> [--format auto] [--type X] [--name X]\n"
+           "            update stored graph from new input (version "
+           "auto-increments)\n"
            "  convert   --input <file> --to <fmt> [-o out]     one-shot "
            "conversion\n"
            "  export    --id <id> --to <fmt> [-o out] [--version N]\n"
-           "  open      --id <id> [--editor browser|drawio|excalidraw|svg]\n"
+           "  open      --id <id> [--editor browser|drawio|excalidraw|svg] "
+           "[--editor-path <path>]\n"
            "  validate  --input <file> | --id <id>\n"
            "  list                                            list stored "
            "graphs\n"
@@ -124,7 +128,8 @@ int usage()
            "model\n"
            "\n"
            "environment:\n"
-           "  GRAPHMCP_STORE   store directory (default ./graph-store)\n";
+           "  GRAPHMCP_STORE   store directory (default ./graph-store)\n"
+           "  GRAPHMCP_EDITOR  default external editor for open command\n";
     return 1;
 }
 
@@ -262,10 +267,49 @@ int main(int argc, char** argv)
                     return 4;
                 }
             }
+            std::string editorPath = a.get("editor-path");
+            if (editorPath.empty())
+                editorPath = ge::editorFromEnv();
             std::cout << "opening: " << target << "\n";
-            if (!ge::openExternal(target))
+            if (!ge::openExternal(target, editorPath))
                 std::cerr
                     << "warning: could not launch handler; open manually\n";
+            return 0;
+        }
+        if (a.command == "update") {
+            if (!a.has("id"))
+                return usage();
+            Graph       g;
+            std::string err;
+            if (!store.load(a.get("id"), g, 0, &err)) {
+                std::cerr << "error: " << err << "\n";
+                return 5;
+            }
+            std::string newContent = readInput(a);
+            if (newContent.empty()) {
+                std::cerr << "error: no input provided (use --input, --content, "
+                             "or pipe)\n";
+                return 1;
+            }
+            Graph updated = gp::parseAny(newContent, a.get("format", "auto"),
+                                          a.get("type", g.type));
+            updated.id = g.id;
+            if (a.has("name"))
+                updated.name = a.get("name");
+            else
+                updated.name = g.name;
+            auto issues = gl::validate(updated);
+            if (!issues.empty())
+                printIssues(issues);
+            if (gl::hasErrors(issues)) {
+                std::cerr << "rejected: updated graph has structural errors\n";
+                return 3;
+            }
+            gl::layout(updated);
+            int v = store.save(updated, a.get("note", "updated via CLI"));
+            std::cout << "updated graph '" << updated.name << "' id="
+                      << updated.id << " v" << v << " (" << updated.nodes.size()
+                      << " nodes, " << updated.edges.size() << " edges)\n";
             return 0;
         }
         if (a.command == "validate") {

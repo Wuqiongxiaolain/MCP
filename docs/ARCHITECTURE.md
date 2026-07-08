@@ -68,10 +68,10 @@ graph-store/
 
 | 工具 | 参数 | 功能 |
 |---|---|---|
-| graph_create | content, format?, type?, name? | 解析+校验+布局+入库，返回图 id |
+| graph_create | content, format?, type?, name?, id? | 解析+校验+布局+入库；若提供已有 id 则更新（升版本） |
 | graph_convert | content, format?, to | 一次性转换（不入库） |
 | graph_export | id, to, path?, version? | 导出文件或内联内容 |
-| graph_open | id, editor? | 生成 URL / 文件并调起外部编辑器 |
+| graph_open | id, editor?, editorPath? | 生成 URL / 文件并调起外部编辑器；editorPath 指定编辑器路径 |
 | graph_validate | content \| id | 结构校验，返回 errors/warnings |
 | graph_list | — | 列出库中所有图 |
 | graph_history | id | 版本历史 |

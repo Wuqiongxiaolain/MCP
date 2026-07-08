@@ -63,13 +63,19 @@ inline Json toolList()
                    "diagram type override: "
                    "flowchart|architecture|er|orgchart|mindmap|whiteboard"));
         p.set("name", prop("string", "human readable graph name"));
+        p.set("id",
+              prop("string",
+                   "existing graph id to update (optional; creates new graph "
+                   "if omitted)"));
         Json req = Json::arr();
         req.push(Json("content"));
         tools.push(toolDef("graph_create",
                            "Parse structured diagram content into the unified "
                            "graph model, validate it, "
                            "apply automatic layout and save it to the "
-                           "versioned store. Returns the graph id.",
+                           "versioned store. Returns the graph id. "
+                           "When an existing graph id is provided, the graph "
+                           "is updated and the version number is incremented.",
                            p, req));
     }
     {
@@ -113,6 +119,10 @@ inline Json toolList()
         p.set("editor",
               prop("string", "target editor: browser (mermaid.live URL) | "
                              "drawio | excalidraw | svg (default browser)"));
+        p.set("editorPath",
+              prop("string",
+                   "explicit editor executable path (overrides OS default and "
+                   "GRAPHMCP_EDITOR env var)"));
         Json req = Json::arr();
         req.push(Json("id"));
         tools.push(toolDef("graph_open",
@@ -231,10 +241,13 @@ class ToolRunner {
     gs::Store& store_;
 
     // create: 解析输入并保存图；有结构性错误时直接拒绝创建
+    // 若提供 id 且对应图已存在，则更新并升版本
     Json create(const Json& a)
     {
         Graph g = gp::parseAny(a.str("content"), a.str("format", "auto"),
                                a.str("type"));
+        if (!a.str("id").empty())
+            g.id = a.str("id");
         if (!a.str("name").empty())
             g.name = a.str("name");
         auto issues = gl::validate(g);
@@ -245,9 +258,11 @@ class ToolRunner {
             return textContent(out.dump(2), true);
         }
         gl::layout(g);
-        int  v   = store_.save(g, "created via MCP");
+        std::string note = a.str("id").empty() ? "created via MCP" :
+                                                 "updated via MCP";
+        int         v    = store_.save(g, note);
         Json out = Json::obj();
-        out.set("status", "created");
+        out.set("status", v > 1 ? "updated" : "created");
         out.set("id", g.id);
         out.set("name", g.name);
         out.set("type", g.type);
@@ -311,14 +326,24 @@ class ToolRunner {
             if (!r.ok)
                 return textContent(r.message, true);
         }
-        bool launched = ge::openExternal(target);
+        std::string editorPath = a.str("editorPath");
+        if (editorPath.empty())
+            editorPath = ge::editorFromEnv();
+        bool launched = ge::openExternal(target, editorPath);
         Json out      = Json::obj();
         out.set("target", target);
         out.set("launched", launched);
-        out.set("hint",
-                launched ?
-                    "opened with system default handler" :
-                    "could not launch automatically; open the target manually");
+        std::string hint =
+            launched ?
+                (editorPath.empty() ?
+                     "opened with system default handler" :
+                     "opened with editor: " + editorPath) :
+                "could not launch automatically; open the target manually";
+        if (!ge::findDrawioDesktop().empty())
+            hint += " (draw.io Desktop detected)";
+        if (!ge::findVSCode().empty())
+            hint += " (VS Code detected)";
+        out.set("hint", hint);
         return textContent(out.dump(2));
     }
 

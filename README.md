@@ -125,13 +125,13 @@ docs/           架构说明、思维导图、工作记录
 `Jenkinsfile` 定义的流水线阶段：
 
 1. DevOps 流水线
-1. **Checkout** — 拉取代码
-2. **Build** — `make all`
-3. **Unit Tests** — `make test`（121 断言）
-4. **Smoke Test** — CLI 全链路 + MCP stdio 会话脚本
-5. **SonarQube Analysis + Quality Gate** — 静态分析，不达标即中断
-6. **Package** — 产出 `graphmcp-<BUILD>.tar.gz` 制品
-7. **Deploy** — `main` 分支触发 Ansible 部署到 `ansible/inventory.ini` 中的主机
+2. **Checkout** — 拉取代码
+3. **Build** — `make all`w
+4. **Unit Tests** — `make test`（121 断言）
+5. **Smoke Test** — CLI 全链路 + MCP stdio 会话脚本
+6. **SonarQube Analysis + Quality Gate** — 静态分析，不达标即中断
+7. **Package** — 产出 `graphmcp-<BUILD>.tar.gz` 制品
+8. **Deploy** — `main` 分支触发 Ansible 部署到 `ansible/inventory.ini` 中的主机
 
 ## 许可
 

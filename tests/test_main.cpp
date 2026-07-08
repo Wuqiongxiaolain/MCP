@@ -6,7 +6,6 @@
 #include <cstdio>
 #include <iostream>
 
-
 static int g_failed = 0;
 static int g_passed = 0;
 
@@ -40,7 +39,7 @@ static void testJson()
     CHECK(err.empty());
     CHECK(j2.dump() == j.dump());
     // error reporting
-    Json bad = Json::parse("{broken", &err);
+    Json::parse("{broken", &err);
     CHECK(!err.empty());
 }
 
@@ -203,7 +202,7 @@ static void testExcalidraw()
         {"id":"fd1","type":"freedraw","x":50,"y":60,"strokeColor":"#ff0000",
          "strokeWidth":3,"points":[[0,0],[30,10],[60,20],[90,15]]}
       ]})";
-    Graph gfd = gp::parseExcalidraw(withFreedraw);
+    Graph       gfd          = gp::parseExcalidraw(withFreedraw);
     CHECK(gfd.elements.size() == 1);
     std::string outFd = ge::toExcalidraw(gfd);
     std::string err;
@@ -223,14 +222,15 @@ static void testExcalidraw()
          "startBinding":{"elementId":"a"},"endBinding":{"elementId":"b"},
          "endArrowhead":"arrow"},
         {"id":"lbl","type":"text","x":70,"y":60,"width":20,"height":20,
-         "text":"是","containerId":"arr","fontSize":16}
+         "text":"是","containerId":"arr","fontSize":16,"textAlign":"center"}
       ]})";
-    Graph gb = gp::parseExcalidraw(bendArrow);
+    Graph       gb        = gp::parseExcalidraw(bendArrow);
     CHECK(gb.edges.size() == 1);
     CHECK(gb.edges[0].label == "是");
     std::string bendSvg = ge::toSVG(gb);
-    CHECK(bendSvg.find("70,60") != std::string::npos || bendSvg.find("是") != std::string::npos);
-    CHECK(bendSvg.find("60,70") != std::string::npos || bendSvg.find("110,70") != std::string::npos);
+    CHECK(bendSvg.find("x=\"110\"") != std::string::npos);
+    CHECK(bendSvg.find("mask id=\"mask-arr\"") != std::string::npos);
+    CHECK(bendSvg.find("是") != std::string::npos);
 }
 
 static void testDetect()
@@ -324,7 +324,7 @@ static void testExporters()
     CHECK(ermmd.find("int id") != std::string::npos);
 
     // whiteboard freedraw: SVG/drawio 保留矢量视图，Mermaid 丢弃
-    Graph wb = gp::parseExcalidraw(R"({
+    Graph       wb    = gp::parseExcalidraw(R"({
       "type":"excalidraw","version":2,"elements":[
         {"id":"fdA","type":"freedraw","x":100,"y":80,"strokeColor":"#00aa00",
          "strokeWidth":2,"points":[[0,0],[20,10],[40,6],[70,20]]}

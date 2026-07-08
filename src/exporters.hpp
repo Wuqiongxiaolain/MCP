@@ -32,11 +32,11 @@ using gm::Node;
 // FreedrawStroke: 从 Excalidraw freedraw 提取出的矢量笔迹
 struct FreedrawStroke
 {
-    std::string                                   id;
-    std::string                                   strokeColor = "#1e1e1e";
-    std::string                                   strokeStyle = "solid";
-    double                                        strokeWidth = 2.0;
-    double                                        opacity     = 1.0;
+    std::string                            id;
+    std::string                            strokeColor = "#1e1e1e";
+    std::string                            strokeStyle = "solid";
+    double                                 strokeWidth = 2.0;
+    double                                 opacity     = 1.0;
     std::vector<std::pair<double, double>> points;  // 绝对坐标点列
 };
 
@@ -147,9 +147,10 @@ inline std::vector<FreedrawStroke> collectFreedrawStrokes(const Graph& g)
         s.strokeColor = el.str("strokeColor", "#1e1e1e");
         s.strokeStyle = el.str("strokeStyle", "solid");
         s.strokeWidth = el.num("strokeWidth", 2);
-        s.opacity     = std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
-        double bx     = el.num("x");
-        double by     = el.num("y");
+        s.opacity =
+            std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+        double bx = el.num("x");
+        double by = el.num("y");
         for (const auto& p : *pts->a) {
             if (!p.isArr() || p.size() < 2)
                 continue;
@@ -167,9 +168,7 @@ inline std::vector<FreedrawStroke> collectFreedrawStrokes(const Graph& g)
 
 // isWhiteboardElements: 是否应按 Excalidraw 原始 elements 渲染
 inline bool isWhiteboardElements(const Graph& g)
-{
-    return g.type == "whiteboard" && !g.elements.empty();
-}
+{ return g.type == "whiteboard" && !g.elements.empty(); }
 
 // elementAbsolutePoints: 将元素局部 points 转为画布绝对坐标
 inline std::vector<std::pair<double, double>>
@@ -272,25 +271,154 @@ inline std::string svgTextAnchor(const std::string& align)
     return "start";
 }
 
+// excalidrawTextSvgXAt: 给定 bbox 左上角计算 SVG 文本锚点 x
+inline double excalidrawTextSvgXAt(double bx, const Json& el)
+{
+    double      w  = el.num("width");
+    std::string ta = el.str("textAlign", "left");
+    if (ta == "center")
+        return bx + w / 2;
+    if (ta == "right")
+        return bx + w;
+    return bx;
+}
+
+// excalidrawTextSvgYAt: 给定 bbox 左上角计算 alphabetic baseline y
+inline double
+excalidrawTextSvgYAt(double by, const Json& el, size_t lineIndex = 0)
+{
+    double fs           = el.num("fontSize", 16);
+    double lh           = el.num("lineHeight", 1.25);
+    double lineHeightPx = fs * lh;
+    double fontSizeEm   = fs / 1000.0;
+    double verticalOffset =
+        fontSizeEm * 886 +
+        (lineHeightPx - fontSizeEm * 886 + fontSizeEm * (-374)) / 2.0;
+    return by + lineIndex * lineHeightPx + verticalOffset;
+}
+
+// excalidrawTextSvgX: Excalidraw 文本 bbox 左上角 + 对齐偏移 → SVG 锚点 x
+inline double excalidrawTextSvgX(const Json& el)
+{ return excalidrawTextSvgXAt(el.num("x"), el); }
+
+// excalidrawTextSvgY: Excalidraw alphabetic baseline（近似 Excalifont 度量）
+inline double excalidrawTextSvgY(const Json& el, size_t lineIndex = 0)
+{ return excalidrawTextSvgYAt(el.num("y"), el, lineIndex); }
+
+// arrowBoundTextBBoxOrigin: 折线箭头嵌字 bbox
+// 左上角（奇数点→拐点，偶数点→中间段中点）
+inline std::pair<double, double> arrowBoundTextBBoxOrigin(const Json& arrow,
+                                                          const Json& text)
+{
+    auto pts = elementAbsolutePoints(arrow);
+    if (pts.size() < 2)
+        return {text.num("x"), text.num("y")};
+    double mx, my;
+    size_t n = pts.size();
+    if (n % 2 == 1) {
+        const auto& p = pts[n / 2];
+        mx            = p.first;
+        my            = p.second;
+    }
+    else {
+        const auto& a = pts[n / 2 - 1];
+        const auto& b = pts[n / 2];
+        mx            = (a.first + b.first) / 2;
+        my            = (a.second + b.second) / 2;
+    }
+    return {mx - text.num("width") / 2, my - text.num("height") / 2};
+}
+
+// excalidrawTextBBoxOrigin: 文本 bbox 左上角（箭头嵌字按折线几何重算）
+inline std::pair<double, double>
+excalidrawTextBBoxOrigin(const Json&                        el,
+                         const std::map<std::string, Json>& arrows)
+{
+    std::string cid = el.str("containerId");
+    if (!cid.empty()) {
+        auto it = arrows.find(cid);
+        if (it != arrows.end())
+            return arrowBoundTextBBoxOrigin(it->second, el);
+    }
+    return {el.num("x"), el.num("y")};
+}
+
+// collectArrowBoundTexts: 收集带嵌字的箭头及其文本元素
+inline void collectArrowBoundTexts(const Graph&                 g,
+                                   std::map<std::string, Json>& arrows,
+                                   std::map<std::string, Json>& arrowLabels)
+{
+    arrows.clear();
+    arrowLabels.clear();
+    for (const auto& el : g.elements) {
+        if (el.str("type") == "arrow")
+            arrows[el.str("id")] = el;
+    }
+    for (const auto& el : g.elements) {
+        if (el.str("type") != "text")
+            continue;
+        std::string cid = el.str("containerId");
+        if (!cid.empty() && !el.str("text").empty() && arrows.count(cid))
+            arrowLabels[cid] = el;
+    }
+}
+
+// arrowLabelMaskHole: 箭头嵌字遮罩挖空区域（含少量边距）
+inline void arrowLabelMaskHole(const Json& arrow,
+                               const Json& text,
+                               double      pad,
+                               double&     hx,
+                               double&     hy,
+                               double&     hw,
+                               double&     hh)
+{
+    auto origin = arrowBoundTextBBoxOrigin(arrow, text);
+    hx          = origin.first - pad;
+    hy          = origin.second - pad;
+    hw          = text.num("width") + pad * 2;
+    hh          = text.num("height") + pad * 2;
+}
+
 // toSVGExcalidraw: 按 Excalidraw elements 原样几何导出 SVG（折线箭头/嵌入文字）
 inline std::string toSVGExcalidraw(const Graph& g)
 {
     double minX = 0, minY = 0, maxX = 200, maxY = 150;
     excalidrawCanvasBounds(g, minX, minY, maxX, maxY);
-    double pad = 40;
-    double w   = maxX - minX + pad * 2;
-    double h   = maxY - minY + pad * 2;
+    double                      pad = 40;
+    double                      w   = maxX - minX + pad * 2;
+    double                      h   = maxY - minY + pad * 2;
+    double                      vx  = minX - pad;
+    double                      vy  = minY - pad;
+    std::map<std::string, Json> arrows, arrowLabels;
+    collectArrowBoundTexts(g, arrows, arrowLabels);
+    constexpr double   kLabelMaskPad = 4.0;
     std::ostringstream os;
     os << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << (int)w
-       << "\" height=\"" << (int)h << "\" viewBox=\"" << (minX - pad) << " "
-       << (minY - pad) << " " << (int)w << " " << (int)h << "\">\n";
-    os << "  <defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"9\" "
+       << "\" height=\"" << (int)h << "\" viewBox=\"" << vx << " " << vy << " "
+       << (int)w << " " << (int)h << "\">\n";
+    os << "  <defs>\n";
+    os << "    <marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"9\" "
           "refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" "
           "orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" "
-          "fill=\"context-stroke\"/></marker></defs>\n";
-    os << "  <rect x=\"" << (minX - pad) << "\" y=\"" << (minY - pad)
-       << "\" width=\"" << w << "\" height=\"" << h
-       << "\" fill=\"#ffffff\"/>\n";
+          "fill=\"context-stroke\"/></marker>\n";
+    for (const auto& kv : arrowLabels) {
+        auto it = arrows.find(kv.first);
+        if (it == arrows.end())
+            continue;
+        double hx, hy, hw, hh;
+        arrowLabelMaskHole(it->second, kv.second, kLabelMaskPad, hx, hy, hw,
+                           hh);
+        os << "    <mask id=\"mask-" << xmlEscape(kv.first)
+           << "\" maskUnits=\"userSpaceOnUse\">\n";
+        os << "      <rect x=\"" << vx << "\" y=\"" << vy << "\" width=\"" << w
+           << "\" height=\"" << h << "\" fill=\"#ffffff\"/>\n";
+        os << "      <rect x=\"" << hx << "\" y=\"" << hy << "\" width=\"" << hw
+           << "\" height=\"" << hh << "\" fill=\"#000000\"/>\n";
+        os << "    </mask>\n";
+    }
+    os << "  </defs>\n";
+    os << "  <rect x=\"" << vx << "\" y=\"" << vy << "\" width=\"" << w
+       << "\" height=\"" << h << "\" fill=\"#ffffff\"/>\n";
     os << "  <style>text{font-family:'Segoe UI',Arial,'Xiaolai',sans-serif;}"
           ".ex-text{fill:#1e1e1e;}</style>\n";
 
@@ -300,7 +428,8 @@ inline std::string toSVGExcalidraw(const Graph& g)
             return;
         std::string stroke = el.str("strokeColor", "#1e1e1e");
         double      sw     = std::max(0.5, el.num("strokeWidth", 2));
-        double      op     = std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+        double      op =
+            std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
         os << "  <polyline fill=\"none\" stroke=\"" << xmlEscape(stroke)
            << "\" stroke-width=\"" << sw << "\" opacity=\"" << op
            << "\" stroke-linecap=\"round\" stroke-linejoin=\"round\" points=\"";
@@ -323,8 +452,9 @@ inline std::string toSVGExcalidraw(const Graph& g)
             std::string stroke = el.str("strokeColor", "#1e1e1e");
             std::string fill   = svgFill(el);
             double      sw     = std::max(0.5, el.num("strokeWidth", 2));
-            double      op     = std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
-            double      rx     = 0;
+            double      op =
+                std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+            double rx = 0;
             if (const Json* rnd = el.find("roundness"))
                 if (rnd->isObj() && rnd->num("type") >= 2)
                     rx = 8;
@@ -341,7 +471,8 @@ inline std::string toSVGExcalidraw(const Graph& g)
             os << "  <ellipse cx=\"" << cx << "\" cy=\"" << cy << "\" rx=\""
                << el.num("width") / 2 << "\" ry=\"" << el.num("height") / 2
                << "\" fill=\"" << svgFill(el) << "\" stroke=\""
-               << xmlEscape(el.str("strokeColor", "#1e1e1e")) << "\" stroke-width=\""
+               << xmlEscape(el.str("strokeColor", "#1e1e1e"))
+               << "\" stroke-width=\""
                << std::max(0.5, el.num("strokeWidth", 2)) << "\""
                << svgDashAttr(el.str("strokeStyle", "solid")) << "/>\n";
         }
@@ -352,19 +483,25 @@ inline std::string toSVGExcalidraw(const Graph& g)
             os << "  <polygon points=\"" << cx << "," << y << " " << x + ew
                << "," << cy << " " << cx << "," << y + eh << " " << x << ","
                << cy << "\" fill=\"" << svgFill(el) << "\" stroke=\""
-               << xmlEscape(el.str("strokeColor", "#1e1e1e")) << "\" stroke-width=\""
+               << xmlEscape(el.str("strokeColor", "#1e1e1e"))
+               << "\" stroke-width=\""
                << std::max(0.5, el.num("strokeWidth", 2)) << "\""
                << svgDashAttr(el.str("strokeStyle", "solid")) << "/>\n";
         }
         else if (ty == "arrow" || ty == "line") {
-            auto pts = elementAbsolutePoints(el);
-            bool endArr =
-                ty == "arrow" && !el.str("endArrowhead").empty() &&
-                el.str("endArrowhead") != "null";
-            bool startArr =
-                ty == "arrow" && !el.str("startArrowhead").empty() &&
-                el.str("startArrowhead") != "null";
+            auto pts      = elementAbsolutePoints(el);
+            bool endArr   = ty == "arrow" && !el.str("endArrowhead").empty() &&
+                            el.str("endArrowhead") != "null";
+            bool startArr = ty == "arrow" &&
+                            !el.str("startArrowhead").empty() &&
+                            el.str("startArrowhead") != "null";
+            std::string aid    = el.str("id");
+            bool        masked = ty == "arrow" && arrowLabels.count(aid);
+            if (masked)
+                os << "  <g mask=\"url(#mask-" << xmlEscape(aid) << ")\">\n";
             emitPolyline(pts, el, endArr, startArr);
+            if (masked)
+                os << "  </g>\n";
         }
         else if (ty == "freedraw") {
             FreedrawStroke s;
@@ -372,13 +509,15 @@ inline std::string toSVGExcalidraw(const Graph& g)
             s.strokeColor = el.str("strokeColor", "#1e1e1e");
             s.strokeStyle = el.str("strokeStyle", "solid");
             s.strokeWidth = el.num("strokeWidth", 2);
-            s.opacity     = std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
-            s.points      = elementAbsolutePoints(el);
+            s.opacity =
+                std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+            s.points = elementAbsolutePoints(el);
             if (s.points.size() >= 2) {
                 os << "  <polyline fill=\"none\" stroke=\""
                    << xmlEscape(s.strokeColor) << "\" stroke-width=\""
                    << std::max(0.5, s.strokeWidth)
-                   << "\" stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\""
+                   << "\" stroke-linecap=\"round\" stroke-linejoin=\"round\" "
+                      "opacity=\""
                    << s.opacity << "\" points=\"";
                 for (size_t i = 0; i < s.points.size(); i++) {
                     if (i)
@@ -396,11 +535,13 @@ inline std::string toSVGExcalidraw(const Graph& g)
         std::string txt = el.str("text");
         if (txt.empty())
             continue;
-        double      fs    = el.num("fontSize", 16);
-        double      x     = el.num("x");
-        double      y     = el.num("y") + fs * 0.85;
-        std::string align = svgTextAnchor(el.str("textAlign", "left"));
-        double      op    = std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
+        auto        origin = excalidrawTextBBoxOrigin(el, arrows);
+        double      fs     = el.num("fontSize", 16);
+        double      x      = excalidrawTextSvgXAt(origin.first, el);
+        double      y      = excalidrawTextSvgYAt(origin.second, el);
+        std::string align  = svgTextAnchor(el.str("textAlign", "left"));
+        double      op =
+            std::max(0.0, std::min(1.0, el.num("opacity", 100) / 100.0));
         os << "  <text class=\"ex-text\" x=\"" << x << "\" y=\"" << y
            << "\" font-size=\"" << fs << "\" text-anchor=\"" << align
            << "\" opacity=\"" << op << "\">" << xmlEscape(txt) << "</text>\n";
@@ -430,47 +571,115 @@ inline std::string toExcalidrawRoughHtml(const Graph& g)
           "svg{display:block}</style>"
           "<script src=\"https://unpkg.com/roughjs@4.6.6/bundled/rough.js\">"
           "</script></head><body>"
-          "<svg id=\"scene\" xmlns=\"http://www.w3.org/2000/svg\" width=\"" << w
-       << "\" height=\"" << h << "\" viewBox=\"" << (minX - pad) << " "
-       << (minY - pad) << " " << w << " " << h << "\"></svg>"
+          "<svg id=\"scene\" xmlns=\"http://www.w3.org/2000/svg\" width=\""
+       << w << "\" height=\"" << h << "\" viewBox=\"" << (minX - pad) << " "
+       << (minY - pad) << " " << w << " " << h
+       << "\"></svg>"
           "<script id=\"excalidraw-data\" type=\"application/json\">"
-       << arr.dump() << "</script><script>\n"
-          "const elements=JSON.parse(document.getElementById('excalidraw-data').textContent);\n"
+       << arr.dump()
+       << "</script><script>\n"
+          "const "
+          "elements=JSON.parse(document.getElementById('excalidraw-data')."
+          "textContent);\n"
           "const svg=document.getElementById('scene');\n"
           "const rc=rough.svg(svg);\n"
-          "function absPts(el){return (el.points||[[0,0]]).map(p=>[el.x+p[0],el.y+p[1]]);}\n"
-          "function dash(st){if(st==='dashed')return[6,4];if(st==='dotted')return[1,4];return undefined;}\n"
-          "function baseOpts(el){return{roughness:el.roughness??1,seed:el.seed??1,"
+          "function absPts(el){return "
+          "(el.points||[[0,0]]).map(p=>[el.x+p[0],el.y+p[1]]);}\n"
+          "function arrowBoundOrigin(arrow,text){const pts=absPts(arrow);"
+          "if(pts.length<2)return[text.x,text.y];let mx,my;"
+          "if(pts.length%2===1){const "
+          "p=pts[Math.floor(pts.length/2)];mx=p[0];my=p[1];}"
+          "else{const "
+          "a=pts[pts.length/2-1],b=pts[pts.length/2];mx=(a[0]+b[0])/"
+          "2;my=(a[1]+b[1])/2;}"
+          "return[mx-(text.width||0)/2,my-(text.height||0)/2];}\n"
+          "const arrowById=new Map();for(const el of "
+          "elements)if(el.type==='arrow')arrowById.set(el.id,el);\n"
+          "const boundTextByArrow=new Map();for(const el of elements)"
+          "if(el.type==='text'&&el.containerId&&el.text)boundTextByArrow.set("
+          "el.containerId,el);\n"
+          "const vb=svg.viewBox.baseVal;const "
+          "defs=document.createElementNS('http://www.w3.org/2000/"
+          "svg','defs');\n"
+          "const labelPad=4;for(const [aid,text] of boundTextByArrow){const "
+          "arrow=arrowById.get(aid);if(!arrow)continue;"
+          "const [bx,by]=arrowBoundOrigin(arrow,text);const "
+          "m=document.createElementNS('http://www.w3.org/2000/svg','mask');"
+          "m.setAttribute('id','mask-'+aid);m.setAttribute('maskUnits','"
+          "userSpaceOnUse');"
+          "const "
+          "bg=document.createElementNS('http://www.w3.org/2000/svg','rect');"
+          "bg.setAttribute('x',vb.x);bg.setAttribute('y',vb.y);bg.setAttribute("
+          "'width',vb.width);bg.setAttribute('height',vb.height);"
+          "bg.setAttribute('fill','#fff');m.appendChild(bg);"
+          "const "
+          "hole=document.createElementNS('http://www.w3.org/2000/svg','rect');"
+          "hole.setAttribute('x',bx-labelPad);hole.setAttribute('y',by-"
+          "labelPad);"
+          "hole.setAttribute('width',(text.width||0)+labelPad*2);hole."
+          "setAttribute('height',(text.height||0)+labelPad*2);"
+          "hole.setAttribute('fill','#000');m.appendChild(hole);defs."
+          "appendChild(m);}\n"
+          "svg.insertBefore(defs,svg.firstChild);\n"
+          "function "
+          "dash(st){if(st==='dashed')return[6,4];if(st==='dotted')return[1,4];"
+          "return undefined;}\n"
+          "function "
+          "baseOpts(el){return{roughness:el.roughness??1,seed:el.seed??1,"
           "stroke:el.strokeColor||'#1e1e1e',strokeWidth:el.strokeWidth||2,"
-          "strokeLineDash:dash(el.strokeStyle),fill:(!el.backgroundColor||el.backgroundColor==='transparent')?undefined:el.backgroundColor};}\n"
+          "strokeLineDash:dash(el.strokeStyle),fill:(!el.backgroundColor||el."
+          "backgroundColor==='transparent')?undefined:el.backgroundColor};}\n"
           "for(const el of elements){\n"
           "  const o=baseOpts(el);\n"
-          "  if(el.type==='rectangle'){svg.appendChild(rc.rectangle(el.x,el.y,el.width,el.height,o));}\n"
-          "  else if(el.type==='ellipse'){svg.appendChild(rc.ellipse(el.x,el.y,el.width,el.height,o));}\n"
-          "  else if(el.type==='diamond'){const cx=el.x+el.width/2,cy=el.y+el.height/2;"
-          "svg.appendChild(rc.polygon([[cx,el.y],[el.x+el.width,cy],[cx,el.y+el.height],[el.x,cy]],o));}\n"
+          "  "
+          "if(el.type==='rectangle'){svg.appendChild(rc.rectangle(el.x,el.y,el."
+          "width,el.height,o));}\n"
+          "  else "
+          "if(el.type==='ellipse'){svg.appendChild(rc.ellipse(el.x,el.y,el."
+          "width,el.height,o));}\n"
+          "  else if(el.type==='diamond'){const "
+          "cx=el.x+el.width/2,cy=el.y+el.height/2;"
+          "svg.appendChild(rc.polygon([[cx,el.y],[el.x+el.width,cy],[cx,el.y+"
+          "el.height],[el.x,cy]],o));}\n"
           "  else if(el.type==='arrow'||el.type==='line'){const pts=absPts(el);"
           "if(pts.length>=2){const lo=Object.assign({},o,{fill:undefined});"
-          "if(el.endArrowhead)lo.arrowEnd='triangle';if(el.startArrowhead)lo.arrowStart='triangle';"
-          "svg.appendChild(rc.linearPath(pts,lo));}}\n"
+          "if(el.endArrowhead)lo.arrowEnd='triangle';if(el.startArrowhead)lo."
+          "arrowStart='triangle';"
+          "const path=rc.linearPath(pts,lo);let node=path;"
+          "if(el.type==='arrow'&&boundTextByArrow.has(el.id)){const "
+          "g=document.createElementNS('http://www.w3.org/2000/svg','g');"
+          "g.setAttribute('mask','url(#mask-'+el.id+')');g.appendChild(path);"
+          "node=g;}"
+          "svg.appendChild(node);}}\n"
           "  else if(el.type==='freedraw'){const pts=absPts(el);"
-          "if(pts.length>=2)svg.appendChild(rc.linearPath(pts,Object.assign({},o,{fill:undefined})));}\n"
+          "if(pts.length>=2)svg.appendChild(rc.linearPath(pts,Object.assign({},"
+          "o,{fill:undefined})));}\n"
           "}\n"
           "for(const el of elements){\n"
           "  if(el.type!=='text'||!el.text)continue;\n"
-          "  const t=document.createElementNS('http://www.w3.org/2000/svg','text');\n"
-          "  t.setAttribute('x',el.x);t.setAttribute('y',el.y+(el.fontSize||16)*0.85);\n"
+          "  const "
+          "t=document.createElementNS('http://www.w3.org/2000/svg','text');\n"
+          "  const tw=el.width||0;const ta=el.textAlign||'left';\n"
+          "  let "
+          "bx=el.x,by=el.y;if(el.containerId&&arrowById.has(el.containerId))"
+          "[bx,by]=arrowBoundOrigin(arrowById.get(el.containerId),el);\n"
+          "  let tx=bx;if(ta==='center')tx=bx+tw/2;else "
+          "if(ta==='right')tx=bx+tw;\n"
+          "  const "
+          "fs=el.fontSize||16,lh=el.lineHeight||1.25,lhp=fs*lh,em=fs/1000;\n"
+          "  const vy=em*886+(lhp-em*886+em*(-374))/2;\n"
+          "  t.setAttribute('x',tx);t.setAttribute('y',by+vy);\n"
           "  t.setAttribute('font-size',el.fontSize||16);\n"
           "  t.setAttribute('fill',el.strokeColor||'#1e1e1e');\n"
           "  t.setAttribute('font-family','Segoe UI,Arial,sans-serif');\n"
-          "  const ta=el.textAlign||'left';\n"
-          "  t.setAttribute('text-anchor',ta==='center'?'middle':(ta==='right'?'end':'start'));\n"
+          "  "
+          "t.setAttribute('text-anchor',ta==='center'?'middle':(ta==='right'?'"
+          "end':'start'));\n"
           "  t.textContent=el.text;svg.appendChild(t);\n"
           "}\n"
           "</script></body></html>\n";
     return os.str();
 }
-
 
 // sanitizeMermaidId: Mermaid 标识符清洗，规避非法字符导致的渲染失败
 inline std::string sanitizeMermaidId(const std::string& id)
@@ -630,7 +839,7 @@ inline std::string toDrawio(Graph g)
 {
     gl::layout(g);
     std::vector<FreedrawStroke> strokes = collectFreedrawStrokes(g);
-    std::ostringstream os;
+    std::ostringstream          os;
     os << "<mxfile host=\"graphmcp\" agent=\"graphmcp/1.0\" type=\"device\">\n";
     os << "  <diagram name=\"" << xmlEscape(g.name.empty() ? "Page-1" : g.name)
        << "\" id=\"" << xmlEscape(g.id.empty() ? "d1" : g.id) << "\">\n";
@@ -696,7 +905,8 @@ inline std::string toDrawio(Graph g)
         std::string style =
             "endArrow=none;startArrow=none;html=1;rounded=0;curved=0;";
         style += "strokeColor=" + s.strokeColor + ";";
-        style += "strokeWidth=" + std::to_string(std::max(0.5, s.strokeWidth)) + ";";
+        style +=
+            "strokeWidth=" + std::to_string(std::max(0.5, s.strokeWidth)) + ";";
         if (s.strokeStyle == "dashed")
             style += "dashed=1;";
         else if (s.strokeStyle == "dotted")
@@ -705,12 +915,13 @@ inline std::string toDrawio(Graph g)
             const auto& p0 = s.points[i - 1];
             const auto& p1 = s.points[i];
             os << "        <mxCell id=\"freedraw" << (++fi)
-               << "\" value=\"\" style=\"" << style << "\" edge=\"1\" parent=\"1\">\n";
+               << "\" value=\"\" style=\"" << style
+               << "\" edge=\"1\" parent=\"1\">\n";
             os << "          <mxGeometry relative=\"1\" as=\"geometry\">\n";
-            os << "            <mxPoint x=\"" << p0.first << "\" y=\"" << p0.second
-               << "\" as=\"sourcePoint\"/>\n";
-            os << "            <mxPoint x=\"" << p1.first << "\" y=\"" << p1.second
-               << "\" as=\"targetPoint\"/>\n";
+            os << "            <mxPoint x=\"" << p0.first << "\" y=\""
+               << p0.second << "\" as=\"sourcePoint\"/>\n";
+            os << "            <mxPoint x=\"" << p1.first << "\" y=\""
+               << p1.second << "\" as=\"targetPoint\"/>\n";
             os << "          </mxGeometry>\n";
             os << "        </mxCell>\n";
         }
@@ -876,7 +1087,7 @@ inline std::string toSVG(Graph g)
 
     gl::layout(g);
     std::vector<FreedrawStroke> strokes = collectFreedrawStrokes(g);
-    double maxX = 200, maxY = 150;
+    double                      maxX = 200, maxY = 150;
     for (auto& n : g.nodes) {
         maxX = std::max(maxX, n.x + n.w);
         maxY = std::max(maxY, n.y + n.h);
@@ -1285,12 +1496,11 @@ inline std::string rasterizeViaBrowser(const std::string& htmlPathIn,
     const char* tmp = getenv("TEMP");
     if (!tmp)
         tmp = getenv("TMP");
-    std::string profile =
-        (tmp ? std::string(tmp) + "/graphmcp-chrome-profile" :
-               outPath + ".chromeprofile");
-    std::string args = "--headless=new --disable-gpu --no-sandbox "
-                       "--user-data-dir=\"" +
-                       profile + "\" ";
+    std::string profile = (tmp ? std::string(tmp) + "/graphmcp-chrome-profile" :
+                                 outPath + ".chromeprofile");
+    std::string args    = "--headless=new --disable-gpu --no-sandbox "
+                          "--user-data-dir=\"" +
+                          profile + "\" ";
     if (fmt == "pdf")
         args += "--no-pdf-header-footer --print-to-pdf=\"" + outPath + "\" \"" +
                 url + "\"";
@@ -1358,7 +1568,8 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
             std::string html     = toExcalidrawRoughHtml(g);
             std::string htmlPath = base + ".tmp.html";
             if (writeFile(htmlPath, html)) {
-                std::string tool = rasterizeViaBrowser(htmlPath, base, to, w, h);
+                std::string tool =
+                    rasterizeViaBrowser(htmlPath, base, to, w, h);
                 std::remove(htmlPath.c_str());
                 if (!tool.empty()) {
                     r.ok      = true;

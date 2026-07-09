@@ -133,6 +133,32 @@ std::string getGraphId(const Args& a)
     return "";
 }
 
+// resolveVersionNested: 解析 version draft/stage 的 action 与 graph id
+// 支持 version draft show my-graph（positionals=[show,my-graph]）
+static bool resolveVersionNested(const Args&                 a,
+                                 const std::string&          defaultAction,
+                                 std::string&                outId,
+                                 std::string&                outAction)
+{
+    auto isKnownAction = [](const std::string& s) {
+        return s == "show" || s == "reset" || s == "add" || s == "clear";
+    };
+    outId     = a.has("id") ? a.get("id") : "";
+    outAction = defaultAction;
+    if (!a.positionals.empty()) {
+        const std::string& p0 = a.positionals[0];
+        if (isKnownAction(p0)) {
+            outAction = p0;
+            if (outId.empty() && a.positionals.size() > 1)
+                outId = a.positionals[1];
+        }
+        else if (outId.empty()) {
+            outId = p0;
+        }
+    }
+    return !outId.empty();
+}
+
 // printIssues: 打印校验问题列表
 void printIssues(const std::vector<gl::Issue>& issues)
 {
@@ -775,12 +801,11 @@ int cmdVersion(Args& a, gs::Store& store)
     }
 
     if (a.subcommand == "draft") {
-        if (id.empty()) {
+        std::string id, action;
+        if (!resolveVersionNested(a, "show", id, action)) {
             usage("missing graph id");
             return 1;
         }
-        std::string action =
-            a.positionals.size() > 1 ? a.positionals[1] : "show";
         if (action == "reset") {
             bool ok = vm.resetDraft(id);
             std::cout << (ok ? "draft discarded\n" : "no draft to discard\n");
@@ -807,12 +832,11 @@ int cmdVersion(Args& a, gs::Store& store)
     }
 
     if (a.subcommand == "stage") {
-        if (id.empty()) {
+        std::string id, action;
+        if (!resolveVersionNested(a, "add", id, action)) {
             usage("missing graph id");
             return 1;
         }
-        std::string action =
-            a.positionals.size() > 1 ? a.positionals[1] : "add";
         if (action == "show") {
             auto stage = vm.loadStage(id);
             if (stage.isEmpty()) {
@@ -1095,6 +1119,13 @@ int cmdGraph(Args& a, gs::Store& store)
                       << "  arrow: " << e->arrow << "\n";
         }
         else {
+            if (g.id.empty()) {
+                std::string err;
+                if (!store.load(id, g, 0, &err)) {
+                    std::cerr << "error: " << err << "\n";
+                    return 5;
+                }
+            }
             std::cout << "══ " << g.name << " ══\n"
                       << "id: " << g.id << "   type: " << g.type
                       << "   version: " << vm.status(id).headVersion << "\n"
@@ -1424,7 +1455,8 @@ int main(int argc, char** argv)
 #endif
     Args a = parseArgs(argc, argv);
 
-    if (a.family.empty() || a.has("help"))
+    if (a.family.empty() || a.family == "--help" || a.family == "-h" ||
+        a.has("help"))
         return usage("", 0);
 
     gs::Store store(getStoreDir(a));

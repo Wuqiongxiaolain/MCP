@@ -37,15 +37,24 @@ inline std::vector<Issue> validate(const Graph& g)
         if (n.label.empty() && n.shape != "group")
             warn("node '" + n.id + "' has empty label");
     }
+    // 白板边可绑定未提升为节点的 Excalidraw 元素 id
+    std::set<std::string> endpointIds = ids;
+    if (g.type == "whiteboard") {
+        for (auto& el : g.elements) {
+            std::string eid = el.str("id");
+            if (!eid.empty())
+                endpointIds.insert(eid);
+        }
+    }
     for (auto& n : g.nodes) {
         if (!n.parent.empty() && !ids.count(n.parent))
             err("node '" + n.id + "' references missing parent '" + n.parent +
                 "'");
     }
     for (auto& e : g.edges) {
-        if (!ids.count(e.from))
+        if (!endpointIds.count(e.from))
             err("edge '" + e.id + "' references missing node '" + e.from + "'");
-        if (!ids.count(e.to))
+        if (!endpointIds.count(e.to))
             err("edge '" + e.id + "' references missing node '" + e.to + "'");
         if (e.from == e.to)
             warn("edge '" + e.id + "' is a self-loop on '" + e.from + "'");

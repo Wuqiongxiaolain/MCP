@@ -93,3 +93,15 @@ graph-store/
   由于 Windows 大多预装 Edge，实际几乎总能直接出图，无需额外安装。
   注意：无头 Chromium 会用独立 `--user-data-dir`，避免和用户正在运行的
   浏览器实例冲突（否则新命令会附加到已有实例并跳过转换任务）。
+
+## 测试入口
+
+| 命令 | 说明 |
+|------|------|
+| `make test` | 核心库 + MCP 协议单元测试（`tests/test_main.cpp`） |
+| `make test-all` | 上述 + 版本管理（`test_version.cpp`）+ 游标（`test_cursor.cpp`） |
+| `make smoke` | 新版 12 命令族 CLI 全量冒烟（`tests/smoke_test.sh`），生成根目录 `SMOKE_REPORT.md` |
+| `make export-testout` | 样例全格式导出矩阵（`scripts/export-example-testout.sh`），输出 `examples/example_testout/TEST_REPORT.md` |
+| `scripts/export-example-testout.ps1` | Windows 版导出矩阵（同上） |
+
+CI（`.github/workflows/ci.yml`）默认执行 `make test-all` 与 `make smoke`；fixture 几何比对已并入 `smoke_test.sh` 的 `[fixture-regression]` 段。

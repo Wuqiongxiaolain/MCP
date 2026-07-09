@@ -135,10 +135,10 @@ std::string getGraphId(const Args& a)
 
 // resolveVersionNested: 解析 version draft/stage 的 action 与 graph id
 // 支持 version draft show my-graph（positionals=[show,my-graph]）
-static bool resolveVersionNested(const Args&                 a,
-                                 const std::string&          defaultAction,
-                                 std::string&                outId,
-                                 std::string&                outAction)
+static bool resolveVersionNested(const Args&        a,
+                                 const std::string& defaultAction,
+                                 std::string&       outId,
+                                 std::string&       outAction)
 {
     auto isKnownAction = [](const std::string& s) {
         return s == "show" || s == "reset" || s == "add" || s == "clear";
@@ -801,18 +801,18 @@ int cmdVersion(Args& a, gs::Store& store)
     }
 
     if (a.subcommand == "draft") {
-        std::string id, action;
-        if (!resolveVersionNested(a, "show", id, action)) {
+        std::string graphId, action;
+        if (!resolveVersionNested(a, "show", graphId, action)) {
             usage("missing graph id");
             return 1;
         }
         if (action == "reset") {
-            bool ok = vm.resetDraft(id);
+            bool ok = vm.resetDraft(graphId);
             std::cout << (ok ? "draft discarded\n" : "no draft to discard\n");
             return 0;
         }
         // show
-        auto draft = vm.loadDraft(id);
+        auto draft = vm.loadDraft(graphId);
         if (draft.isEmpty()) {
             std::cout << "Draft is empty (based on v" << draft.baseVersion
                       << ")\n";
@@ -832,13 +832,13 @@ int cmdVersion(Args& a, gs::Store& store)
     }
 
     if (a.subcommand == "stage") {
-        std::string id, action;
-        if (!resolveVersionNested(a, "add", id, action)) {
+        std::string graphId, action;
+        if (!resolveVersionNested(a, "add", graphId, action)) {
             usage("missing graph id");
             return 1;
         }
         if (action == "show") {
-            auto stage = vm.loadStage(id);
+            auto stage = vm.loadStage(graphId);
             if (stage.isEmpty()) {
                 std::cout << "Stage is empty\n";
                 return 0;
@@ -852,7 +852,7 @@ int cmdVersion(Args& a, gs::Store& store)
             return 0;
         }
         if (action == "clear") {
-            vm.clearStage(id);
+            vm.clearStage(graphId);
             std::cout << "stage cleared\n";
             return 0;
         }
@@ -874,15 +874,15 @@ int cmdVersion(Args& a, gs::Store& store)
             }
             if (!cur.empty())
                 indices.push_back(atoi(cur.c_str()));
-            vm.stageSelected(id, indices);
+            vm.stageSelected(graphId, indices);
             std::cout << "staged " << indices.size() << " operation(s) for "
-                      << id << "\n";
+                      << graphId << "\n";
         }
         else {
-            vm.stageAll(id);
-            auto draft = vm.loadDraft(id);
+            vm.stageAll(graphId);
+            auto draft = vm.loadDraft(graphId);
             std::cout << "staged " << draft.operationCount()
-                      << " operation(s) for " << id << "\n";
+                      << " operation(s) for " << graphId << "\n";
         }
         return 0;
     }

@@ -25,7 +25,7 @@ PASSED=0
 FAILED=0
 
 cleanup() {
-    rm -rf "$STORE" smoke-*.svg smoke-*.drawio smoke-*.mmd smoke-*.json smoke-*.png smoke-*.pdf smoke-*.excalidraw smoke-fix-* smoke-broken.mmd 2>/dev/null || true
+    rm -rf "$STORE" smoke-*.svg smoke-*.drawio smoke-*.mmd smoke-*.json smoke-*.png smoke-*.pdf smoke-*.excalidraw smoke-fix-* smoke-broken.xml 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -45,13 +45,25 @@ run_stdout_contains() {
     local label="$1" pattern="$2"; shift 2
     local out
     if out=$("$BIN" "$@" 2>&1); then
-        if echo "$out" | grep -q "$pattern"; then
+        if echo "$out" | grep -Fq "$pattern"; then
             pass "$label"
         else
             fail "$label" "output missing '$pattern': $out"
         fi
     else
-        fail "$label" "command failed: $BIN $*"
+        fail "$label" "command failed: $BIN $* | $out"
+    fi
+}
+
+# run_output_contains: 无论退出码，断言输出含固定字符串（用于 validate 等非零成功场景）
+run_output_contains() {
+    local label="$1" pattern="$2"; shift 2
+    local out
+    out=$("$BIN" "$@" 2>&1) || true
+    if echo "$out" | grep -Fq "$pattern"; then
+        pass "$label"
+    else
+        fail "$label" "output missing '$pattern': $out"
     fi
 }
 
@@ -94,7 +106,7 @@ run_stdout_contains "from-markdown file"  "created graph" create from-markdown -
 run_stdout_contains "from-csv file"       "created graph" create from-csv --file examples/example_input/orgchart.csv --name smoke-org --id smoke-3
 run_stdout_contains "from-xml file"       "created graph" create from-xml --file examples/example_input/architecture.xml --name smoke-arch --id smoke-4
 run_stdout_contains "from-excalidraw file" "created graph" create from-excalidraw --file examples/example_input/whiteboard_freedraw.excalidraw --name smoke-wb --id smoke-5
-run_stdout_contains "from-mermaid content" "created graph" create from-mermaid --content "flowchart TD\nA[Test]-->B[Done]" --name smoke-inline --id smoke-6
+run_stdout_contains "from-mermaid content" "created graph" create from-mermaid --content $'flowchart TD\nA[Test]-->B[Done]' --name smoke-inline --id smoke-6
 run_stdout_contains "from-input auto-detect" "created graph" create from-input --file examples/example_input/flowchart.mmd --id smoke-7
 
 # ─── store ────────────────────────────────────────────────────
@@ -137,7 +149,7 @@ run_stdout_contains "update selector"   "updated"      graph update --selector "
 
 # ─── graph insert ─────────────────────────────────────────────
 echo "[graph insert]"
-run_stdout_contains "insert node" "inserted node" graph insert --node --type rect --label "Extra Step" --position 400 200 smoke-1
+run_stdout_contains "insert node" "inserted node" graph insert --node --type rect --label "Extra Step" --position "400 200" smoke-1
 run_stdout_contains "insert edge" "inserted edge" graph insert --edge --from A --to B smoke-1
 
 # ─── graph delete ─────────────────────────────────────────────
@@ -179,7 +191,7 @@ run_stdout_contains "log --format oneline" "v" version log smoke-1 --format onel
 # ─── version show ─────────────────────────────────────────────
 echo "[version show]"
 run_stdout_contains "show latest" "nodes" version show smoke-1
-run_stdout_contains "show --version 1" "smoke test commit" version show smoke-1 --version 1
+run_stdout_contains "show --version 2" "smoke test commit" version show smoke-1 --version 2
 
 # ─── version diff ─────────────────────────────────────────────
 echo "[version diff]"
@@ -237,9 +249,9 @@ run_stdout_contains "validate graph" "valid: no issues found" validate graph --i
 run_stdout_contains "validate input" "valid: no issues found" validate input --file examples/example_input/er.mmd --input-format mermaid
 run_stdout_contains "validate strict" "valid: no issues found" validate input --file examples/example_input/flowchart.mmd --strict
 
-# Create a broken input to test validation failure
-printf 'flowchart TD\nA-->B\nC-->missing\n' > smoke-broken.mmd
-run_stdout_contains "validate broken" "missing" validate input --file smoke-broken.mmd
+# 悬空边触发结构校验错误（Mermaid 会自动补全未声明节点）
+printf '<graph type="flowchart"><node id="a" label="A"/><edge from="a" to="missing"/></graph>' > smoke-broken.xml
+run_output_contains "validate broken" "error" validate input --file smoke-broken.xml --input-format xml
 
 # ─── store delete ─────────────────────────────────────────────
 echo "[store delete]"
@@ -250,6 +262,8 @@ echo "[edge-cases]"
 run_fails "invalid graph id"    graph show nonexistent-graph
 run_fails "invalid node ref"    graph update --node FAKE --set label=X smoke-1
 run_fails "commit empty stage"  version commit smoke-1 -m "should fail"
+# 制造未提交 draft 后 checkout 应失败
+"$BIN" graph update --node A --set label="dirty checkout test" smoke-1 > /dev/null 2>&1
 run_fails "checkout dirty"      version checkout smoke-1 1
 run_stdout_contains "help flag" "usage" --help
 

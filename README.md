@@ -13,6 +13,7 @@
 | 文档 | 说明 |
 |------|------|
 | [架构说明](docs/ARCHITECTURE.md) | 总体设计、统一图模型、各模块职责、MCP 工具清单、存储布局与错误处理 |
+| [CLI & MCP 指令参考](docs/CLI_MCP_REFERENCE.md) | 完整 CLI 命令族与 MCP 工具接口文档，含示例 |
 | [项目思维导图](docs/MINDMAP.md) | 能力总览、输入/输出格式、质量保障与 DevOps 全景 |
 | [更新日志](docs/WORKLOG.md) | 自项目创建以来的功能新增、变更与修复记录 |
 

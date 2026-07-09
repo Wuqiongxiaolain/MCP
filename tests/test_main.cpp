@@ -641,6 +641,9 @@ static std::string mcpText(const Json& resp)
     return "";
 }
 
+// TODO: graph_open 当前会触发真实外部打开行为，待能力完善后再恢复到 CI。
+static constexpr bool ENABLE_GRAPH_OPEN_TEST = false;
+
 static void testMcpToolsRemaining()
 {
     gs::Store   store("test-store-tmp");
@@ -733,14 +736,16 @@ static void testMcpToolsRemaining()
     CHECK(de.str("status") == "deleted");
     CHECK(de.str("elementType") == "node");
 
-    Json open = Json::parse(
-        R"({"jsonrpc":"2.0","id":24,"method":"tools/call","params":{
+    if (ENABLE_GRAPH_OPEN_TEST) {
+        Json open = Json::parse(
+            R"({"jsonrpc":"2.0","id":24,"method":"tools/call","params":{
             "name":"graph_open","arguments":{"id":")" +
             gid + R"(","editor":"svg"}}})",
-        &err);
-    CHECK(mcp::handleMessage(open, store, resp));
-    Json oj = Json::parse(mcpText(resp), &err);
-    CHECK(!oj.str("target").empty());
+            &err);
+        CHECK(mcp::handleMessage(open, store, resp));
+        Json oj = Json::parse(mcpText(resp), &err);
+        CHECK(!oj.str("target").empty());
+    }
 
     Json copen = Json::parse(
         R"({"jsonrpc":"2.0","id":25,"method":"tools/call","params":{

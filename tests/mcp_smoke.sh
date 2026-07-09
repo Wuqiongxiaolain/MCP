@@ -29,6 +29,7 @@ LOG_FILE="mcp-smoke.log"
 STORE="mcp-smoke-store-$$"
 TMP_REQ=".mcp-smoke.req.json"
 TMP_RESP=".mcp-smoke.resp.json"
+SERVER_PID=""
 export GRAPHMCP_STORE="$STORE"
 
 PASSED=0
@@ -38,6 +39,10 @@ GID=""
 CURSOR_ID=""
 
 cleanup() {
+    if [ -n "${SERVER_PID:-}" ]; then
+        kill "$SERVER_PID" 2>/dev/null || true
+        wait "$SERVER_PID" 2>/dev/null || true
+    fi
     rm -rf "$STORE" "$TMP_REQ" "$TMP_RESP" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -58,15 +63,31 @@ fail() {
     echo "    $2"
 }
 
+start_server() {
+    coproc MCP_SERVER { "$BIN" serve 2>> "$LOG_FILE"; }
+    SERVER_PID=$COPROC_PID
+}
+
 rpc_call() {
     local req="$1"
+    local expect_response="${2:-1}"
     printf '%s\n' "$req" > "$TMP_REQ"
     {
         echo ">>> $req"
-        "$BIN" serve < "$TMP_REQ" > "$TMP_RESP" 2>> "$LOG_FILE"
-        cat "$TMP_RESP"
-        echo
     } >> "$LOG_FILE"
+    printf '%s\n' "$req" >&"${MCP_SERVER[1]}"
+    : > "$TMP_RESP"
+    if [ "$expect_response" = "1" ]; then
+        if IFS= read -r response_line <&"${MCP_SERVER[0]}"; then
+            printf '%s\n' "$response_line" > "$TMP_RESP"
+            {
+                printf '%s\n' "$response_line"
+                echo
+            } >> "$LOG_FILE"
+        fi
+    else
+        echo >> "$LOG_FILE"
+    fi
 }
 
 extract_text() {
@@ -87,11 +108,13 @@ echo "graphmcp MCP Smoke Test Suite"
 echo "binary: $BIN"
 echo "=========================================="
 
+start_server
+
 rpc_call '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
 PROTO="$(jq -r '.result.protocolVersion // empty' "$TMP_RESP")"
 check_eq "initialize" "$PROTO" "2024-11-05" "protocolVersion=$PROTO"
 
-rpc_call '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+rpc_call '{"jsonrpc":"2.0","method":"notifications/initialized"}' 0
 if [ ! -s "$TMP_RESP" ]; then
     pass "notifications/initialized" "no response"
 else
@@ -228,6 +251,12 @@ with open(report_json, "w", encoding="utf-8", newline="\n") as f:
     json.dump(data, f, ensure_ascii=False, indent=2)
     f.write("\n")
 PY
+
+if [ -n "${SERVER_PID:-}" ]; then
+    kill "$SERVER_PID" 2>/dev/null || true
+    wait "$SERVER_PID" 2>/dev/null || true
+    SERVER_PID=""
+fi
 
 echo "=========================================="
 printf "Results: \033[32m%d passed\033[0m, " "$PASSED"

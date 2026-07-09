@@ -117,6 +117,7 @@ SMOKE_FAIL=$((3 - S1 - S2 - S3))
 
 REPORT="$OUT_ROOT/TEST_REPORT.md"
 REPORT_JSON="$OUT_ROOT/TEST_REPORT.json"
+MCP_NOTE="not run in export-example-testout.sh; use tests/mcp_smoke.sh"
 {
     echo "# example_testout export report"
     echo ""
@@ -139,6 +140,12 @@ REPORT_JSON="$OUT_ROOT/TEST_REPORT.json"
     if [ "$S1" -eq 1 ]; then echo "- create flowchart.mmd: PASS"; else echo "- create flowchart.mmd: FAIL"; fi
     if [ "$S2" -eq 1 ]; then echo "- create orgchart.csv (same id): PASS"; else echo "- create orgchart.csv (same id): FAIL"; fi
     if [ "$S3" -eq 1 ]; then echo "- export to svg: PASS ($SMOKE_SVG)"; else echo "- export to svg: FAIL ($SMOKE_SVG)"; fi
+    echo ""
+    echo "## MCP protocol smoke"
+    echo ""
+    echo "| step | tool/method | status | note |"
+    echo "|------|-------------|--------|------|"
+    echo "| - | mcp_smoke.sh | SKIP | $MCP_NOTE |"
     echo ""
     echo "## summary"
     echo ""
@@ -163,7 +170,15 @@ data = {
         "failed": int(failed),
         "skipped": int(skipped),
         "smoke_failures": int(smoke_fail),
-    }
+    },
+    "mcp": {
+        "passed": 0,
+        "failed": 0,
+        "skipped": 1,
+        "log": "",
+        "steps": [],
+        "note": "not run in export-example-testout.sh; use tests/mcp_smoke.sh",
+    },
 }
 with open(report_json, "w", encoding="utf-8", newline="\n") as f:
     json.dump(data, f, ensure_ascii=False, indent=2)

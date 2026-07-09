@@ -1,14 +1,15 @@
 // mcp.hpp - Model Context Protocol 服务端（基于 stdio 的 JSON-RPC 2.0，
 // 按行分隔消息）。对外提供图创建/转换/导出/打开/校验/布局/版本管理/
-// Cursor 操作等 20 个工具。
+// Cursor 操作等 24 个工具。
 #pragma once
 #include "exporters.hpp"
 #include "parsers.hpp"
 #include "storage.hpp"
 #include "version_manager.hpp"
 #include "cursor_types.hpp"
+#include <chrono>
+#include <cstdlib>
 #include <iostream>
-#include <algorithm>
 
 namespace mcp {
 
@@ -46,7 +47,7 @@ inline Json toolDef(const std::string& name, const std::string& desc,
     return t;
 }
 
-// toolList: 返回服务暴露的全部工具清单（20 个工具）
+// toolList: 返回服务暴露的全部工具清单（24 个工具）
 inline Json toolList() {
     Json tools = Json::arr();
 
@@ -387,6 +388,44 @@ inline Json textContent(const std::string& text, bool isError = false)
     if (isError)
         result.set("isError", true);
     return result;
+}
+
+// logLevel: 读取 GRAPHMCP_LOG 日志级别
+inline const char* logLevel()
+{
+    const char* lvl = std::getenv("GRAPHMCP_LOG");
+    return (lvl && *lvl) ? lvl : "off";
+}
+
+// logEnabled: 是否启用 MCP 运行时日志
+inline bool logEnabled()
+{
+    return std::string(logLevel()) != "off";
+}
+
+// logDebugEnabled: 是否启用 debug 级日志
+inline bool logDebugEnabled()
+{
+    return std::string(logLevel()) == "debug";
+}
+
+// logEvent: 仅向 stderr 输出结构化日志，避免污染 JSON-RPC stdout
+inline void logEvent(const std::string& level, const std::string& method,
+                     const std::string& tool, long long durationMs,
+                     const std::string& status,
+                     const std::string& note = "")
+{
+    if (!logEnabled())
+        return;
+    if (level == "debug" && !logDebugEnabled())
+        return;
+    std::cerr << "[graphmcp] level=" << level << " method=" << method;
+    if (!tool.empty())
+        std::cerr << " tool=" << tool;
+    std::cerr << " duration_ms=" << durationMs << " status=" << status;
+    if (!note.empty())
+        std::cerr << " note=\"" << note << "\"";
+    std::cerr << "\n";
 }
 
 // issuesToJson: 将校验问题列表转换为 JSON 数组
@@ -1220,6 +1259,7 @@ inline Json rpcError(const Json& id, int code, const std::string& msg)
 // 处理一条请求；若是通知消息且无需响应则返回 false
 // handleMessage: 处理单条 JSON-RPC 请求
 inline bool handleMessage(const Json& msg, gs::Store& store, Json& response) {
+    auto started = std::chrono::steady_clock::now();
     std::string method = msg.str("method");
     const Json* idPtr = msg.find("id");
     bool isNotification = (idPtr == nullptr);
@@ -1236,35 +1276,87 @@ inline bool handleMessage(const Json& msg, gs::Store& store, Json& response) {
         info.set("version", SERVER_VERSION);
         result.set("serverInfo", info);
         response = rpcResult(id, result);
+        auto ended = std::chrono::steady_clock::now();
+        logEvent("info", method, "",
+                 std::chrono::duration_cast<std::chrono::milliseconds>(
+                     ended - started)
+                     .count(),
+                 "ok");
         return !isNotification;
     }
-    if (method == "notifications/initialized" || method == "initialized")
+    if (method == "notifications/initialized" || method == "initialized") {
+        auto ended = std::chrono::steady_clock::now();
+        logEvent("debug", method, "",
+                 std::chrono::duration_cast<std::chrono::milliseconds>(
+                     ended - started)
+                     .count(),
+                 "notification");
         return false;
+    }
     if (method == "ping") {
         response = rpcResult(id, Json::obj());
+        auto ended = std::chrono::steady_clock::now();
+        logEvent("debug", method, "",
+                 std::chrono::duration_cast<std::chrono::milliseconds>(
+                     ended - started)
+                     .count(),
+                 "ok");
         return !isNotification;
     }
     if (method == "tools/list") {
         Json result = Json::obj();
         result.set("tools", toolList());
         response = rpcResult(id, result);
+        auto ended = std::chrono::steady_clock::now();
+        logEvent("info", method, "",
+                 std::chrono::duration_cast<std::chrono::milliseconds>(
+                     ended - started)
+                     .count(),
+                 "ok");
         return !isNotification;
     }
     if (method == "tools/call") {
         const Json* params = msg.find("params");
         if (!params) {
             response = rpcError(id, -32602, "missing params");
+            auto ended = std::chrono::steady_clock::now();
+            logEvent("error", method, "",
+                     std::chrono::duration_cast<std::chrono::milliseconds>(
+                         ended - started)
+                         .count(),
+                     "error", "missing params");
             return !isNotification;
         }
         std::string name = params->str("name");
         const Json* args = params->find("arguments");
         ToolRunner  runner(store);
-        response = rpcResult(id, runner.call(name, args ? *args : Json::obj()));
+        Json toolResp = runner.call(name, args ? *args : Json::obj());
+        bool isError  = toolResp.boolean("isError", false);
+        response      = rpcResult(id, toolResp);
+        auto ended = std::chrono::steady_clock::now();
+        logEvent(isError ? "error" : "info", method, name,
+                 std::chrono::duration_cast<std::chrono::milliseconds>(
+                     ended - started)
+                     .count(),
+                 isError ? "error" : "ok");
         return !isNotification;
     }
-    if (isNotification)
+    if (isNotification) {
+        auto ended = std::chrono::steady_clock::now();
+        logEvent("debug", method, "",
+                 std::chrono::duration_cast<std::chrono::milliseconds>(
+                     ended - started)
+                     .count(),
+                 "ignored");
         return false;
+    }
     response = rpcError(id, -32601, "method not found: " + method);
+    auto ended = std::chrono::steady_clock::now();
+    logEvent("error", method, "",
+             std::chrono::duration_cast<std::chrono::milliseconds>(
+                 ended - started)
+                 .count(),
+             "error", "method not found");
     return true;
 }
 
@@ -1282,6 +1374,7 @@ inline int serve(gs::Store& store)
             std::cout << rpcError(Json(), -32700, "parse error: " + err).dump()
                       << "\n"
                       << std::flush;
+            logEvent("error", "parse", "", 0, "error", err);
             continue;
         }
         Json response;

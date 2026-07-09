@@ -251,6 +251,16 @@ graphmcp draft discard my-graph    # 丢弃所有未提交更改（不可逆）
 graphmcp serve
 ```
 
+调试日志：
+
+```bash
+GRAPHMCP_LOG=info  graphmcp serve 2>serve.info.log
+GRAPHMCP_LOG=debug graphmcp serve 2>serve.debug.log
+```
+
+日志仅写入 `stderr`，不污染 `stdout` 的 JSON-RPC 响应；`info` 输出
+`initialize` / `tools/list` / `tools/call` 摘要，`debug` 额外记录通知与忽略路径。
+
 MCP 客户端配置示例（`mcp-config.example.json`）：
 
 ```json
@@ -266,7 +276,7 @@ MCP 客户端配置示例（`mcp-config.example.json`）：
 
 ---
 
-## 二、MCP 工具（22 个）
+## 二、MCP 工具（24 个）
 
 所有工具通过 `tools/call` 方法调用，参数与 CLI 对应。
 

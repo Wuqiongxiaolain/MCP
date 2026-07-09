@@ -23,82 +23,27 @@ jobs:
       - name: 安装构建依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++ make
+          sudo apt-get install -y g++ make python3 imagemagick
 
       - name: 编译
         run: make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
 
       - name: 单元测试
-        run: make test
+        run: make test-all
 
-      - name: 冒烟测试（CLI + MCP）
-        run: |
-          set -euo pipefail
-          export GRAPHMCP_STORE=ci-store
-          SMOKE_ID="ci-smoke-${GITHUB_RUN_NUMBER}"
+      - name: CLI 冒烟（新版命令族）
+        env:
+          SMOKE_REQUIRE_RASTER: "1"
+        run: make smoke
 
-          # create/list/history/rollback/validate: 覆盖版本化主链路
-          ./bin/graphmcp create --input examples/example_input/flowchart.mmd --id "$SMOKE_ID" --name ci-smoke-flow
-          ./bin/graphmcp create --input examples/example_input/orgchart.csv  --id "$SMOKE_ID" --name ci-smoke-org
-          ./bin/graphmcp list | grep -q "$SMOKE_ID"
-          ./bin/graphmcp history --id "$SMOKE_ID" | tee ci-smoke.history
-          grep -q '^v1' ci-smoke.history
-          grep -q '^v2' ci-smoke.history
-          ./bin/graphmcp rollback --id "$SMOKE_ID" --version 1
-          ./bin/graphmcp validate --id "$SMOKE_ID" | grep -q "valid: no issues found"
-
-          # export/convert/validate: 覆盖核心功能输出
-          ./bin/graphmcp export --id "$SMOKE_ID" --to drawio -o ci-smoke.drawio
-          ./bin/graphmcp export --id "$SMOKE_ID" --to svg    -o ci-smoke.svg
-          ./bin/graphmcp export --id "$SMOKE_ID" --to mermaid -o ci-smoke.mmd
-          ./bin/graphmcp convert --input examples/example_input/workflow.drawio --to mermaid -o ci-smoke-workflow.mmd
-          ./bin/graphmcp convert --input examples/example_input/outline.md --to mermaid -o ci-smoke-convert.mmd
-          ./bin/graphmcp convert --input examples/example_input/whiteboard_freedraw.excalidraw --to svg -o ci-smoke-whiteboard.svg
-          ./bin/graphmcp convert --input examples/example_input/whiteboard_freedraw.excalidraw --to mermaid -o ci-smoke-whiteboard.mmd
-          ./bin/graphmcp convert --input examples/example_input/architecture.xml --to mermaid -o ci-smoke-architecture.mmd
-          ./bin/graphmcp validate --input examples/example_input/er.mmd --format mermaid | grep -q "valid: no issues found"
-          ./bin/graphmcp validate --input examples/example_input/architecture.xml --format xml | grep -q "valid: no issues found"
-          test -s ci-smoke.drawio
-          test -s ci-smoke.svg
-          test -s ci-smoke.mmd
-          test -s ci-smoke-workflow.mmd
-          test -s ci-smoke-convert.mmd
-          test -s ci-smoke-whiteboard.svg
-          test -s ci-smoke-whiteboard.mmd
-          test -s ci-smoke-architecture.mmd
-          # 忽略 CRLF/LF 差异：样例在 Windows 检出可能是 CRLF，工具输出统一为 LF
-          diff -q --strip-trailing-cr \
-            ci-smoke-workflow.mmd \
-            examples/example_output/workflow.drawio_out/workflow.drawio.mmd
-          diff -q --strip-trailing-cr \
-            ci-smoke-whiteboard.mmd \
-            examples/example_output/whiteboard_freedraw.excalidraw_out/whiteboard_freedraw.excalidraw.mmd
-          diff -q --strip-trailing-cr \
-            ci-smoke-architecture.mmd \
-            examples/example_output/architecture.xml_out/architecture.xml.mmd
-          # whiteboard SVG：剥离内嵌字体后比对几何结构，避免字体 base64 抖动掩盖回归
-          # 用 DOTALL 以兼容 <style> 换行（sed [^<]* 无法跨行）
-          strip_svg_style() {
-            python3 -c 'import re,sys; t=open(sys.argv[1],encoding="utf-8",newline="").read(); sys.stdout.write(re.sub(r"<style>.*?</style>", "", t, flags=re.S|re.I))' "$1"
-          }
-          diff -q --strip-trailing-cr \
-            <(strip_svg_style ci-smoke-whiteboard.svg) \
-            <(strip_svg_style examples/example_output/whiteboard_freedraw.excalidraw_out/whiteboard_freedraw.excalidraw.svg)
-          grep -q "base64," ci-smoke-whiteboard.svg
-          if grep -q "font-family:&#39;Excalifont&#39;" ci-smoke-whiteboard.svg; then
-            echo "error: font CSS quotes were wrongly xml-escaped"
-            exit 1
-          fi
-          grep -q "font-family:'Excalifont'" ci-smoke-whiteboard.svg
-
-          # serve: tools/list + tools/call graph_create
-          printf '%s\n%s\n%s\n' \
-            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
-            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
-            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"graph_create","arguments":{"content":"flowchart TD\nM[MCP]-->N[Test]","name":"ci-mcp"}}}' \
-            | ./bin/graphmcp serve | tee ci-smoke.mcp.log
-          grep -q graph_create ci-smoke.mcp.log
-          grep -Eq '(\\"status\\"|"status")[[:space:]]*:[[:space:]]*(\\"created\\"|"created")' ci-smoke.mcp.log
+      - name: 上传冒烟报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report-${{ github.run_number }}
+          path: SMOKE_REPORT.md
+          retention-days: 30
+          if-no-files-found: ignore
 
       - name: 打包制品
         run: |

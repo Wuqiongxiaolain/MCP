@@ -93,3 +93,26 @@ graph-store/
   由于 Windows 大多预装 Edge，实际几乎总能直接出图，无需额外安装。
   注意：无头 Chromium 会用独立 `--user-data-dir`，避免和用户正在运行的
   浏览器实例冲突（否则新命令会附加到已有实例并跳过转换任务）。
+
+## 测试入口
+
+| 命令 | 说明 |
+|------|------|
+| `make test` | 核心库 + MCP 协议单元测试（`tests/test_main.cpp`） |
+| `make test-all` | 上述 + 版本管理（`test_version.cpp`）+ 游标（`test_cursor.cpp`） |
+| `make smoke` | 新版 12 命令族 CLI 全量冒烟（`tests/smoke_test.sh`），生成根目录 `SMOKE_REPORT.md` |
+| `make export-testout` | 样例全格式导出矩阵（`scripts/export-example-testout.sh`），输出 `examples/example_testout/TEST_REPORT.md` |
+| `scripts/export-example-testout.ps1` | Windows 版导出矩阵（同上） |
+
+CI（`.github/workflows/ci.yml`）默认执行 `make test-all` 与 `make smoke`；fixture 几何比对已并入 `smoke_test.sh` 的 `[fixture-regression]` 段。
+
+## 旧版 CLI 与新版 version 语义
+
+旧版扁平命令（`create`/`rollback`/`history` 等，无子命令）经 `handleLegacyCommand` 保留；新版 12 命令族通过子命令分发，二者可共用同一 `graph-store` 目录。
+
+| 操作 | 旧版 `rollback` | 新版 `version checkout` |
+|------|----------------|-------------------------|
+| 行为 | 将指定版本内容**另存为新版本**（版本号递增） | **移动 HEAD 指针**，不新建版本 |
+| 草稿 | 不清理 draft/stage | 默认清理 draft/stage（`--force` 可丢弃未提交修改） |
+
+自本分支起，`storage.save`（含旧版 `create`/`rollback` 与 MCP `graph_rollback`）在写入快照后会同步更新 `<graph-id>/HEAD`，与 `version commit` 一致，避免新旧命令混用后 `version status` 读到过期 HEAD。

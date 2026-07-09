@@ -600,7 +600,7 @@ inline Json openCursor(gs::Store& store, const std::string& graphId,
     }
     GraphVersionManager vm(store.root());
     // 不主动创建空草稿——游标仅读取,不应产生写入副作用
-    Draft draft = vm.loadDraft(graphId);
+    (void)vm.loadDraft(graphId);
 
     std::string cid = gm::genId("cur");
     int count = target == "nodes" ? (int)g.nodes.size() : (int)g.edges.size();

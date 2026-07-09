@@ -144,7 +144,7 @@ inline std::string base64Encode(const std::string& in)
 // getEnvVar: 跨平台读取环境变量；Windows 下避免直接使用废弃 getenv
 inline std::string getEnvVar(const char* name)
 {
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__MINGW32__)
     char*  value = nullptr;
     size_t len   = 0;
     if (_dupenv_s(&value, &len, name) != 0 || !value)

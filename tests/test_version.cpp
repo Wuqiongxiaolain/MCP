@@ -108,6 +108,21 @@ static void testStageJson()
     CHECK(s2.message == "test commit");
 }
 
+// ─── Test 3b: Commit::fromJson 兼容 storage 快照字段 note/savedAt ──
+static void testCommitFromStorageSnap()
+{
+    Json snap = Json::obj();
+    snap.set("version", 2.0);
+    snap.set("parent", 1.0);
+    snap.set("note", "smoke test commit");
+    snap.set("savedAt", "2026-01-01T00:00:00Z");
+    snap.set("model", Json::obj());
+    Commit c = Commit::fromJson(snap);
+    CHECK(c.version == 2);
+    CHECK(c.message == "smoke test commit");
+    CHECK(c.timestamp == "2026-01-01T00:00:00Z");
+}
+
 // ─── Test 4: Commit rebuild (apply patch) ────────────────────
 static void testCommitRebuild()
 {
@@ -398,6 +413,7 @@ int main()
     testOperationJson();
     testDraftJson();
     testStageJson();
+    testCommitFromStorageSnap();
     testCommitRebuild();
     testVersionManagerLifecycle();
     testResetDraft();

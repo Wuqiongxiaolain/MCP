@@ -97,8 +97,8 @@ inline OpType opTypeFromString(const std::string& s)
 // ─── FieldChange: 单个字段的变更记录 ──────────────────────────────
 struct FieldChange
 {
-    std::string field;  // 字段名：label / shape / style / x / y / w / h /
-                        // parent / from / to / arrow
+    std::string field;     // 字段名：label / shape / style / x / y / w / h /
+                           // parent / from / to / arrow
     std::string oldValue;  // 旧值（删除时为空）
     std::string newValue;  // 新值（插入时为空）
 
@@ -292,12 +292,16 @@ struct Commit
     static Commit fromJson(const Json& j)
     {
         Commit c;
-        c.version   = (int)j.num("version");
-        c.parent    = (int)j.num("parent");
-        c.commitId  = j.str("commitId");
-        c.message   = j.str("message");
+        c.version  = (int)j.num("version");
+        c.parent   = (int)j.num("parent");
+        c.commitId = j.str("commitId");
+        c.message  = j.str("message");
+        if (c.message.empty())
+            c.message = j.str("note");  // storage 快照字段兼容
         c.author    = j.str("author");
         c.timestamp = j.str("timestamp");
+        if (c.timestamp.empty())
+            c.timestamp = j.str("savedAt");
         if (const Json* pa = j.find("patch")) {
             if (pa->isArr())
                 for (auto& op : *pa->a)

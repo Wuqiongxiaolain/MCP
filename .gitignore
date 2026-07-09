@@ -11,6 +11,7 @@ test-store-tmp/
 *.tar.gz
 *.tmp.svg
 ci-smoke.*
+.vs/
 .vscode/
 .idea/
 .cursor/

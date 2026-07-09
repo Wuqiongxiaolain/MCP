@@ -20,8 +20,17 @@ if(MINGW)
 endif()
 
 enable_testing()
+
 add_executable(graphmcp_tests tests/test_main.cpp)
 target_include_directories(graphmcp_tests PRIVATE src)
 add_test(NAME unit_tests COMMAND graphmcp_tests)
+
+add_executable(graphmcp_version_tests tests/test_version.cpp)
+target_include_directories(graphmcp_version_tests PRIVATE src)
+add_test(NAME version_tests COMMAND graphmcp_version_tests)
+
+add_executable(graphmcp_cursor_tests tests/test_cursor.cpp)
+target_include_directories(graphmcp_cursor_tests PRIVATE src)
+add_test(NAME cursor_tests COMMAND graphmcp_cursor_tests)
 
 install(TARGETS graphmcp RUNTIME DESTINATION bin)

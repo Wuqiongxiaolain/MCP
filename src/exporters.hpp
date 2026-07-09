@@ -5,6 +5,7 @@
 #include "model.hpp"
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <sstream>
@@ -18,14 +19,8 @@
 #        define WIN32_LEAN_AND_MEAN
 #    endif
 #    include <windows.h>
-#elif defined(__APPLE__)
-#    include <limits.h>
-#    include <mach-o/dyld.h>
-#    include <sys/stat.h>
-#    ifndef PATH_MAX
-#        define PATH_MAX 4096
-#    endif
 #else
+#    include <dirent.h>
 #    include <limits.h>
 #    include <sys/stat.h>
 #    include <unistd.h>
@@ -191,6 +186,60 @@ inline std::string readFile(const std::string& path)
     return os.str();
 }
 
+// removeDirectory: 递归删除目录及其内容（不使用 shell，避免注入风险）
+inline bool removeDirectory(const std::string& dirPath) {
+#ifdef _WIN32
+    auto toWide = [](const std::string& s) {
+        int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
+        std::wstring w((size_t)(n > 0 ? n - 1 : 0), L'\0');
+        if (n > 0) MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &w[0], n);
+        return w;
+    };
+    std::wstring wpath = toWide(dirPath);
+    std::wstring searchPath = wpath + L"\\*";
+    WIN32_FIND_DATAW fd;
+    HANDLE hFind = FindFirstFileW(searchPath.c_str(), &fd);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        if (DeleteFileW(wpath.c_str())) return true;
+        return RemoveDirectoryW(wpath.c_str()) != 0;
+    }
+    do {
+        if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0)
+            continue;
+        std::wstring child = wpath + L"\\" + fd.cFileName;
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            int clen = WideCharToMultiByte(CP_UTF8, 0, child.c_str(), -1,
+                                           nullptr, 0, nullptr, nullptr);
+            std::string childUtf8(clen > 0 ? (size_t)(clen - 1) : 0, '\0');
+            if (clen > 0)
+                WideCharToMultiByte(CP_UTF8, 0, child.c_str(), -1,
+                                    &childUtf8[0], clen, nullptr, nullptr);
+            removeDirectory(childUtf8);
+        } else {
+            DeleteFileW(child.c_str());
+        }
+    } while (FindNextFileW(hFind, &fd));
+    FindClose(hFind);
+    return RemoveDirectoryW(wpath.c_str()) != 0;
+#else
+    DIR* dir = opendir(dirPath.c_str());
+    if (!dir) return remove(dirPath.c_str()) == 0;
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+        std::string child = dirPath + "/" + entry->d_name;
+        struct stat st;
+        if (stat(child.c_str(), &st) == 0) {
+            if (S_ISDIR(st.st_mode)) removeDirectory(child);
+            else remove(child.c_str());
+        }
+    }
+    closedir(dir);
+    return rmdir(dirPath.c_str()) == 0;
+#endif
+}
+
 // fileReadable: 探测路径是否可打开读取
 inline bool fileReadable(const std::string& path)
 {
@@ -214,34 +263,19 @@ inline std::string joinPath(const std::string& a, const std::string& b)
 // executableDir: 当前进程可执行文件所在目录（失败返回空）
 inline std::string executableDir()
 {
-    std::string path;
 #ifdef _WIN32
     char  buf[MAX_PATH];
     DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
     if (n == 0 || n >= MAX_PATH)
         return "";
-    path.assign(buf, n);
-#elif defined(__APPLE__)
-    // 缓冲不足时 _NSGetExecutablePath 会写入所需 size 并返回非 0，需按新 size
-    // 重试
-    char     stackBuf[PATH_MAX];
-    uint32_t size = sizeof(stackBuf);
-    if (_NSGetExecutablePath(stackBuf, &size) == 0) {
-        path = stackBuf;
-    }
-    else {
-        std::vector<char> heap(size);
-        if (_NSGetExecutablePath(heap.data(), &size) != 0)
-            return "";
-        path.assign(heap.data());
-    }
+    std::string path(buf, n);
 #else
     char    buf[PATH_MAX];
     ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
     if (n <= 0)
         return "";
     buf[n] = '\0';
-    path   = buf;
+    std::string path(buf);
 #endif
     size_t slash = path.find_last_of("/\\");
     if (slash == std::string::npos)
@@ -277,7 +311,7 @@ inline std::string bundledAssetPath(const std::string& name)
         if (fileReadable(c))
             return c;
     }
-    return candidates.back();
+    return "";
 }
 
 struct ExcalidrawFontMetrics
@@ -328,8 +362,7 @@ inline std::string excalidrawTextFontFamilyCss(const Json& el)
 
 inline std::string excalidrawEmbeddedFontCss()
 {
-    // 仅在必要字体全部成功时永久缓存；部分成功则本轮返回临时结果、保持
-    // css 为空以便后续（修正 CWD / GRAPHMCP_ASSETS）后重试
+    // 非空才缓存：首轮若资源未就绪（错误 CWD），后续可重试加载
     static std::string css;
     if (!css.empty())
         return css;
@@ -349,18 +382,16 @@ inline std::string excalidrawEmbeddedFontCss()
         return os.str();
     };
 
-    // 必要：Virgil + Excalifont 主片；Cascadia / 其余子集尽量加载
-    std::string virgil = fontFace("Virgil", "Virgil.woff2");
-    std::string casc   = fontFace("Cascadia", "Cascadia.woff2");
-    std::string exMain = fontFace(
+    std::ostringstream os;
+    os << fontFace("Virgil", "Virgil.woff2");
+    os << fontFace("Cascadia", "Cascadia.woff2");
+    os << fontFace(
         "Excalifont",
         "Excalifont-Regular-a88b72a24fb54c9f94e3b5fdaa7481c9.woff2",
         "U+20-7e,U+a0-a3,U+a5-a6,U+a8-ab,U+ad-b1,U+b4,U+b6-b8,U+ba-ff,"
         "U+131,U+152-153,U+2bc,U+2c6,U+2da,U+2dc,U+304,U+308,U+2013-2014,"
         "U+2018-201a,U+201c-201e,U+2020,U+2022,U+2024-2026,U+2030,"
         "U+2039-203a,U+20ac,U+2122,U+2212");
-    std::ostringstream os;
-    os << virgil << casc << exMain;
     os << fontFace("Excalifont",
                    "Excalifont-Regular-be310b9bcd4f1a43f571c46df7809174.woff2",
                    "U+100-130,U+132-137,U+139-149,U+14c-151,U+154-17e,U+192,"
@@ -385,11 +416,8 @@ inline std::string excalidrawEmbeddedFontCss()
     os << fontFace("Excalifont",
                    "Excalifont-Regular-623ccf21b21ef6b3a0d87738f77eb071.woff2",
                    "U+300-301,U+303");
-    std::string built = os.str();
-    // Virgil + Excalifont 主片齐备才永久缓存，避免部分成功锁死
-    if (!virgil.empty() && !exMain.empty())
-        css = built;
-    return built;
+    css = os.str();
+    return css;
 }
 
 // collectFreedrawStrokes: 从 g.elements 提取 freedraw 并转换为绝对坐标点列
@@ -525,14 +553,6 @@ excalidrawTextSvgYAt(double by, const Json& el, size_t lineIndex = 0)
                                 2.0;
     return by + lineIndex * lineHeightPx + verticalOffset;
 }
-
-// excalidrawTextSvgX: Excalidraw 文本 bbox 左上角 + 对齐偏移 → SVG 锚点 x
-inline double excalidrawTextSvgX(const Json& el)
-{ return excalidrawTextSvgXAt(el.num("x"), el); }
-
-// excalidrawTextSvgY: Excalidraw alphabetic baseline（近似 Excalifont 度量）
-inline double excalidrawTextSvgY(const Json& el, size_t lineIndex = 0)
-{ return excalidrawTextSvgYAt(el.num("y"), el, lineIndex); }
 
 inline std::pair<double, double>
 polylineMidpoint(const std::vector<std::pair<double, double>>& pts);
@@ -883,13 +903,6 @@ inline void excalidrawCanvasBounds(const Graph& g,
     minY = 1e18;
     maxX = -1e18;
     maxY = -1e18;
-    // 箭头嵌字实际渲染位置取路径中点，bounds 必须用同一来源，不能只用 JSON 的
-    // x/y
-    std::map<std::string, Json> arrows;
-    for (const auto& el : g.elements) {
-        if (el.str("type") == "arrow")
-            arrows[el.str("id")] = el;
-    }
     for (const auto& el : g.elements) {
         std::string ty = el.str("type");
         if (ty == "arrow" || ty == "line" || ty == "freedraw") {
@@ -906,17 +919,9 @@ inline void excalidrawCanvasBounds(const Graph& g,
             }
             continue;
         }
-        double bx = el.num("x");
-        double by = el.num("y");
-        if (ty == "text") {
-            auto origin = excalidrawTextBBoxOrigin(el, arrows);
-            bx          = origin.first;
-            by          = origin.second;
-        }
-        ExcalidrawAffine tf = excalidrawElementAffineByBox(
-            el, bx, by, el.num("width"), el.num("height"));
-        extendBoundsAffineRect(minX, minY, maxX, maxY, bx, by, el.num("width"),
-                               el.num("height"), tf);
+        ExcalidrawAffine tf = excalidrawElementAffine(el);
+        extendBoundsAffineRect(minX, minY, maxX, maxY, el.num("x"), el.num("y"),
+                               el.num("width"), el.num("height"), tf);
     }
     if (minX > maxX) {
         minX = 0;
@@ -1143,7 +1148,7 @@ inline std::string toSVGExcalidraw(const Graph& g)
                    << "\" overflow=\"hidden\" preserveAspectRatio=\"none\">\n";
                 os << "    <image x=\"" << (p.x - p.clipX) << "\" y=\""
                    << (p.y - p.clipY) << "\" width=\"" << p.w << "\" height=\""
-                   << p.h << "\" href=\"" << xmlAttrEscape(dataUrl)
+                   << p.h << "\" href=\"" << xmlEscape(dataUrl)
                    << "\" opacity=\"" << op << "\" preserveAspectRatio=\"none\""
                    << "/>\n";
                 os << "  </svg>\n";
@@ -1151,7 +1156,7 @@ inline std::string toSVGExcalidraw(const Graph& g)
             else {
                 os << "  <image x=\"" << p.x << "\" y=\"" << p.y
                    << "\" width=\"" << p.w << "\" height=\"" << p.h
-                   << "\" href=\"" << xmlAttrEscape(dataUrl) << "\" opacity=\""
+                   << "\" href=\"" << xmlEscape(dataUrl) << "\" opacity=\""
                    << op << "\" preserveAspectRatio=\"none\"/>\n";
             }
             if (!tf.identity)
@@ -1830,8 +1835,12 @@ inline std::string findBrowser()
              "/usr/bin/chromium-browser", "/usr/bin/microsoft-edge"};
 #endif
     for (auto& c : cands) {
+#ifdef _WIN32
         std::ifstream f(c, std::ios::binary);
         if (f.good())
+#else
+        if (access(c.c_str(), X_OK) == 0)
+#endif
             return c;
     }
     return "";
@@ -1986,56 +1995,6 @@ inline std::string rasterize(const std::string& svgPathIn,
             return "chromium";
 #endif
         }
-    }
-    return "";
-}
-
-// rasterizeViaBrowser: 用 headless 浏览器对 HTML 页面截图或打印 PDF
-inline std::string rasterizeViaBrowser(const std::string& htmlPathIn,
-                                       const std::string& outPathIn,
-                                       const std::string& fmt,
-                                       int                width,
-                                       int                height)
-{
-    std::string htmlPath = absPath(htmlPathIn);
-    std::string outPath  = absPath(outPathIn);
-    if (width <= 0)
-        width = 1200;
-    if (height <= 0)
-        height = 800;
-    auto produced = [&]() {
-        std::ifstream check(outPath, std::ios::binary);
-        return check.good() &&
-               check.peek() != std::ifstream::traits_type::eof();
-    };
-    std::string browser = findBrowser();
-    if (browser.empty())
-        return "";
-    std::string url = fileUrl(htmlPath);
-    std::string tmp = getEnvVar("TEMP");
-    if (tmp.empty())
-        tmp = getEnvVar("TMP");
-    std::string profile = (!tmp.empty() ? tmp + "/graphmcp-chrome-profile" :
-                                          outPath + ".chromeprofile");
-    std::string args    = "--headless=new --disable-gpu --no-sandbox "
-                          "--virtual-time-budget=3000 "
-                          "--user-data-dir=\"" +
-                          profile + "\" ";
-    if (fmt == "pdf")
-        args += "--no-pdf-header-footer --print-to-pdf=\"" + outPath + "\" \"" +
-                url + "\"";
-    else
-        args += "--force-device-scale-factor=2 --window-size=" +
-                std::to_string(width) + "," + std::to_string(height) +
-                " --screenshot=\"" + outPath + "\" \"" + url + "\"";
-    std::remove(outPath.c_str());
-    launchBrowser(browser, args);
-    if (produced()) {
-#ifdef _WIN32
-        return browser.find("msedge") != std::string::npos ? "edge" : "chrome";
-#else
-        return "chromium";
-#endif
     }
     return "";
 }

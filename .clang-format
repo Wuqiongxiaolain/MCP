@@ -186,8 +186,8 @@ SpacesInCStyleCastParentheses: false
 SpacesInParentheses: false
 # 在方括号的[后和]前添加空格，lamda表达式和未指明大小的数组的声明不受影响
 SpacesInSquareBrackets: false
-# 标准: Cpp03, Cpp11, Auto
-Standard: Cpp11
+# 标准: Cpp03, Cpp11, Auto (与 -std=c++17 一致)
+Standard: Cpp17
 # tab宽度
 TabWidth: 4
 # 使用tab字符: Never, ForIndentation, ForContinuationAndIndentation, Always

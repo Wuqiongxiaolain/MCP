@@ -21,7 +21,7 @@ HDRS := src/json.hpp src/model.hpp src/parsers.hpp src/layout.hpp \
         src/exporters.hpp src/storage.hpp src/mcp.hpp \
         src/version_types.hpp src/cursor_types.hpp src/version_manager.hpp \
 
-.PHONY: all test test-all test-version test-cursor smoke clean export-testout
+.PHONY: all test test-all test-version test-cursor smoke mcp-smoke clean export-testout
 
 all: $(BIN)/graphmcp$(EXE) $(BIN)/graphmcp_tests$(EXE) \
      $(BIN)/graphmcp_version_tests$(EXE) $(BIN)/graphmcp_cursor_tests$(EXE)
@@ -57,6 +57,9 @@ test-all: test test-version test-cursor
 
 smoke: $(BIN)/graphmcp$(EXE)
 	bash tests/smoke_test.sh $(BIN)/graphmcp$(EXE)
+
+mcp-smoke: $(BIN)/graphmcp$(EXE)
+	bash tests/mcp_smoke.sh $(BIN)/graphmcp$(EXE)
 
 export-testout: $(BIN)/graphmcp$(EXE)
 	bash scripts/export-example-testout.sh $(BIN)/graphmcp$(EXE)

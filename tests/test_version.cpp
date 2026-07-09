@@ -1,35 +1,42 @@
 // test_version.cpp - unit tests for version management module
 // Tests: Draft/Stage/Commit lifecycle, VersionManager CRUD, diff, checkout
-#include "../src/version_manager.hpp"
 #include "../src/cursor_types.hpp"
-#include <iostream>
+#include "../src/version_manager.hpp"
 #include <cstdio>
+#include <iostream>
 
 static int g_failed = 0;
 static int g_passed = 0;
 
-#define CHECK(cond) do { \
-    if (cond) { g_passed++; } \
-    else { g_failed++; \
-        std::cerr << "FAIL " << __FILE__ << ":" << __LINE__ << "  " #cond "\n"; } \
-} while (0)
+#define CHECK(cond)                                                            \
+    do {                                                                       \
+        if (cond) {                                                            \
+            g_passed++;                                                        \
+        }                                                                      \
+        else {                                                                 \
+            g_failed++;                                                        \
+            std::cerr << "FAIL " << __FILE__ << ":" << __LINE__                \
+                      << "  " #cond "\n";                                      \
+        }                                                                      \
+    } while (0)
 
-using gv::GraphVersionManager;
-using gv::Draft;
-using gv::Stage;
-using gv::Operation;
-using gv::OpType;
-using gv::FieldChange;
-using gv::Commit;
-using gv::VersionMeta;
-using gv::Selector;
+using gj::Json;
 using gm::Edge;
 using gm::Graph;
 using gm::Node;
-using gj::Json;
+using gv::Commit;
+using gv::Draft;
+using gv::FieldChange;
+using gv::GraphVersionManager;
+using gv::Operation;
+using gv::OpType;
+using gv::Selector;
+using gv::Stage;
+using gv::VersionMeta;
 
 // cleanup helper
-static void rmtree(const std::string& dir) {
+static void rmtree(const std::string& dir)
+{
 #ifdef _WIN32
     std::system(("rmdir /s /q \"" + dir + "\" >nul 2>nul").c_str());
 #else
@@ -38,16 +45,17 @@ static void rmtree(const std::string& dir) {
 }
 
 // ─── Test 1: Operation serialization round-trip ──────────────
-static void testOperationJson() {
+static void testOperationJson()
+{
     Operation op;
-    op.type = OpType::NODE_UPDATE;
-    op.targetId = "A";
+    op.type       = OpType::NODE_UPDATE;
+    op.targetId   = "A";
     op.targetType = "node";
     op.changes.push_back({"label", "old", "new"});
     op.changes.push_back({"shape", "rect", "diamond"});
     op.timestamp = "2026-07-08T10:00:00";
 
-    Json j = op.toJson();
+    Json      j   = op.toJson();
     Operation op2 = Operation::fromJson(j);
 
     CHECK(op2.type == OpType::NODE_UPDATE);
@@ -58,21 +66,22 @@ static void testOperationJson() {
 }
 
 // ─── Test 2: Draft serialization round-trip ──────────────────
-static void testDraftJson() {
+static void testDraftJson()
+{
     Draft d;
-    d.graphId = "gtest";
+    d.graphId     = "gtest";
     d.baseVersion = 1;
-    d.updatedAt = "2026-07-08T10:00:00";
+    d.updatedAt   = "2026-07-08T10:00:00";
 
     Operation op;
-    op.type = OpType::NODE_UPDATE;
-    op.targetId = "A";
+    op.type       = OpType::NODE_UPDATE;
+    op.targetId   = "A";
     op.targetType = "node";
     op.changes.push_back({"label", "Start", "Begin"});
     op.timestamp = "2026-07-08T10:00:01";
     d.operations.push_back(op);
 
-    Json j = d.toJson();
+    Json  j  = d.toJson();
     Draft d2 = Draft::fromJson(j);
 
     CHECK(d2.graphId == "gtest");
@@ -82,14 +91,15 @@ static void testDraftJson() {
 }
 
 // ─── Test 3: Stage serialization round-trip ──────────────────
-static void testStageJson() {
+static void testStageJson()
+{
     Stage s;
-    s.graphId = "gtest";
+    s.graphId         = "gtest";
     s.stagedOpIndices = {0, 2, 5};
-    s.message = "test commit";
-    s.stagedAt = "2026-07-08T10:00:00";
+    s.message         = "test commit";
+    s.stagedAt        = "2026-07-08T10:00:00";
 
-    Json j = s.toJson();
+    Json  j  = s.toJson();
     Stage s2 = Stage::fromJson(j);
 
     CHECK(s2.graphId == "gtest");
@@ -99,7 +109,8 @@ static void testStageJson() {
 }
 
 // ─── Test 4: Commit rebuild (apply patch) ────────────────────
-static void testCommitRebuild() {
+static void testCommitRebuild()
+{
     Graph base;
     base.id = "gtest";
     base.ensureNode("A", "Start");
@@ -111,8 +122,8 @@ static void testCommitRebuild() {
     // NODE_UPDATE: rename A
     {
         Operation op;
-        op.type = OpType::NODE_UPDATE;
-        op.targetId = "A";
+        op.type       = OpType::NODE_UPDATE;
+        op.targetId   = "A";
         op.targetType = "node";
         op.changes.push_back({"label", "Start", "Begin"});
         patch.push_back(op);
@@ -121,15 +132,17 @@ static void testCommitRebuild() {
     // NODE_INSERT: add C
     {
         Operation op;
-        op.type = OpType::NODE_INSERT;
-        op.targetId = "C";
+        op.type       = OpType::NODE_INSERT;
+        op.targetId   = "C";
         op.targetType = "node";
-        Json snap = Json::obj();
+        Json snap     = Json::obj();
         snap.set("id", "C");
         snap.set("label", "End");
         snap.set("shape", "round");
-        snap.set("x", 100.0); snap.set("y", 200.0);
-        snap.set("w", 120.0); snap.set("h", 44.0);
+        snap.set("x", 100.0);
+        snap.set("y", 200.0);
+        snap.set("w", 120.0);
+        snap.set("h", 44.0);
         op.snapshot = snap;
         patch.push_back(op);
     }
@@ -137,8 +150,8 @@ static void testCommitRebuild() {
     // EDGE_DELETE: remove A->B
     {
         Operation op;
-        op.type = OpType::EDGE_DELETE;
-        op.targetId = base.edges[0].id;
+        op.type       = OpType::EDGE_DELETE;
+        op.targetId   = base.edges[0].id;
         op.targetType = "edge";
         patch.push_back(op);
     }
@@ -146,10 +159,10 @@ static void testCommitRebuild() {
     // EDGE_INSERT: add A->C
     {
         Operation op;
-        op.type = OpType::EDGE_INSERT;
-        op.targetId = "e_new";
+        op.type       = OpType::EDGE_INSERT;
+        op.targetId   = "e_new";
         op.targetType = "edge";
-        Json snap = Json::obj();
+        Json snap     = Json::obj();
         snap.set("id", "e_new");
         snap.set("from", "A");
         snap.set("to", "C");
@@ -163,8 +176,8 @@ static void testCommitRebuild() {
     Graph result = Commit::rebuild(base, patch);
 
     CHECK(result.findNode("A")->label == "Begin");
-    CHECK(result.findNode("C") != nullptr);
-    CHECK(result.findNode("C")->shape == "round");
+    const gm::Node* node_c = result.findNode("C");
+    CHECK(node_c != nullptr && node_c->shape == "round");
     CHECK(result.edges.size() == 1);
     CHECK(result.edges[0].from == "A");
     CHECK(result.edges[0].to == "C");
@@ -172,7 +185,8 @@ static void testCommitRebuild() {
 }
 
 // ─── Test 5: VersionManager full lifecycle ───────────────────
-static void testVersionManagerLifecycle() {
+static void testVersionManagerLifecycle()
+{
     std::string storeDir = "test-vm-store";
     rmtree(storeDir);
     {
@@ -180,7 +194,7 @@ static void testVersionManagerLifecycle() {
 
         // Create initial graph via store
         Graph g;
-        g.id = "gm1";
+        g.id   = "gm1";
         g.name = "TestGraph";
         g.type = "flowchart";
         g.ensureNode("A", "Start");
@@ -205,8 +219,8 @@ static void testVersionManagerLifecycle() {
 
         // Add operations to draft
         Operation op;
-        op.type = OpType::NODE_UPDATE;
-        op.targetId = "A";
+        op.type       = OpType::NODE_UPDATE;
+        op.targetId   = "A";
         op.targetType = "node";
         op.changes.push_back({"label", "Start", "Beginning"});
         op.timestamp = gv::nowIso();
@@ -244,16 +258,20 @@ static void testVersionManagerLifecycle() {
 
         // commitAll (skip stage)
         Operation op2;
-        op2.type = OpType::NODE_INSERT;
-        op2.targetId = "C";
+        op2.type       = OpType::NODE_INSERT;
+        op2.targetId   = "C";
         op2.targetType = "node";
-        Json snap = Json::obj();
-        snap.set("id", "C"); snap.set("label", "Extra");
-        snap.set("shape", "rect"); snap.set("x", 0.0); snap.set("y", 0.0);
-        snap.set("w", 100.0); snap.set("h", 44.0);
-        op2.snapshot = snap;
+        Json snap      = Json::obj();
+        snap.set("id", "C");
+        snap.set("label", "Extra");
+        snap.set("shape", "rect");
+        snap.set("x", 0.0);
+        snap.set("y", 0.0);
+        snap.set("w", 100.0);
+        snap.set("h", 44.0);
+        op2.snapshot  = snap;
         op2.timestamp = gv::nowIso();
-        draft = vm.loadDraft("gm1");
+        draft         = vm.loadDraft("gm1");
         draft.operations.push_back(op2);
         vm.saveDraft("gm1", draft);
 
@@ -281,7 +299,8 @@ static void testVersionManagerLifecycle() {
 }
 
 // ─── Test 6: resetDraft ──────────────────────────────────────
-static void testResetDraft() {
+static void testResetDraft()
+{
     std::string storeDir = "test-reset-store";
     rmtree(storeDir);
     {
@@ -293,10 +312,10 @@ static void testResetDraft() {
         vm.store().save(g, "first");
 
         // Add to draft
-        Draft draft = vm.loadDraft("gr1");
+        Draft     draft = vm.loadDraft("gr1");
         Operation op;
-        op.type = OpType::NODE_UPDATE;
-        op.targetId = "X";
+        op.type       = OpType::NODE_UPDATE;
+        op.targetId   = "X";
         op.targetType = "node";
         op.changes.push_back({"label", "NodeX", "Changed"});
         op.timestamp = gv::nowIso();
@@ -314,7 +333,8 @@ static void testResetDraft() {
 }
 
 // ─── Test 7: Selector parsing ────────────────────────────────
-static void testSelectorParse() {
+static void testSelectorParse()
+{
     auto s1 = Selector::parse("shape=rect");
     CHECK(s1.kind == Selector::Kind::BY_TYPE);
     CHECK(s1.value == "rect");
@@ -334,12 +354,16 @@ static void testSelectorParse() {
 }
 
 // ─── Test 8: FieldChange get/set on Node ─────────────────────
-static void testFieldAccess() {
+static void testFieldAccess()
+{
     Node n;
-    n.id = "test";
+    n.id    = "test";
     n.label = "Hello";
     n.shape = "rect";
-    n.x = 10; n.y = 20; n.w = 100; n.h = 50;
+    n.x     = 10;
+    n.y     = 20;
+    n.w     = 100;
+    n.h     = 50;
 
     CHECK(gv::getNodeField(n, "label") == "Hello");
     CHECK(gv::getNodeField(n, "shape") == "rect");
@@ -352,10 +376,12 @@ static void testFieldAccess() {
 }
 
 // ─── Test 9: Edge field access ───────────────────────────────
-static void testEdgeFieldAccess() {
+static void testEdgeFieldAccess()
+{
     Edge e;
-    e.id = "e1";
-    e.from = "A"; e.to = "B";
+    e.id    = "e1";
+    e.from  = "A";
+    e.to    = "B";
     e.label = "connects";
     e.style = "dashed";
     e.arrow = "none";
@@ -367,7 +393,8 @@ static void testEdgeFieldAccess() {
     CHECK(e.style == "solid");
 }
 
-int main() {
+int main()
+{
     testOperationJson();
     testDraftJson();
     testStageJson();
@@ -378,6 +405,7 @@ int main() {
     testFieldAccess();
     testEdgeFieldAccess();
 
-    std::cout << "version tests: " << g_passed << " passed, " << g_failed << " failed\n";
+    std::cout << "version tests: " << g_passed << " passed, " << g_failed
+              << " failed\n";
     return g_failed == 0 ? 0 : 1;
 }

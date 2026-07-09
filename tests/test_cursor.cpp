@@ -1,59 +1,71 @@
 // test_cursor.cpp - unit tests for Cursor operations
 // Tests: NodeCursor, EdgeCursor, SelectionCursor, insert/delete helpers
 #include "../src/cursor_types.hpp"
-#include <iostream>
 #include <cstdio>
+#include <iostream>
 
 static int g_failed = 0;
 static int g_passed = 0;
 
-#define CHECK(cond) do { \
-    if (cond) { g_passed++; } \
-    else { g_failed++; \
-        std::cerr << "FAIL " << __FILE__ << ":" << __LINE__ << "  " #cond "\n"; } \
-} while (0)
+#define CHECK(cond)                                                            \
+    do {                                                                       \
+        if (cond) {                                                            \
+            g_passed++;                                                        \
+        }                                                                      \
+        else {                                                                 \
+            g_failed++;                                                        \
+            std::cerr << "FAIL " << __FILE__ << ":" << __LINE__                \
+                      << "  " #cond "\n";                                      \
+        }                                                                      \
+    } while (0)
 
-using gv::NodeCursor;
-using gv::EdgeCursor;
-using gv::SelectionCursor;
-using gv::Selector;
-using gv::Draft;
-using gv::selectNode;
-using gv::selectNodes;
-using gv::selectEdge;
-using gv::selectEdges;
-using gv::select;
-using gv::insertNode;
-using gv::insertEdge;
-using gv::deleteNode;
-using gv::deleteEdge;
+using gm::Edge;
 using gm::Graph;
 using gm::Node;
-using gm::Edge;
+using gv::deleteEdge;
+using gv::deleteNode;
+using gv::Draft;
+using gv::EdgeCursor;
+using gv::insertEdge;
+using gv::insertNode;
+using gv::NodeCursor;
+using gv::select;
+using gv::selectEdge;
+using gv::selectEdges;
+using gv::SelectionCursor;
+using gv::selectNode;
+using gv::selectNodes;
+using gv::Selector;
 
 // setup helper
-static Graph makeTestGraph() {
+static Graph makeTestGraph()
+{
     Graph g;
-    g.id = "gtest";
+    g.id   = "gtest";
     g.name = "Test";
     g.type = "flowchart";
     // Create nodes
     g.ensureNode("A", "Start");
     g.findNode("A")->shape = "round";
-    g.findNode("A")->x = 40; g.findNode("A")->y = 40;
-    g.findNode("A")->w = 100; g.findNode("A")->h = 44;
+    g.findNode("A")->x     = 40;
+    g.findNode("A")->y     = 40;
+    g.findNode("A")->w     = 100;
+    g.findNode("A")->h     = 44;
 
     g.ensureNode("B", "Process");
     g.findNode("B")->shape = "rect";
-    g.findNode("B")->x = 200; g.findNode("B")->y = 40;
+    g.findNode("B")->x     = 200;
+    g.findNode("B")->y     = 40;
 
     g.ensureNode("C", "End");
     g.findNode("C")->shape = "round";
-    g.findNode("C")->x = 360; g.findNode("C")->y = 40;
+    g.findNode("C")->x     = 360;
+    g.findNode("C")->y     = 40;
 
     g.ensureNode("D", "Decision");
     g.findNode("D")->shape = "diamond";
-    g.findNode("D")->x = 200; g.findNode("D")->y = 160;
+    g.findNode("D")->x     = 200;
+    g.findNode("D")->y     = 160;
 
     // Create edges
     g.addEdge("A", "B", "go");
@@ -63,9 +75,11 @@ static Graph makeTestGraph() {
 }
 
 // ─── Test 1: NodeCursor exact match ──────────────────────────
-static void testNodeCursorExact() {
+static void testNodeCursorExact()
+{
     Graph g = makeTestGraph();
-    Draft draft; draft.graphId = "gtest";
+    Draft draft;
+    draft.graphId = "gtest";
 
     auto nc = selectNode(g, &draft, "A");
     CHECK(nc.valid());
@@ -79,14 +93,16 @@ static void testNodeCursorExact() {
 }
 
 // ─── Test 2: NodeCursor chained update ───────────────────────
-static void testNodeCursorUpdate() {
+static void testNodeCursorUpdate()
+{
     Graph g = makeTestGraph();
-    Draft draft; draft.graphId = "gtest";
+    Draft draft;
+    draft.graphId = "gtest";
 
     auto nc = selectNode(g, &draft, "B");
     nc.updateLabel("Processing")
-      .updateShape("diamond")
-      .updatePosition(300, 100);
+        .updateShape("diamond")
+        .updatePosition(300, 100);
 
     CHECK(g.findNode("B")->label == "Processing");
     CHECK(g.findNode("B")->shape == "diamond");
@@ -94,20 +110,25 @@ static void testNodeCursorUpdate() {
     CHECK(g.findNode("B")->y == 100.0);
 
     // Draft should record the operations
-    CHECK(draft.operationCount() == 1); // Merged into single NODE_UPDATE
+    CHECK(draft.operationCount() == 1);  // Merged into single NODE_UPDATE
     CHECK(draft.operations[0].targetId == "B");
-    CHECK(draft.operations[0].changes.size() == 4); // label, shape, x, y
+    CHECK(draft.operations[0].changes.size() == 4);  // label, shape, x, y
 }
 
 // ─── Test 3: NodeCursor selector matching ────────────────────
-static void testNodeCursorSelector() {
+static void testNodeCursorSelector()
+{
     Graph g = makeTestGraph();
-    Draft draft; draft.graphId = "gtest";
+    Draft draft;
+    draft.graphId = "gtest";
 
     // Select all round nodes — NodeCursor::updateShape 仅影响当前元素
     auto nc = selectNodes(g, &draft, Selector::byType("round"));
-    CHECK(nc.count() == 2); // A and C are round
-    for (int i = 0; i < nc.count(); i++) { nc.at(i); nc.updateShape("rect"); }
+    CHECK(nc.count() == 2);  // A and C are round
+    for (int i = 0; i < nc.count(); i++) {
+        nc.at(i);
+        nc.updateShape("rect");
+    }
     CHECK(g.findNode("A")->shape == "rect");
     CHECK(g.findNode("C")->shape == "rect");
 
@@ -117,21 +138,21 @@ static void testNodeCursorSelector() {
 }
 
 // ─── Test 4: EdgeCursor operations ───────────────────────────
-static void testEdgeCursor() {
+static void testEdgeCursor()
+{
     Graph g = makeTestGraph();
-    Draft draft; draft.graphId = "gtest";
+    Draft draft;
+    draft.graphId = "gtest";
 
     // Exact match
     std::string eid = g.edges[0].id;
-    auto ec = selectEdge(g, &draft, eid);
+    auto        ec  = selectEdge(g, &draft, eid);
     CHECK(ec.valid());
     CHECK(ec.get()->from == "A");
     CHECK(ec.get()->label == "go");
 
     // Update edge
-    ec.updateLabel("proceed")
-      .updateStyle("dashed")
-      .updateArrow("none");
+    ec.updateLabel("proceed").updateStyle("dashed").updateArrow("none");
 
     CHECK(g.edges[0].label == "proceed");
     CHECK(g.edges[0].style == "dashed");
@@ -148,9 +169,11 @@ static void testEdgeCursor() {
 }
 
 // ─── Test 5: SelectionCursor batch operations ────────────────
-static void testSelectionCursor() {
+static void testSelectionCursor()
+{
     Graph g = makeTestGraph();
-    Draft draft; draft.graphId = "gtest";
+    Draft draft;
+    draft.graphId = "gtest";
 
     // Select all nodes with parent="" (all root nodes in this test)
     auto sc = select(g, &draft, Selector::byParent(""));
@@ -166,9 +189,11 @@ static void testSelectionCursor() {
 }
 
 // ─── Test 6: NodeCursor navigation ───────────────────────────
-static void testNodeCursorNavigation() {
+static void testNodeCursorNavigation()
+{
     Graph g = makeTestGraph();
-    Draft draft; draft.graphId = "gtest";
+    Draft draft;
+    draft.graphId = "gtest";
 
     auto nc = selectNodes(g, &draft, Selector::allNodes());
     CHECK(nc.count() == 4);
@@ -190,19 +215,24 @@ static void testNodeCursorNavigation() {
 }
 
 // ─── Test 7: insert helpers ──────────────────────────────────
-static void testInsertHelpers() {
+static void testInsertHelpers()
+{
     Graph g = makeTestGraph();
-    Draft draft; draft.graphId = "gtest";
+    Draft draft;
+    draft.graphId = "gtest";
 
     // Insert node
-    std::string nid = insertNode(g, &draft, "rect", "NewNode", 500, 200, 120, 44);
-    CHECK(g.findNode(nid) != nullptr);
-    CHECK(g.findNode(nid)->label == "NewNode");
+    std::string nid =
+        insertNode(g, &draft, "rect", "NewNode", 500, 200, 120, 44);
+    const gm::Node* inserted = g.findNode(nid);
+    CHECK(inserted != nullptr && inserted->label == "NewNode");
 
     // Insert edge
-    std::string eid = insertEdge(g, &draft, "A", nid, "to new");
-    bool foundEdge = false;
-    for (auto& e : g.edges) if (e.id == eid && e.label == "to new") foundEdge = true;
+    std::string eid       = insertEdge(g, &draft, "A", nid, "to new");
+    bool        foundEdge = false;
+    for (auto& e : g.edges)
+        if (e.id == eid && e.label == "to new")
+            foundEdge = true;
     CHECK(foundEdge);
 
     // Draft records
@@ -210,9 +240,11 @@ static void testInsertHelpers() {
 }
 
 // ─── Test 8: delete helpers ──────────────────────────────────
-static void testDeleteHelpers() {
+static void testDeleteHelpers()
+{
     Graph g = makeTestGraph();
-    Draft draft; draft.graphId = "gtest";
+    Draft draft;
+    draft.graphId = "gtest";
 
     int initialNodes = (int)g.nodes.size();
     int initialEdges = (int)g.edges.size();
@@ -223,13 +255,15 @@ static void testDeleteHelpers() {
     CHECK(g.findNode("A") == nullptr);
     CHECK((int)g.nodes.size() == initialNodes - 1);
     // Edge A->B should be deleted too
-    for (auto& e : g.edges) CHECK(e.from != "A");
+    for (auto& e : g.edges)
+        CHECK(e.from != "A");
 
     // Delete edge by id
     std::string eid = g.edges[0].id;
-    bool ok2 = deleteEdge(g, &draft, eid);
+    bool        ok2 = deleteEdge(g, &draft, eid);
     CHECK(ok2);
-    CHECK((int)g.edges.size() == initialEdges - 2); // one from cascade, one from direct
+    CHECK((int)g.edges.size() ==
+          initialEdges - 2);  // one from cascade, one from direct
 
     // Delete non-existent
     CHECK(!deleteNode(g, &draft, "nonexistent"));
@@ -237,7 +271,8 @@ static void testDeleteHelpers() {
 }
 
 // ─── Test 9: Draft-less cursor (nullptr) ─────────────────────
-static void testCursorNoDraft() {
+static void testCursorNoDraft()
+{
     Graph g = makeTestGraph();
 
     // Should work without draft (just no recording)
@@ -251,7 +286,8 @@ static void testCursorNoDraft() {
 }
 
 // ─── Test 10: Selector connectedTo ───────────────────────────
-static void testSelectorConnectedTo() {
+static void testSelectorConnectedTo()
+{
     Graph g = makeTestGraph();
 
     // Nodes connected to A: only B
@@ -265,13 +301,15 @@ static void testSelectorConnectedTo() {
 }
 
 // ─── Test 11: SelectionCursor deleteAll ──────────────────────
-static void testSelectionCursorDeleteAll() {
+static void testSelectionCursorDeleteAll()
+{
     Graph g = makeTestGraph();
-    Draft draft; draft.graphId = "gtest";
+    Draft draft;
+    draft.graphId = "gtest";
 
     // Delete all diamond-shaped nodes
-    auto sc = select(g, &draft, Selector::byType("diamond"));
-    int diamondCount = sc.count(); // D is diamond
+    auto sc           = select(g, &draft, Selector::byType("diamond"));
+    int  diamondCount = sc.count();  // D is diamond
     CHECK(diamondCount == 1);
 
     sc.deleteAll();
@@ -283,7 +321,8 @@ static void testSelectionCursorDeleteAll() {
     }
 }
 
-int main() {
+int main()
+{
     testNodeCursorExact();
     testNodeCursorUpdate();
     testNodeCursorSelector();
@@ -296,6 +335,7 @@ int main() {
     testSelectorConnectedTo();
     testSelectionCursorDeleteAll();
 
-    std::cout << "cursor tests: " << g_passed << " passed, " << g_failed << " failed\n";
+    std::cout << "cursor tests: " << g_passed << " passed, " << g_failed
+              << " failed\n";
     return g_failed == 0 ? 0 : 1;
 }

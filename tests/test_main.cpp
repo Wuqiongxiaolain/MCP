@@ -729,7 +729,7 @@ static void testMcpToolsRemaining()
     Json delEl = Json::parse(
         R"({"jsonrpc":"2.0","id":23,"method":"tools/call","params":{
             "name":"graph_delete_element","arguments":{"id":")" +
-            gid + R"(","node":")" + insertedId + R"("}}})",
+            gid + R"(","node":"A"}}})",
         &err);
     CHECK(mcp::handleMessage(delEl, store, resp));
     Json de = Json::parse(mcpText(resp), &err);

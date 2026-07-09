@@ -65,7 +65,7 @@ fail() {
 
 start_server() {
     coproc MCP_SERVER { "$BIN" serve 2>> "$LOG_FILE"; }
-    SERVER_PID=$COPROC_PID
+    SERVER_PID=$MCP_SERVER_PID
 }
 
 rpc_call() {

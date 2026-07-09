@@ -123,7 +123,7 @@ fi
 
 rpc_call '{"jsonrpc":"2.0","id":3,"method":"tools/list"}'
 TOOLS_LEN="$(jq -r '.result.tools | length' "$TMP_RESP")"
-check_eq "tools/list" "$TOOLS_LEN" "24" "tools.length=$TOOLS_LEN"
+check_eq "tools/list" "$TOOLS_LEN" "25" "tools.length=$TOOLS_LEN"
 
 rpc_call '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"graph_create","arguments":{"content":"flowchart TD\nA[Start]-->B[Done]","name":"mcp-smoke"}}}'
 CREATE_TEXT="$(extract_text)"

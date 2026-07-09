@@ -137,6 +137,38 @@ class Json {
         return 0;
     }
 
+    // ---- 类型安全常量访问器 ----
+    // as_str/as_num/as_bool: 直接从 JSON 值提取对应类型；类型不匹配时返回安全默认值
+    std::string as_str() const
+    {
+        return isStr() ? s : "";
+    }
+    double as_num() const
+    {
+        return isNum() ? n : 0.0;
+    }
+
+    // ---- 数组索引访问 ----
+    // operator[] 整型重载：随机访问数组元素（const 版本，越界返回静态空 Json）
+    const Json& operator[](size_t idx) const
+    {
+        if (t == ARR && a && idx < a->size())
+            return (*a)[idx];
+        static const Json null_json;
+        return null_json;
+    }
+    // operator[] 整型重载：随机访问数组元素（非 const 版本，自动扩容）
+    Json& operator[](size_t idx)
+    {
+        if (t != ARR) {
+            t = ARR;
+            a = std::make_shared<JArray>();
+        }
+        if (idx >= a->size())
+            a->resize(idx + 1);
+        return (*a)[idx];
+    }
+
     // ---- 序列化 ----
     // escape: 序列化前转义控制字符，保证输出是合法 JSON 字符串
     static void escape(const std::string& in, std::string& out)

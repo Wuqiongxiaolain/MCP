@@ -3,10 +3,9 @@ name: CD 制品发布
 on:
   push:
     tags:
-      - '*'
+      - 'v*'
 
-permissions:
-  contents: write
+permissions: {}
 
 concurrency:
   group: cd-${{ github.workflow }}-${{ github.ref }}
@@ -126,6 +125,8 @@ jobs:
     if: ${{ !github.event.deleted }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
 
     steps:
       - name: 下载全部平台制品

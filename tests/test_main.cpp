@@ -788,7 +788,7 @@ static void testMcpProtocol()
     Json tl =
         Json::parse(R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})", &err);
     CHECK(mcp::handleMessage(tl, store, resp));
-    CHECK(resp.find("result")->find("tools")->size() == 8);
+    CHECK(resp.find("result")->find("tools")->size() == 24);
     // tools/call graph_create
     Json call = Json::parse(
         R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
@@ -831,6 +831,78 @@ static void testMcpProtocol()
     Json bad = Json::parse(R"({"jsonrpc":"2.0","id":5,"method":"nope"})", &err);
     CHECK(mcp::handleMessage(bad, store, resp));
     CHECK(resp.find("error") != nullptr);
+
+    // tools/call graph_status
+    Json st = Json::parse(
+        R"({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{
+            "name":"graph_status","arguments":{"id":")" + gid +
+        R"("}}})", &err);
+    CHECK(mcp::handleMessage(st, store, resp));
+    text = resp.find("result")->find("content")->a->at(0).str("text");
+    CHECK(text.find("headVersion") != std::string::npos);
+
+    // tools/call graph_layout
+    Json lay = Json::parse(
+        R"({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{
+            "name":"graph_layout","arguments":{"id":")" + gid +
+        R"(","strategy":"auto"}}})", &err);
+    CHECK(mcp::handleMessage(lay, store, resp));
+    text = resp.find("result")->find("content")->a->at(0).str("text");
+    CHECK(text.find("layout applied") != std::string::npos);
+
+    // tools/call graph_show
+    Json sh = Json::parse(
+        R"({"jsonrpc":"2.0","id":8,"method":"tools/call","params":{
+            "name":"graph_show","arguments":{"id":")" + gid +
+        R"("}}})", &err);
+    CHECK(mcp::handleMessage(sh, store, resp));
+    text = resp.find("result")->find("content")->a->at(0).str("text");
+    CHECK(text.find("nodeList") != std::string::npos);
+
+    // tools/call graph_update
+    Json upd = Json::parse(
+        R"({"jsonrpc":"2.0","id":9,"method":"tools/call","params":{
+            "name":"graph_update","arguments":{"id":")" + gid +
+        R"(","node":"X","set":"label=MCP Updated"}}})", &err);
+    CHECK(mcp::handleMessage(upd, store, resp));
+    text = resp.find("result")->find("content")->a->at(0).str("text");
+    CHECK(text.find("updated") != std::string::npos);
+
+    // tools/call graph_draft
+    Json dr = Json::parse(
+        R"({"jsonrpc":"2.0","id":10,"method":"tools/call","params":{
+            "name":"graph_draft","arguments":{"id":")" + gid +
+        R"(","action":"show"}}})", &err);
+    CHECK(mcp::handleMessage(dr, store, resp));
+    text = resp.find("result")->find("content")->a->at(0).str("text");
+    CHECK(text.find("operationCount") != std::string::npos);
+
+    // tools/call graph_commit (commit all)
+    Json cmt = Json::parse(
+        R"({"jsonrpc":"2.0","id":11,"method":"tools/call","params":{
+            "name":"graph_commit","arguments":{"id":")" + gid +
+        R"(","message":"mcp test commit","all":true}}})", &err);
+    CHECK(mcp::handleMessage(cmt, store, resp));
+    text = resp.find("result")->find("content")->a->at(0).str("text");
+    CHECK(text.find("committed") != std::string::npos);
+
+    // tools/call graph_diff
+    Json df = Json::parse(
+        R"({"jsonrpc":"2.0","id":12,"method":"tools/call","params":{
+            "name":"graph_diff","arguments":{"id":")" + gid +
+        R"(","v1":1,"v2":2,"format":"json"}}})", &err);
+    CHECK(mcp::handleMessage(df, store, resp));
+    text = resp.find("result")->find("content")->a->at(0).str("text");
+    CHECK(text.find("operations") != std::string::npos);
+
+    // tools/call graph_delete
+    Json del = Json::parse(
+        R"({"jsonrpc":"2.0","id":13,"method":"tools/call","params":{
+            "name":"graph_delete","arguments":{"id":")" + gid +
+        R"(","force":true}}})", &err);
+    CHECK(mcp::handleMessage(del, store, resp));
+    text = resp.find("result")->find("content")->a->at(0).str("text");
+    CHECK(text.find("deleted") != std::string::npos);
 }
 
 int runAll()

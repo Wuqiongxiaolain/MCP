@@ -267,23 +267,31 @@ inline void layoutGrid(Graph& g)
 }
 
 // 入口：按图类型选择布局策略，并先补齐节点尺寸
-// layout: 总布局入口（按图类型选择策略）
+// layout: 总布局入口（按图类型或显式策略选择）
 // 关键步骤：补默认尺寸 -> 策略分发 -> 坐标归一化到正区间
-inline void layout(Graph& g, bool force = false)
-{
+inline void layout(Graph& g, bool force = false,
+                   const std::string& strategy = "") {
     if (g.laidOut && !force)
         return;
     for (auto& n : g.nodes)
         if (n.w <= 0 || n.h <= 0)
             gm::defaultSize(n);
-    if (g.type == "mindmap")
-        layoutTree(g, true);
-    else if (g.type == "orgchart")
-        layoutTree(g, false);
-    else if (g.edges.empty())
-        layoutGrid(g);
-    else
+    if (strategy == "layered")
         layoutLayered(g);
+    else if (strategy == "tree-h")
+        layoutTree(g, true);
+    else if (strategy == "tree-v")
+        layoutTree(g, false);
+    else if (strategy == "grid")
+        layoutGrid(g);
+    else if (strategy == "auto" || strategy.empty()) {
+        if (g.type == "mindmap")       layoutTree(g, true);
+        else if (g.type == "orgchart") layoutTree(g, false);
+        else if (g.edges.empty())      layoutGrid(g);
+        else                           layoutLayered(g);
+    } else {
+        layoutLayered(g);  // 未知策略回退
+    }
     // 坐标归一化到正区间
     double minX = 1e18, minY = 1e18;
     for (auto& n : g.nodes) {

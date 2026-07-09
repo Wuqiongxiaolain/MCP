@@ -6,6 +6,7 @@
 #pragma once
 #include "exporters.hpp"  // 复用 writeFile / readFile
 #include "model.hpp"
+#include "version_types.hpp"  // gv::nowIso / gv::isValidId
 #include <ctime>
 
 #ifdef _WIN32
@@ -30,20 +31,8 @@ inline void makeDir(const std::string& path)
 #endif
 }
 
-// nowIso: 生成本地时间 ISO 字符串，用于版本时间戳
-inline std::string nowIso()
-{
-    time_t    t   = time(nullptr);
-    struct tm tmv = {};
-#ifdef _WIN32
-    localtime_s(&tmv, &t);
-#else
-    localtime_r(&t, &tmv);
-#endif
-    char buf[32];
-    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", &tmv);
-    return buf;
-}
+// nowIso/nowIso 已统一到 gv::nowIso (version_types.hpp)，避免维护分歧
+using gv::nowIso;
 
 // Store: 文件系统版图存储服务（索引 + latest + versions）
 class Store {
@@ -61,6 +50,11 @@ class Store {
 
     const std::string& root() const
     { return root_; }
+
+    // isValidGraphId: 委托统一的 gv::isValidId (version_types.hpp)
+    static bool isValidGraphId(const std::string& id) {
+        return gv::isValidId(id);
+    }
 
     // ---- 索引 ----
     // loadIndex: 读取索引；文件缺失或损坏时返回空索引结构
@@ -89,10 +83,12 @@ class Store {
     // 返回新版本号
     // save: 保存当前图并创建不可变快照版本
     // 关键步骤：补齐 id/name -> 写 latest -> 写 versions/vN -> 更新索引版本计数
-    int save(Graph& g, const std::string& note = "")
+    int save(Graph& g, const std::string& note = "",
+             int parentVersion = 0, const std::string& commitId = "")
     {
         if (g.id.empty())
             g.id = gm::genId();
+        if (!isValidGraphId(g.id)) return -1;
         if (g.name.empty())
             g.name = g.id;
         std::string dir = root_ + "/" + g.id;
@@ -118,6 +114,9 @@ class Store {
         snap.set("version", version);
         snap.set("savedAt", nowIso());
         snap.set("note", note);
+        snap.set("parent", parentVersion);
+        if (!commitId.empty())
+            snap.set("commitId", commitId);
         snap.set("model", model);
         ge::writeFile(dir + "/versions/v" + std::to_string(version) + ".json",
                       snap.dump(2));
@@ -149,6 +148,10 @@ class Store {
               int                version = 0,
               std::string*       err     = nullptr) const
     {
+        if (!isValidGraphId(id)) {
+            if (err) *err = "invalid graph id";
+            return false;
+        }
         std::string path;
         if (version <= 0) {
             path = root_ + "/" + id + "/latest.json";
@@ -236,8 +239,11 @@ class Store {
             return false;
         g.id   = id;
         int nv = save(g, "rollback to v" + std::to_string(version));
-        if (newVersion)
-            *newVersion = nv;
+        if (nv < 0) {
+            if (err) *err = "rollback save failed";
+            return false;
+        }
+        if (newVersion) *newVersion = nv;
         return true;
     }
 

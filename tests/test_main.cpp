@@ -22,7 +22,9 @@ static int g_passed = 0;
     } while (0)
 
 using gj::Json;
+using gm::Edge;
 using gm::Graph;
+using gm::Node;
 
 static void testJson()
 {
@@ -919,6 +921,95 @@ static void testMcpProtocol()
     CHECK(text.find("deleted") != std::string::npos);
 }
 
+static void testParseDrawio()
+{
+    std::string d =
+        "<mxfile host=\"graphmcp\">\n"
+        "  <diagram name=\"Test\" id=\"d1\">\n"
+        "    <mxGraphModel>\n"
+        "      <root>\n"
+        "        <mxCell id=\"0\"/>\n"
+        "        <mxCell id=\"1\" parent=\"0\"/>\n"
+        "        <mxCell id=\"A\" value=\"Start\" style=\"rounded=1;\" "
+        "vertex=\"1\" parent=\"1\">\n"
+        "          <mxGeometry x=\"100\" y=\"50\" width=\"120\" height=\"60\" "
+        "as=\"geometry\"/>\n"
+        "        </mxCell>\n"
+        "        <mxCell id=\"B\" value=\"End\" style=\"rhombus;\" "
+        "vertex=\"1\" parent=\"1\">\n"
+        "          <mxGeometry x=\"300\" y=\"50\" width=\"120\" height=\"60\" "
+        "as=\"geometry\"/>\n"
+        "        </mxCell>\n"
+        "        <mxCell id=\"edge1\" value=\"ok\" style=\"dashed=1;\" "
+        "edge=\"1\" parent=\"1\" source=\"A\" target=\"B\">\n"
+        "          <mxGeometry relative=\"1\" as=\"geometry\"/>\n"
+        "        </mxCell>\n"
+        "      </root>\n"
+        "    </mxGraphModel>\n"
+        "  </diagram>\n"
+        "</mxfile>";
+    Graph g = gp::parseDrawio(d);
+    CHECK(g.name == "Test");
+    CHECK(g.nodes.size() == 2);
+    CHECK(g.edges.size() == 1);
+    CHECK(g.findNode("A")->shape == "round");
+    CHECK(g.findNode("B")->shape == "diamond");
+    CHECK(g.edges[0].from == "A");
+    CHECK(g.edges[0].style == "dashed");
+    Graph g2 = gp::parseAny(d);
+    CHECK(g2.nodes.size() == 2);
+}
+
+static void testDrawioRoundTrip()
+{
+    Graph g;
+    g.name   = "RoundTrip";
+    g.type   = "flowchart";
+    Node& n1 = g.ensureNode("n1", "Hello");
+    n1.shape = "round";
+    n1.x = 100; n1.y = 100; n1.w = 120; n1.h = 60;
+    Node& n2 = g.ensureNode("n2", "World");
+    n2.shape = "diamond";
+    n2.x = 300; n2.y = 100; n2.w = 120; n2.h = 60;
+    g.addEdge("n1", "n2", "Link", "solid");
+    std::string dx = ge::toDrawio(g);
+    CHECK(!dx.empty());
+    CHECK(dx.find("<mxfile") != std::string::npos);
+    Graph g2 = gp::parseDrawio(dx);
+    CHECK(g2.name == "RoundTrip");
+    CHECK(g2.nodes.size() >= 2);
+    CHECK(g2.edges.size() >= 1);
+}
+
+static void testMcpGraphImport()
+{
+    gs::Store   store("test-store-tmp");
+    std::string err;
+    Json call1 = Json::parse(R"({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"graph_create","arguments":{"content":"flowchart TD\nA-->B","name":"import-test"}}})", &err);
+    CHECK(err.empty());
+    Json resp1;
+    CHECK(mcp::handleMessage(call1, store, resp1));
+    const Json* res1 = resp1.find("result");
+    CHECK(res1 != nullptr);
+    const Json* ct1 = res1->find("content") ? &res1->find("content")->a->at(0) : nullptr;
+    CHECK(ct1 != nullptr);
+    Json j1 = Json::parse(ct1->str("text"), &err);
+    std::string gid = j1.str("id");
+    CHECK(!gid.empty());
+    Graph g;
+    CHECK(store.load(gid, g, 0, &err));
+    std::string fpath = store.root() + "/" + gid + "/open.drawio";
+    CHECK(ge::writeFile(fpath, ge::toDrawio(g)));
+    Json call2 = Json::parse(R"({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"graph_import","arguments":{"id":")" + gid + R"("}}})", &err);
+    Json resp2;
+    CHECK(mcp::handleMessage(call2, store, resp2));
+    const Json* res2 = resp2.find("result");
+    const Json* ct2 = res2 && res2->find("content") ? &res2->find("content")->a->at(0) : nullptr;
+    Json j2 = Json::parse(ct2 ? ct2->str("text") : "", &err);
+    CHECK(j2.str("status") == "imported");
+    CHECK((int)j2.num("version") == 2);
+}
+
 int runAll()
 {
     testJson();
@@ -941,6 +1032,9 @@ int runAll()
     testStorage();
     testMcpProtocol();
     testMcpExtended();
+    testParseDrawio();
+    testDrawioRoundTrip();
+    testMcpGraphImport();
     std::cout << "tests: " << g_passed << " passed, " << g_failed
               << " failed\n";
     return g_failed == 0 ? 0 : 1;

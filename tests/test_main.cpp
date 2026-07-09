@@ -320,6 +320,20 @@ static void testExcalidraw()
           std::string::npos);
     CHECK(startOnlySvg.find("marker-end=\"url(#arrow)\"") == std::string::npos);
 
+    // 箭头绑定 image 等非节点元素时，白板校验应通过（边端点为 element id）
+    std::string arrowToImage = R"({
+      "type":"excalidraw","version":2,"elements":[
+        {"id":"r1","type":"rectangle","x":10,"y":10,"width":80,"height":40},
+        {"id":"img1","type":"image","x":200,"y":10,"width":50,"height":40},
+        {"id":"arr","type":"arrow","x":50,"y":30,"width":160,"height":0,
+         "startBinding":{"elementId":"r1"},"endBinding":{"elementId":"img1"},
+         "endArrowhead":"arrow"}
+      ]})";
+    Graph       gai = gp::parseExcalidraw(arrowToImage);
+    CHECK(gai.edges.size() == 1);
+    auto vi         = gl::validate(gai);
+    CHECK(!gl::hasErrors(vi));
+
     // 多行彩色文本应保留颜色、透明度与 Excalifont；CSS 单引号不得被 &#39; 化
     std::string multiText = R"({
       "type":"excalidraw","version":2,"elements":[

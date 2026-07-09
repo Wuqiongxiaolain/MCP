@@ -138,6 +138,8 @@ class Store {
             idx["graphs"].push(e);
         }
         saveIndex(idx);
+        // 与 GraphVersionManager::writeHead 对齐，旧版 save/rollback 也更新 HEAD
+        ge::writeFile(dir + "/HEAD", std::to_string(version));
         return version;
     }
 

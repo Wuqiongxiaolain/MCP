@@ -594,7 +594,7 @@ int cmdEdit(Args& a, gs::Store& store)
     }
     std::string editorPath = ge::resolveEditor(editor,
                                                 a.get("editor-path"));
-    std::cout << "editing: " << target;
+    std::cout << "opening: " << target;
     if (!editorPath.empty())
         std::cout << " (editor: " << editorPath << ")";
     std::cout << "\n";

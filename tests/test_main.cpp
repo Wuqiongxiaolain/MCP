@@ -331,9 +331,9 @@ static void testExcalidraw()
          "startBinding":{"elementId":"r1"},"endBinding":{"elementId":"img1"},
          "endArrowhead":"arrow"}
       ]})";
-    Graph       gai = gp::parseExcalidraw(arrowToImage);
+    Graph       gai          = gp::parseExcalidraw(arrowToImage);
     CHECK(gai.edges.size() == 1);
-    auto vi         = gl::validate(gai);
+    auto vi = gl::validate(gai);
     CHECK(!gl::hasErrors(vi));
 
     // 多行彩色文本应保留颜色、透明度与 Excalifont；CSS 单引号不得被 &#39; 化
@@ -630,6 +630,324 @@ static void testMcpExtended()
     CHECK(resp.find("result") != nullptr);
 }
 
+static std::string mcpText(const Json& resp)
+{
+    const Json* result = resp.find("result");
+    CHECK(result != nullptr);
+    const Json* content = result ? result->find("content") : nullptr;
+    CHECK(content != nullptr);
+    CHECK(content && content->isArr());
+    CHECK(content && content->a && !content->a->empty());
+    if (content && content->isArr() && content->a && !content->a->empty())
+        return content->a->at(0).str("text");
+    return "";
+}
+
+static void testMcpToolsRemaining()
+{
+    gs::Store   store("test-store-tmp");
+    std::string err;
+    Json        resp;
+
+    Json create = Json::parse(
+        R"({"jsonrpc":"2.0","id":16,"method":"tools/call","params":{
+            "name":"graph_create","arguments":{
+              "content":"flowchart TD\nA[Start]-->B[End]","name":"mcp-remaining"}}})",
+        &err);
+    CHECK(mcp::handleMessage(create, store, resp));
+    Json        created = Json::parse(mcpText(resp), &err);
+    std::string gid     = created.str("id");
+    CHECK(!gid.empty());
+
+    Json ins = Json::parse(
+        R"({"jsonrpc":"2.0","id":17,"method":"tools/call","params":{
+            "name":"graph_insert","arguments":{"id":")" +
+            gid +
+            R"(","element":"node","type":"rect","label":"Inserted","position":"400 200"}}})",
+        &err);
+    CHECK(mcp::handleMessage(ins, store, resp));
+    Json inserted = Json::parse(mcpText(resp), &err);
+    CHECK(inserted.str("status") == "inserted");
+    std::string insertedId = inserted.str("elementId");
+    CHECK(!insertedId.empty());
+
+    Json stage = Json::parse(
+        R"({"jsonrpc":"2.0","id":18,"method":"tools/call","params":{
+            "name":"graph_stage","arguments":{"id":")" +
+            gid + R"(","action":"add"}}})",
+        &err);
+    CHECK(mcp::handleMessage(stage, store, resp));
+    Json staged = Json::parse(mcpText(resp), &err);
+    CHECK(staged.str("status") == "staged");
+    CHECK(staged.num("count") >= 1);
+
+    Json commit = Json::parse(
+        R"({"jsonrpc":"2.0","id":19,"method":"tools/call","params":{
+            "name":"graph_commit","arguments":{"id":")" +
+            gid + R"(","message":"remaining commit"}}})",
+        &err);
+    CHECK(mcp::handleMessage(commit, store, resp));
+    Json committed = Json::parse(mcpText(resp), &err);
+    CHECK(committed.str("status") == "committed");
+    CHECK(committed.num("version") >= 2);
+
+    Json diff = Json::parse(
+        R"({"jsonrpc":"2.0","id":20,"method":"tools/call","params":{
+            "name":"graph_diff","arguments":{"id":")" +
+            gid + R"(","v1":1,"v2":2,"format":"json"}}})",
+        &err);
+    CHECK(mcp::handleMessage(diff, store, resp));
+    Json        dj         = Json::parse(mcpText(resp), &err);
+    const Json* operations = dj.find("operations");
+    CHECK(operations != nullptr);
+    if (operations)
+        CHECK(operations->size() >= 1);
+    else
+        CHECK(false);
+
+    Json checkout = Json::parse(
+        R"({"jsonrpc":"2.0","id":21,"method":"tools/call","params":{
+            "name":"graph_checkout","arguments":{"id":")" +
+            gid + R"(","version":1}}})",
+        &err);
+    CHECK(mcp::handleMessage(checkout, store, resp));
+    Json co = Json::parse(mcpText(resp), &err);
+    CHECK(co.str("status") == "checkout complete");
+    CHECK((int)co.num("headVersion") == 1);
+
+    Json rollback = Json::parse(
+        R"({"jsonrpc":"2.0","id":22,"method":"tools/call","params":{
+            "name":"graph_rollback","arguments":{"id":")" +
+            gid + R"(","version":1}}})",
+        &err);
+    CHECK(mcp::handleMessage(rollback, store, resp));
+    Json rb = Json::parse(mcpText(resp), &err);
+    CHECK(rb.str("status") == "rolled back");
+    CHECK((int)rb.num("newVersion") >= 3);
+
+    Json delEl = Json::parse(
+        R"({"jsonrpc":"2.0","id":23,"method":"tools/call","params":{
+            "name":"graph_delete_element","arguments":{"id":")" +
+            gid + R"(","node":"A"}}})",
+        &err);
+    CHECK(mcp::handleMessage(delEl, store, resp));
+    Json de = Json::parse(mcpText(resp), &err);
+    CHECK(de.str("status") == "deleted");
+    CHECK(de.str("elementType") == "node");
+
+    // ── graph_open MCP 冒烟（不依赖 GUI，验证协议层完整性）
+    {
+        // 1. browser 模式：验证生成 mermaid.live URL
+        Json ob = Json::parse(
+            R"({"jsonrpc":"2.0","id":24,"method":"tools/call","params":{
+            "name":"graph_open","arguments":{"id":")" +
+            gid + R"(","editor":"browser"}}})",
+            &err);
+        CHECK(mcp::handleMessage(ob, store, resp));
+        Json obj = Json::parse(mcpText(resp), &err);
+        CHECK(obj.str("target").find("https://mermaid.live/") == 0);
+        CHECK(obj.str("editor") == "browser");
+        CHECK(obj.find("launched") != nullptr);
+
+        // 2. drawio 模式：验证生成 .drawio 文件路径
+        Json od = Json::parse(
+            R"({"jsonrpc":"2.0","id":25,"method":"tools/call","params":{
+            "name":"graph_open","arguments":{"id":")" +
+            gid + R"(","editor":"drawio"}}})",
+            &err);
+        CHECK(mcp::handleMessage(od, store, resp));
+        Json odj = Json::parse(mcpText(resp), &err);
+        CHECK(odj.str("target").find("/open.drawio") != std::string::npos);
+        CHECK(odj.str("editor") == "drawio");
+        CHECK(odj.find("availableEditors") != nullptr);
+
+        // 3. excalidraw 模式：验证生成 .excalidraw 文件路径
+        Json oe = Json::parse(
+            R"({"jsonrpc":"2.0","id":26,"method":"tools/call","params":{
+            "name":"graph_open","arguments":{"id":")" +
+            gid + R"(","editor":"excalidraw"}}})",
+            &err);
+        CHECK(mcp::handleMessage(oe, store, resp));
+        Json oej = Json::parse(mcpText(resp), &err);
+        CHECK(oej.str("target").find("/open.excalidraw") != std::string::npos);
+        CHECK(oej.str("editor") == "excalidraw");
+
+        // 4. svg 模式 + editorPath：验证显式编辑器路径
+        Json os = Json::parse(
+            R"({"jsonrpc":"2.0","id":27,"method":"tools/call","params":{
+            "name":"graph_open","arguments":{"id":")" +
+            gid +
+            R"(","editor":"svg","editorPath":"/usr/bin/code"}}})",
+            &err);
+        CHECK(mcp::handleMessage(os, store, resp));
+        Json osj = Json::parse(mcpText(resp), &err);
+        CHECK(osj.str("target").find("/open.svg") != std::string::npos);
+        CHECK(osj.str("editor") == "svg");
+        CHECK(osj.str("editorPath") == "/usr/bin/code");
+
+        // 5. 不存在的图：验证错误返回
+        Json onf = Json::parse(
+            R"({"jsonrpc":"2.0","id":28,"method":"tools/call","params":{
+            "name":"graph_open","arguments":{"id":"nonexistent-id"}}})",
+            &err);
+        CHECK(mcp::handleMessage(onf, store, resp));
+        CHECK(resp.find("result")->find("content")->a->at(0)
+                  .str("text")
+                  .find("graph not found") != std::string::npos);
+    }
+
+    // ── graph_import MCP 冒烟（编辑回导闭环）
+    {
+        // 1. 自动探测 open.drawio（由上面 graph_open drawio 生成）
+        Json ia = Json::parse(
+            R"({"jsonrpc":"2.0","id":29,"method":"tools/call","params":{
+            "name":"graph_import","arguments":{"id":")" +
+            gid + R"("}}})",
+            &err);
+        CHECK(mcp::handleMessage(ia, store, resp));
+        Json iaj = Json::parse(mcpText(resp), &err);
+        CHECK(iaj.str("status") == "imported");
+        CHECK(iaj.str("id") == gid);
+        CHECK((int)iaj.num("version") >= 2);
+        CHECK(iaj.num("nodes") >= 1);
+
+        // 2. 显式 content（mermaid 格式）
+        Json ic = Json::parse(
+            R"({"jsonrpc":"2.0","id":30,"method":"tools/call","params":{
+            "name":"graph_import","arguments":{"id":")" +
+            gid +
+            R"(","content":"flowchart TD\nX-->Y-->Z","format":"mermaid"}}})",
+            &err);
+        CHECK(mcp::handleMessage(ic, store, resp));
+        Json icj = Json::parse(mcpText(resp), &err);
+        CHECK(icj.str("status") == "imported");
+        CHECK((int)icj.num("version") >= 3);
+        CHECK(icj.num("nodes") == 3);
+
+        // 3. 不存在的 id：验证错误返回
+        Json inf = Json::parse(
+            R"({"jsonrpc":"2.0","id":31,"method":"tools/call","params":{
+            "name":"graph_import","arguments":{"id":"nonexistent-id"}}})",
+            &err);
+        CHECK(mcp::handleMessage(inf, store, resp));
+        CHECK(resp.find("result")->find("content")->a->at(0)
+                  .str("text")
+                  .find("graph not found") != std::string::npos);
+    }
+
+    Json copen = Json::parse(
+        R"({"jsonrpc":"2.0","id":32,"method":"tools/call","params":{
+            "name":"graph_cursor_open","arguments":{"id":")" +
+            gid + R"(","target":"nodes"}}})",
+        &err);
+    CHECK(mcp::handleMessage(copen, store, resp));
+    Json        copenj = Json::parse(mcpText(resp), &err);
+    std::string cid    = copenj.str("cursor");
+    CHECK(!cid.empty());
+
+    Json cget = Json::parse(
+        R"({"jsonrpc":"2.0","id":26,"method":"tools/call","params":{
+            "name":"graph_cursor_get","arguments":{"id":")" +
+            gid + R"(","cursor":")" + cid + R"("}}})",
+        &err);
+    CHECK(mcp::handleMessage(cget, store, resp));
+    Json cgetj = Json::parse(mcpText(resp), &err);
+    CHECK(cgetj.find("index") != nullptr);
+
+    Json cmove1 = Json::parse(
+        R"({"jsonrpc":"2.0","id":27,"method":"tools/call","params":{
+            "name":"graph_cursor_move","arguments":{"id":")" +
+            gid + R"(","cursor":")" + cid + R"(","delta":1}}})",
+        &err);
+    CHECK(mcp::handleMessage(cmove1, store, resp));
+    Json move1j = Json::parse(mcpText(resp), &err);
+    CHECK(move1j.find("index") != nullptr);
+
+    Json cmove2 = Json::parse(
+        R"({"jsonrpc":"2.0","id":28,"method":"tools/call","params":{
+            "name":"graph_cursor_move","arguments":{"id":")" +
+            gid + R"(","cursor":")" + cid + R"(","delta":-1}}})",
+        &err);
+    CHECK(mcp::handleMessage(cmove2, store, resp));
+    Json move2j = Json::parse(mcpText(resp), &err);
+    CHECK(move2j.find("index") != nullptr);
+
+    Json cclose = Json::parse(
+        R"({"jsonrpc":"2.0","id":29,"method":"tools/call","params":{
+            "name":"graph_cursor_close","arguments":{"id":")" +
+            gid + R"(","cursor":")" + cid + R"("}}})",
+        &err);
+    CHECK(mcp::handleMessage(cclose, store, resp));
+    Json cclosej = Json::parse(mcpText(resp), &err);
+    CHECK(cclosej.boolean("closed", false));
+
+    Json del = Json::parse(
+        R"({"jsonrpc":"2.0","id":30,"method":"tools/call","params":{
+            "name":"graph_delete","arguments":{"id":")" +
+            gid + R"(","force":true}}})",
+        &err);
+    CHECK(mcp::handleMessage(del, store, resp));
+    CHECK(mcpText(resp).find("deleted") != std::string::npos);
+}
+
+static void testMcpErrors()
+{
+    gs::Store   store("test-store-tmp");
+    std::string err;
+    Json        resp;
+
+    Json unknown = Json::parse(
+        R"({"jsonrpc":"2.0","id":31,"method":"tools/call","params":{
+            "name":"graph_nope","arguments":{}}})",
+        &err);
+    CHECK(mcp::handleMessage(unknown, store, resp));
+    const Json* result = resp.find("result");
+    CHECK(result != nullptr);
+    if (result)
+        CHECK(result->boolean("isError", false));
+    else
+        CHECK(false);
+    CHECK(mcpText(resp).find("unknown tool") != std::string::npos);
+
+    Json validateMissing = Json::parse(
+        R"({"jsonrpc":"2.0","id":32,"method":"tools/call","params":{
+            "name":"graph_validate","arguments":{}}})",
+        &err);
+    CHECK(mcp::handleMessage(validateMissing, store, resp));
+    result = resp.find("result");
+    CHECK(result != nullptr);
+    if (result)
+        CHECK(result->boolean("isError", false));
+    else
+        CHECK(false);
+    CHECK(mcpText(resp).find("provide either 'id' or 'content'") !=
+          std::string::npos);
+
+    Json create = Json::parse(
+        R"({"jsonrpc":"2.0","id":33,"method":"tools/call","params":{
+            "name":"graph_create","arguments":{
+              "content":"flowchart TD\nA-->B","name":"mcp-error"}}})",
+        &err);
+    CHECK(mcp::handleMessage(create, store, resp));
+    Json        created = Json::parse(mcpText(resp), &err);
+    std::string gid     = created.str("id");
+    CHECK(!gid.empty());
+
+    Json emptyCommit = Json::parse(
+        R"({"jsonrpc":"2.0","id":34,"method":"tools/call","params":{
+            "name":"graph_commit","arguments":{"id":")" +
+            gid + R"(","message":"should fail"}}})",
+        &err);
+    CHECK(mcp::handleMessage(emptyCommit, store, resp));
+    result = resp.find("result");
+    CHECK(result != nullptr);
+    if (result)
+        CHECK(result->boolean("isError", false));
+    else
+        CHECK(false);
+    CHECK(mcpText(resp).find("nothing to commit") != std::string::npos);
+}
+
 static void testDetect()
 {
     CHECK(gp::detectFormat("flowchart TD\nA-->B") == "mermaid");
@@ -851,8 +1169,9 @@ static void testMcpProtocol()
     // tools/call graph_status
     Json st = Json::parse(
         R"({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{
-            "name":"graph_status","arguments":{"id":")" + gid +
-        R"("}}})", &err);
+            "name":"graph_status","arguments":{"id":")" +
+            gid + R"("}}})",
+        &err);
     CHECK(mcp::handleMessage(st, store, resp));
     text = resp.find("result")->find("content")->a->at(0).str("text");
     CHECK(text.find("headVersion") != std::string::npos);
@@ -860,8 +1179,9 @@ static void testMcpProtocol()
     // tools/call graph_layout
     Json lay = Json::parse(
         R"({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{
-            "name":"graph_layout","arguments":{"id":")" + gid +
-        R"(","strategy":"auto"}}})", &err);
+            "name":"graph_layout","arguments":{"id":")" +
+            gid + R"(","strategy":"auto"}}})",
+        &err);
     CHECK(mcp::handleMessage(lay, store, resp));
     text = resp.find("result")->find("content")->a->at(0).str("text");
     CHECK(text.find("layout applied") != std::string::npos);
@@ -869,8 +1189,9 @@ static void testMcpProtocol()
     // tools/call graph_show
     Json sh = Json::parse(
         R"({"jsonrpc":"2.0","id":8,"method":"tools/call","params":{
-            "name":"graph_show","arguments":{"id":")" + gid +
-        R"("}}})", &err);
+            "name":"graph_show","arguments":{"id":")" +
+            gid + R"("}}})",
+        &err);
     CHECK(mcp::handleMessage(sh, store, resp));
     text = resp.find("result")->find("content")->a->at(0).str("text");
     CHECK(text.find("nodeList") != std::string::npos);
@@ -878,8 +1199,9 @@ static void testMcpProtocol()
     // tools/call graph_update
     Json upd = Json::parse(
         R"({"jsonrpc":"2.0","id":9,"method":"tools/call","params":{
-            "name":"graph_update","arguments":{"id":")" + gid +
-        R"(","node":"X","set":"label=MCP Updated"}}})", &err);
+            "name":"graph_update","arguments":{"id":")" +
+            gid + R"(","node":"X","set":"label=MCP Updated"}}})",
+        &err);
     CHECK(mcp::handleMessage(upd, store, resp));
     text = resp.find("result")->find("content")->a->at(0).str("text");
     CHECK(text.find("updated") != std::string::npos);
@@ -887,8 +1209,9 @@ static void testMcpProtocol()
     // tools/call graph_draft
     Json dr = Json::parse(
         R"({"jsonrpc":"2.0","id":10,"method":"tools/call","params":{
-            "name":"graph_draft","arguments":{"id":")" + gid +
-        R"(","action":"show"}}})", &err);
+            "name":"graph_draft","arguments":{"id":")" +
+            gid + R"(","action":"show"}}})",
+        &err);
     CHECK(mcp::handleMessage(dr, store, resp));
     text = resp.find("result")->find("content")->a->at(0).str("text");
     CHECK(text.find("operationCount") != std::string::npos);
@@ -896,8 +1219,9 @@ static void testMcpProtocol()
     // tools/call graph_commit (commit all)
     Json cmt = Json::parse(
         R"({"jsonrpc":"2.0","id":11,"method":"tools/call","params":{
-            "name":"graph_commit","arguments":{"id":")" + gid +
-        R"(","message":"mcp test commit","all":true}}})", &err);
+            "name":"graph_commit","arguments":{"id":")" +
+            gid + R"(","message":"mcp test commit","all":true}}})",
+        &err);
     CHECK(mcp::handleMessage(cmt, store, resp));
     text = resp.find("result")->find("content")->a->at(0).str("text");
     CHECK(text.find("committed") != std::string::npos);
@@ -905,8 +1229,9 @@ static void testMcpProtocol()
     // tools/call graph_diff
     Json df = Json::parse(
         R"({"jsonrpc":"2.0","id":12,"method":"tools/call","params":{
-            "name":"graph_diff","arguments":{"id":")" + gid +
-        R"(","v1":1,"v2":2,"format":"json"}}})", &err);
+            "name":"graph_diff","arguments":{"id":")" +
+            gid + R"(","v1":1,"v2":2,"format":"json"}}})",
+        &err);
     CHECK(mcp::handleMessage(df, store, resp));
     text = resp.find("result")->find("content")->a->at(0).str("text");
     CHECK(text.find("operations") != std::string::npos);
@@ -914,8 +1239,9 @@ static void testMcpProtocol()
     // tools/call graph_delete
     Json del = Json::parse(
         R"({"jsonrpc":"2.0","id":13,"method":"tools/call","params":{
-            "name":"graph_delete","arguments":{"id":")" + gid +
-        R"(","force":true}}})", &err);
+            "name":"graph_delete","arguments":{"id":")" +
+            gid + R"(","force":true}}})",
+        &err);
     CHECK(mcp::handleMessage(del, store, resp));
     text = resp.find("result")->find("content")->a->at(0).str("text");
     CHECK(text.find("deleted") != std::string::npos);
@@ -1032,6 +1358,8 @@ int runAll()
     testStorage();
     testMcpProtocol();
     testMcpExtended();
+    testMcpToolsRemaining();
+    testMcpErrors();
     testParseDrawio();
     testDrawioRoundTrip();
     testMcpGraphImport();

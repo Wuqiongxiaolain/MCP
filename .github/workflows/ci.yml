@@ -23,7 +23,7 @@ jobs:
       - name: 安装构建依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++ make python3 imagemagick
+          sudo apt-get install -y g++ make python3 imagemagick jq
 
       - name: 编译
         run: make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
@@ -36,12 +36,31 @@ jobs:
           SMOKE_REQUIRE_RASTER: "1"
         run: make smoke
 
+      - name: MCP 冒烟
+        env:
+          GRAPHMCP_LOG: info
+        run: make mcp-smoke
+
       - name: 上传冒烟报告
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: smoke-report-${{ github.run_number }}
-          path: SMOKE_REPORT.md
+          path: |
+            SMOKE_REPORT.md
+            mcp-smoke.log
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: 上传测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ github.run_number }}
+          path: |
+            examples/example_testout/TEST_REPORT.md
+            examples/example_testout/TEST_REPORT.json
+            mcp-smoke.log
           retention-days: 30
           if-no-files-found: ignore
 

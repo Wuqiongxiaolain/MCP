@@ -3,7 +3,8 @@
 # Usage: bash tests/smoke_test.sh [path/to/graphmcp]
 # Default binary: ./bin/graphmcp (Linux) or ./bin/graphmcp.exe (Windows)
 
-set -euo pipefail
+# 不用 set -e：断言走 pass/fail 计数，避免前置 setup 失败时跳过报告生成
+set -uo pipefail
 
 BIN="${1:-}"
 if [ -z "$BIN" ]; then
@@ -23,6 +24,7 @@ STORE="smoke-test-store-$$"
 export GRAPHMCP_STORE="$STORE"
 PASSED=0
 FAILED=0
+SVG_FALLBACK=0
 
 cleanup() {
     rm -rf "$STORE" smoke-*.svg smoke-*.drawio smoke-*.mmd smoke-*.json smoke-*.png smoke-*.pdf smoke-*.excalidraw smoke-fix-* smoke-broken.xml 2>/dev/null || true
@@ -76,14 +78,17 @@ run_fails() {
     fi
 }
 
-# run_output_file: 断言输出文件非空；png/pdf 允许 SVG 回退
+# run_output_file: 断言输出文件非空；本地无栅格化工具时允许 SVG 回退（CI 设 SMOKE_REQUIRE_RASTER=1 则强制 png/pdf）
 run_output_file() {
     local label="$1" out="$2"; shift 2
     "$BIN" "$@" > /dev/null 2>&1 || true
     if [ -s "$out" ]; then
         pass "$label"
+    elif [ "${SMOKE_REQUIRE_RASTER:-}" = "1" ]; then
+        fail "$label" "required raster output missing at $out (SMOKE_REQUIRE_RASTER=1)"
     elif [ -s "${out%.png}.svg" ] || [ -s "${out%.pdf}.svg" ]; then
         pass "$label (svg fallback)"
+        SVG_FALLBACK=$((SVG_FALLBACK + 1))
     else
         fail "$label" "no output at $out"
     fi
@@ -164,21 +169,21 @@ run_stdout_contains "draft reset" "discarded" version draft reset smoke-1
 
 # ─── draft (独立命令族) ───────────────────────────────────────
 echo "[draft]"
-"$BIN" graph update --node A --set label="Draft Test" smoke-1 > /dev/null 2>&1
+"$BIN" graph update --node A --set label="Draft Test" smoke-1 > /dev/null 2>&1 || true
 run_stdout_contains "draft status" '"draft"' draft status smoke-1
 run_stdout_contains "draft discard" "discarded" draft discard smoke-1
 
 # ─── version stage + commit ───────────────────────────────────
 echo "[version stage+commit]"
 # Make a change first
-"$BIN" graph update --node A --set label="Staged Label" smoke-1 > /dev/null 2>&1
+"$BIN" graph update --node A --set label="Staged Label" smoke-1 > /dev/null 2>&1 || true
 run_stdout_contains "stage all" "staged" version stage smoke-1
 run_stdout_contains "stage show" "Staged" version stage show smoke-1
 run_stdout_contains "commit" "committed smoke-1 v" version commit smoke-1 -m "smoke test commit"
 run_stdout_contains "stage clear" "cleared" version stage clear smoke-1
 
 # Make another change and commitAll
-"$BIN" graph update --node B --set label="Skipped Stage" smoke-1 > /dev/null 2>&1
+"$BIN" graph update --node B --set label="Skipped Stage" smoke-1 > /dev/null 2>&1 || true
 run_stdout_contains "commit --all" "committed" version commit smoke-1 -m "direct commit" --all
 
 # ─── version log ──────────────────────────────────────────────
@@ -248,6 +253,7 @@ echo "[validate]"
 run_stdout_contains "validate graph" "valid: no issues found" validate graph --id smoke-1
 run_stdout_contains "validate input" "valid: no issues found" validate input --file examples/example_input/er.mmd --input-format mermaid
 run_stdout_contains "validate strict" "valid: no issues found" validate input --file examples/example_input/flowchart.mmd --strict
+run_stdout_contains "validate architecture xml" "valid: no issues found" validate input --file examples/example_input/architecture.xml --input-format xml
 
 # 悬空边触发结构校验错误（Mermaid 会自动补全未声明节点）
 printf '<graph type="flowchart"><node id="a" label="A"/><edge from="a" to="missing"/></graph>' > smoke-broken.xml
@@ -263,16 +269,16 @@ run_fails "invalid graph id"    graph show nonexistent-graph
 run_fails "invalid node ref"    graph update --node FAKE --set label=X smoke-1
 run_fails "commit empty stage"  version commit smoke-1 -m "should fail"
 # 制造未提交 draft 后 checkout 应失败
-"$BIN" graph update --node A --set label="dirty checkout test" smoke-1 > /dev/null 2>&1
+"$BIN" graph update --node A --set label="dirty checkout test" smoke-1 > /dev/null 2>&1 || true
 run_fails "checkout dirty"      version checkout smoke-1 1
 run_stdout_contains "help flag" "usage" --help
 
 # ─── fixture-regression（与 CI 样例输出比对）────────────────────
 echo "[fixture-regression]"
-"$BIN" convert to-mermaid --file examples/example_input/workflow.drawio --output smoke-fix-workflow.mmd > /dev/null 2>&1
-"$BIN" convert to-mermaid --file examples/example_input/whiteboard_freedraw.excalidraw --output smoke-fix-whiteboard.mmd > /dev/null 2>&1
-"$BIN" convert to-mermaid --file examples/example_input/architecture.xml --output smoke-fix-architecture.mmd > /dev/null 2>&1
-"$BIN" convert to-svg --file examples/example_input/whiteboard_freedraw.excalidraw --output smoke-fix-whiteboard.svg > /dev/null 2>&1
+"$BIN" convert to-mermaid --file examples/example_input/workflow.drawio --output smoke-fix-workflow.mmd > /dev/null 2>&1 || true
+"$BIN" convert to-mermaid --file examples/example_input/whiteboard_freedraw.excalidraw --output smoke-fix-whiteboard.mmd > /dev/null 2>&1 || true
+"$BIN" convert to-mermaid --file examples/example_input/architecture.xml --output smoke-fix-architecture.mmd > /dev/null 2>&1 || true
+"$BIN" convert to-svg --file examples/example_input/whiteboard_freedraw.excalidraw --output smoke-fix-whiteboard.svg > /dev/null 2>&1 || true
 if diff -q --strip-trailing-cr smoke-fix-workflow.mmd examples/example_output/workflow.drawio_out/workflow.drawio.mmd > /dev/null 2>&1; then
     pass "fixture workflow mermaid"
 else
@@ -312,21 +318,35 @@ fi
 # ─── legacy-compat（旧版扁平命令回归）──────────────────────────
 echo "[legacy-compat]"
 LEGACY_ID="smoke-legacy"
-"$BIN" create --input examples/example_input/flowchart.mmd --id "$LEGACY_ID" --name legacy-flow > /dev/null 2>&1
-"$BIN" create --input examples/example_input/orgchart.csv --id "$LEGACY_ID" --name legacy-org > /dev/null 2>&1
+"$BIN" create --input examples/example_input/flowchart.mmd --id "$LEGACY_ID" --name legacy-flow > /dev/null 2>&1 || true
+"$BIN" create --input examples/example_input/orgchart.csv --id "$LEGACY_ID" --name legacy-org > /dev/null 2>&1 || true
 run_stdout_contains "legacy list" "$LEGACY_ID" list
 run_stdout_contains "legacy history v1" "v1" history --id "$LEGACY_ID"
 run_stdout_contains "legacy history v2" "v2" history --id "$LEGACY_ID"
 run_ok "legacy rollback" rollback --id "$LEGACY_ID" --version 1
 run_stdout_contains "legacy open" "opening:" open --id "$LEGACY_ID"
 
-# ─── serve (basic protocol check) ─────────────────────────────
+# ─── serve (stdio JSON-RPC 集成) ────────────────────────────────
 echo "[serve]"
-SERVE_OUT=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n' | "$BIN" serve 2>&1 || true)
+SERVE_OUT=$(printf '%s\n%s\n%s\n' \
+    '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+    '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+    '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"graph_create","arguments":{"content":"flowchart TD\nM[MCP]-->N[Test]","name":"ci-mcp"}}}' \
+    | "$BIN" serve 2>&1 || true)
 if echo "$SERVE_OUT" | grep -q "protocolVersion"; then
     pass "serve initialize"
 else
     fail "serve initialize" "$SERVE_OUT"
+fi
+if echo "$SERVE_OUT" | grep -Fq "graph_create"; then
+    pass "serve tools/list"
+else
+    fail "serve tools/list" "graph_create not in tools/list output"
+fi
+if echo "$SERVE_OUT" | grep -Eq '(\\"status\\"|"status")[[:space:]]*:[[:space:]]*(\\"created\\"|"created")'; then
+    pass "serve graph_create"
+else
+    fail "serve graph_create" "created status not found in: $SERVE_OUT"
 fi
 
 # ─── summary ──────────────────────────────────────────────────
@@ -344,6 +364,8 @@ echo "=========================================="
     echo "- store: $STORE"
     echo "- passed: $PASSED"
     echo "- failed: $FAILED"
+    echo "- svg_fallback: $SVG_FALLBACK"
+    echo "- smoke_require_raster: ${SMOKE_REQUIRE_RASTER:-0}"
     echo ""
     if [ "$FAILED" -eq 0 ]; then echo "**ALL PASSED**"; else echo "**HAS FAILURES**"; fi
 } > SMOKE_REPORT.md

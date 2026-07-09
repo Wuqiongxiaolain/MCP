@@ -23,7 +23,7 @@ jobs:
       - name: 安装构建依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++ make python3
+          sudo apt-get install -y g++ make python3 imagemagick
 
       - name: 编译
         run: make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
@@ -32,6 +32,8 @@ jobs:
         run: make test-all
 
       - name: CLI 冒烟（新版命令族）
+        env:
+          SMOKE_REQUIRE_RASTER: "1"
         run: make smoke
 
       - name: 上传冒烟报告

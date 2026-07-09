@@ -711,6 +711,216 @@ inline Graph parseXML(const std::string& text)
     return g;
 }
 
+// --------------------------------------------------------------- drawio --
+
+// parseDrawio: 解析 draw.io XML (.drawio) 回统一 Graph 模型
+// 关键步骤：提取 mxCell vertex → 节点(含坐标/形状/层级) +
+//           提取 mxCell edge → 边(含箭头/线型)
+//           映射 draw.io 样式回统一模型形状
+inline Graph parseDrawio(const std::string& text)
+{
+    detail::XmlNode mxfile = detail::parseXmlDoc(text);
+    if (mxfile.tag != "mxfile")
+        throw ParseError("drawio: root element must be <mxfile>, got <" +
+                         mxfile.tag + ">");
+    const detail::XmlNode* diagram = nullptr;
+    for (auto& c : mxfile.children)
+        if (c.tag == "diagram") { diagram = &c; break; }
+    if (!diagram)
+        throw ParseError("drawio: <mxfile> must contain a <diagram>");
+    const detail::XmlNode* model = nullptr;
+    for (auto& c : diagram->children)
+        if (c.tag == "mxGraphModel") { model = &c; break; }
+    if (!model)
+        throw ParseError("drawio: <diagram> must contain an <mxGraphModel>");
+    const detail::XmlNode* root = nullptr;
+    for (auto& c : model->children)
+        if (c.tag == "root") { root = &c; break; }
+    if (!root)
+        throw ParseError("drawio: <mxGraphModel> must contain a <root>");
+
+    Graph g;
+    if (diagram->attrs.count("name"))
+        g.name = diagram->attrs.at("name");
+    g.type = "flowchart";
+
+    struct Cell
+    {
+        std::string id, value, style, parent;
+        std::string source, target;
+        bool        vertex = false, edge = false;
+        double      x = 0, y = 0, w = 140, h = 80;
+        bool        hasSourcePoint = false;
+    };
+    std::vector<Cell> cells;
+
+    for (auto& c : root->children) {
+        if (c.tag != "mxCell")
+            continue;
+        Cell cell;
+        auto ga = [&](const char* k, std::string& out) {
+            if (c.attrs.count(k))
+                out = c.attrs.at(k);
+        };
+        ga("id", cell.id);
+        ga("value", cell.value);
+        ga("style", cell.style);
+        ga("parent", cell.parent);
+        ga("source", cell.source);
+        ga("target", cell.target);
+        if (c.attrs.count("vertex") && c.attrs.at("vertex") == "1")
+            cell.vertex = true;
+        if (c.attrs.count("edge") && c.attrs.at("edge") == "1")
+            cell.edge = true;
+        for (auto& gc : c.children) {
+            if (gc.tag == "mxGeometry") {
+                auto gd = [&](const char* k, double& out) {
+                    if (gc.attrs.count(k))
+                        out = std::stod(gc.attrs.at(k));
+                };
+                gd("x", cell.x);
+                gd("y", cell.y);
+                gd("width", cell.w);
+                gd("height", cell.h);
+                for (auto& pt : gc.children) {
+                    if (pt.tag == "mxPoint") {
+                        auto it = pt.attrs.find("as");
+                        if (it != pt.attrs.end() && it->second == "sourcePoint")
+                            cell.hasSourcePoint = true;
+                    }
+                }
+            }
+        }
+        cells.push_back(cell);
+    }
+
+    auto skipCell = [&](const Cell& cell) -> bool {
+        if (cell.id == "0" || cell.id == "1")
+            return true;
+        if (cell.edge && cell.hasSourcePoint && cell.source.empty())
+            return true;
+        return false;
+    };
+    auto styleHas = [](const std::string& s, const std::string& key) {
+        return s.find(key) != std::string::npos;
+    };
+
+    for (auto& cell : cells) {
+        if (skipCell(cell) || !cell.vertex)
+            continue;
+
+        std::string              label = cell.value;
+        std::vector<std::string> attrs;
+        if (!label.empty() && label.find("<b>") != std::string::npos) {
+            std::string title;
+            size_t      bp = label.find("<b>");
+            size_t      be = label.find("</b>", bp);
+            if (bp != std::string::npos && be != std::string::npos)
+                title = label.substr(bp + 3, be - bp - 3);
+            else
+                title = label;
+            size_t pos = 0;
+            while (pos < label.size()) {
+                size_t      brp = label.find("<br/>", pos);
+                std::string part;
+                if (brp != std::string::npos) {
+                    part = label.substr(pos, brp - pos);
+                    pos  = brp + 5;
+                }
+                else {
+                    part = label.substr(pos);
+                    pos  = label.size();
+                }
+                std::string cleaned;
+                for (size_t i = 0; i < part.size();) {
+                    if (part.compare(i, 4, "</b>") == 0)
+                        i += 4;
+                    else if (part.compare(i, 3, "<b>") == 0)
+                        i += 3;
+                    else
+                        cleaned += part[i++];
+                }
+                std::string t = gm::trim(cleaned);
+                if (!t.empty())
+                    attrs.push_back(t);
+            }
+            if (!attrs.empty() && !title.empty()) {
+                label = title;
+                if (attrs[0] == title)
+                    attrs.erase(attrs.begin());
+            }
+        }
+        if (label.empty())
+            label = cell.id;
+
+        std::string shape = "rect";
+        if (styleHas(cell.style, "rhombus"))
+            shape = "diamond";
+        else if (styleHas(cell.style, "ellipse"))
+            shape = "ellipse";
+        else if (styleHas(cell.style, "shape=hexagon"))
+            shape = "hexagon";
+        else if (styleHas(cell.style, "arcSize=50"))
+            shape = "stadium";
+        else if (styleHas(cell.style, "rounded=1"))
+            shape = "round";
+        else if (styleHas(cell.style, "shape=table"))
+            shape = "rect";
+
+        bool isGroup = false;
+        if (styleHas(cell.style, "fillColor=none") &&
+            styleHas(cell.style, "dashed=1"))
+            isGroup = true;
+        for (auto& oc : cells)
+            if (oc.parent == cell.id && (oc.vertex || oc.edge))
+                isGroup = true;
+        if (isGroup)
+            shape = "group";
+
+        Node& n = g.ensureNode(cell.id, label);
+        n.shape = shape;
+        n.x     = cell.x;
+        n.y     = cell.y;
+        n.w     = cell.w;
+        n.h     = cell.h;
+        if (!attrs.empty())
+            n.attrs = attrs;
+        if (!cell.parent.empty() && cell.parent != "1" && cell.parent != "0")
+            n.parent = cell.parent;
+    }
+
+    for (auto& cell : cells) {
+        if (skipCell(cell) || !cell.edge)
+            continue;
+        if (cell.source.empty() || cell.target.empty())
+            continue;
+
+        std::string label     = cell.value;
+        std::string edgeStyle = "solid";
+        if (styleHas(cell.style, "dashed=1"))
+            edgeStyle = "dashed";
+        if (styleHas(cell.style, "strokeWidth=3") ||
+            styleHas(cell.style, "strokeWidth=4"))
+            edgeStyle = "thick";
+
+        std::string arrow  = "arrow";
+        bool        noEnd  = styleHas(cell.style, "endArrow=none");
+        bool        hasStart =
+            styleHas(cell.style, "startArrow=classic") ||
+            styleHas(cell.style, "startArrow=block");
+        if (noEnd && hasStart)
+            arrow = "both";
+        else if (noEnd)
+            arrow = "none";
+        else if (hasStart)
+            arrow = "both";
+
+        g.addEdge(cell.source, cell.target, label, edgeStyle, arrow);
+    }
+
+    return g;
+}
+
 // ------------------------------------------------------------- Excalidraw --
 
 // parseExcalidraw: 解析 Excalidraw JSON
@@ -801,8 +1011,11 @@ inline std::string detectFormat(const std::string& text)
     std::string t = trim(text);
     if (t.empty())
         return "auto";
-    if (t[0] == '<')
+    if (t[0] == '<') {
+        if (t.find("<mxfile") != std::string::npos)
+            return "drawio";
         return "xml";
+    }
     if (t[0] == '{') {
         std::string err;
         Json        j = Json::parse(t, &err);
@@ -856,6 +1069,8 @@ inline Graph parseAny(const std::string& text,
         g = parseXML(text);
     else if (format == "excalidraw")
         g = parseExcalidraw(text);
+    else if (format == "drawio")
+        g = parseDrawio(text);
     else if (format == "model") {
         std::string err;
         Json        j = Json::parse(text, &err);

@@ -19,6 +19,16 @@
 #        define WIN32_LEAN_AND_MEAN
 #    endif
 #    include <windows.h>
+
+#    include <shellapi.h>
+#elif defined(__APPLE__)
+#    include <limits.h>
+
+#    include <mach-o/dyld.h>
+#    include <sys/stat.h>
+#    ifndef PATH_MAX
+#        define PATH_MAX 4096
+#    endif
 #else
 #    include <dirent.h>
 #    include <limits.h>
@@ -133,7 +143,7 @@ inline std::string base64Encode(const std::string& in)
 // getEnvVar: 跨平台读取环境变量；Windows 下避免直接使用废弃 getenv
 inline std::string getEnvVar(const char* name)
 {
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__MINGW32__)
     char*  value = nullptr;
     size_t len   = 0;
     if (_dupenv_s(&value, &len, name) != 0 || !value)
@@ -2090,18 +2100,163 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
 
 // ----------------------------------------------------- 外部编辑器打开 --
 
-// 使用系统默认处理器/浏览器打开文件或 URL
-// openExternal: 用系统默认处理器打开 URL 或文件
-inline bool openExternal(const std::string& target)
+// editorFromEnv: 读取 GRAPHMCP_EDITOR 环境变量，允许用户覆盖默认编辑器
+inline std::string editorFromEnv()
+{ return getEnvVar("GRAPHMCP_EDITOR"); }
+
+// findExecutable: 从候选路径列表中定位第一个存在的可执行文件
+inline std::string findExecutable(const std::vector<std::string>& cands)
+{
+    for (auto& c : cands) {
+        std::ifstream f(c, std::ios::binary);
+        if (f.good())
+            return c;
+    }
+    return "";
+}
+
+// findDrawioDesktop: 按候选路径探测 draw.io Desktop 安装
+inline std::string findDrawioDesktop()
+{
+    std::vector<std::string> cands;
+#ifdef _WIN32
+    std::string lad = getEnvVar("LOCALAPPDATA");
+    if (!lad.empty())
+        cands.push_back(lad + "\\Programs\\draw.io\\draw.io.exe");
+    std::string pf = getEnvVar("ProgramFiles");
+    if (!pf.empty())
+        cands.push_back(pf + "\\draw.io\\draw.io.exe");
+#elif __APPLE__
+    cands.push_back("/Applications/draw.io.app/Contents/MacOS/draw.io");
+#else
+    cands.push_back("/usr/bin/draw.io");
+    cands.push_back("/usr/local/bin/draw.io");
+#endif
+    return findExecutable(cands);
+}
+
+// findVSCode: 按候选路径探测 VS Code 安装（常用于 SVG 编辑）
+inline std::string findVSCode()
+{
+    std::vector<std::string> cands;
+#ifdef _WIN32
+    std::string lad = getEnvVar("LOCALAPPDATA");
+    if (!lad.empty())
+        cands.push_back(lad + "\\Programs\\Microsoft VS Code\\Code.exe");
+    std::string pf = getEnvVar("ProgramFiles");
+    if (!pf.empty())
+        cands.push_back(pf + "\\Microsoft VS Code\\Code.exe");
+#elif __APPLE__
+    cands.push_back("/usr/local/bin/code");
+    cands.push_back(
+        "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code");
+#else
+    cands.push_back("/usr/bin/code");
+    cands.push_back("/usr/local/bin/code");
+#endif
+    return findExecutable(cands);
+}
+
+// resolveEditor: 按优先级解析编辑器路径
+// 1. 显式传入 editorPath  2. GRAPHMCP_EDITOR 环境变量
+// 3. 按类型自动探测（drawio→findDrawioDesktop, svg→findVSCode）
+// 返回空串表示使用系统默认关联打开
+inline std::string resolveEditor(const std::string& editorType,
+                                 const std::string& editorPath = "")
+{
+    if (!editorPath.empty())
+        return editorPath;
+    std::string env = editorFromEnv();
+    if (!env.empty())
+        return env;
+    if (editorType == "drawio") {
+        std::string found = findDrawioDesktop();
+        if (!found.empty())
+            return found;
+    }
+    if (editorType == "svg") {
+        std::string found = findVSCode();
+        if (!found.empty())
+            return found;
+    }
+    // 交叉兜底
+    std::string alt = findDrawioDesktop();
+    if (!alt.empty())
+        return alt;
+    alt = findVSCode();
+    if (!alt.empty())
+        return alt;
+    return "";
+}
+
+// readOpenFile: 从图存储目录探测 graph_open 生成的临时编辑文件
+// 按 .drawio → .excalidraw → .svg 顺序查找，返回内容并设置 format
+inline std::string readOpenFile(const std::string& storeRoot,
+                                const std::string& graphId,
+                                std::string&       format)
+{
+    std::string base = storeRoot + "/" + graphId + "/open";
+    struct { const char* ext; const char* fmt; } cands[] = {
+        {".drawio", "drawio"}, {".excalidraw", "excalidraw"}, {".svg", "svg"},
+    };
+    for (auto& c : cands) {
+        std::string text = readFile(base + c.ext);
+        if (!text.empty()) {
+            if (format == "auto" || format.empty())
+                format = c.fmt;
+            return text;
+        }
+    }
+    return "";
+}
+
+// openExternal: 用系统默认处理器或指定编辑器打开 URL/文件
+// 当指定编辑器失败时，自动降级为系统默认关联打开
+inline bool openExternal(const std::string& target,
+                         const std::string& editor = "")
 {
 #ifdef _WIN32
-    std::string cmd = "start \"\" \"" + target + "\"";
+    std::wstring wtarget = widen(target);
+    if (!editor.empty()) {
+        std::wstring weditor = widen(editor);
+        HINSTANCE    h = ShellExecuteW(nullptr, L"open", weditor.c_str(),
+                                       wtarget.c_str(), nullptr, SW_SHOWNORMAL);
+        if (reinterpret_cast<INT_PTR>(h) > 32)
+            return true;
+        // 降级：用系统默认关联重试
+        h = ShellExecuteW(nullptr, L"open", wtarget.c_str(), nullptr,
+                          nullptr, SW_SHOWNORMAL);
+        return reinterpret_cast<INT_PTR>(h) > 32;
+    }
+    HINSTANCE h = ShellExecuteW(nullptr, L"open", wtarget.c_str(), nullptr,
+                                nullptr, SW_SHOWNORMAL);
+    return reinterpret_cast<INT_PTR>(h) > 32;
 #elif __APPLE__
-    std::string cmd = "open \"" + target + "\"";
+    if (!editor.empty()) {
+        std::string appPath = editor;
+        size_t      dotApp  = appPath.find(".app/");
+        if (dotApp != std::string::npos)
+            appPath = appPath.substr(0, dotApp + 4);
+        if (std::system(
+                ("open -a \"" + appPath + "\" \"" + target + "\"").c_str()) == 0)
+            return true;
+        if (std::system(
+                ("\"" + editor + "\" \"" + target + "\" >/dev/null 2>&1")
+                    .c_str()) == 0)
+            return true;
+        return std::system(("open \"" + target + "\"").c_str()) == 0;
+    }
+    return std::system(("open \"" + target + "\"").c_str()) == 0;
 #else
-    std::string cmd = "xdg-open \"" + target + "\"";
+    std::string quiet = " >/dev/null 2>&1";
+    if (!editor.empty()) {
+        if (std::system(
+                ("\"" + editor + "\" \"" + target + "\"" + quiet).c_str()) == 0)
+            return true;
+        return std::system(("xdg-open \"" + target + "\"" + quiet).c_str()) == 0;
+    }
+    return std::system(("xdg-open \"" + target + "\"" + quiet).c_str()) == 0;
 #endif
-    return std::system(cmd.c_str()) == 0;
 }
 
 }  // namespace ge

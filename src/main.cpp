@@ -426,9 +426,61 @@ int cmdEdit(Args& a, gs::Store& store) {
         ge::ExportResult r = ge::exportGraph(g, fmt, target);
         if (!r.ok) { std::cerr << "error: " << r.message << "\n"; return 4; }
     }
-    std::cout << "opening: " << target << "\n";
-    if (!ge::openExternal(target))
-        std::cerr << "warning: could not launch handler; open manually\n";
+    std::string editorPath = ge::resolveEditor(editor,
+                                                a.get("editor-path"));
+    std::cout << "editing: " << target;
+    if (!editorPath.empty())
+        std::cout << " (editor: " << editorPath << ")";
+    std::cout << "\n";
+    if (!ge::openExternal(target, editorPath)) {
+        std::cerr << "warning: could not launch editor; open manually: "
+                  << target << "\n";
+        std::string drawio = ge::findDrawioDesktop();
+        std::string vscode = ge::findVSCode();
+        if (!drawio.empty())
+            std::cerr << "  hint: draw.io Desktop found at " << drawio << "\n";
+        if (!vscode.empty())
+            std::cerr << "  hint: VS Code found at " << vscode << "\n";
+    }
+    return 0;
+}
+
+// ─── import 命令 ───────────────────────────────────────────────
+int cmdImport(Args& a, gs::Store& store) {
+    std::string id = getGraphId(a);
+    if (id.empty()) { usage("missing graph id"); return 1; }
+
+    Graph g; std::string err;
+    if (!store.load(id, g, 0, &err)) {
+        std::cerr << "error: " << err << "\n"; return 5;
+    }
+
+    std::string content = readInput(a);
+    std::string fmt     = a.get("format", "auto");
+    if (content.empty())
+        content = ge::readOpenFile(store.root(), g.id, fmt);
+    if (content.empty()) {
+        std::cerr << "error: no input provided (use --file, --content, or pipe; "
+                     "or run 'edit' first to generate an editable file)\n";
+        return 1;
+    }
+
+    Graph imported = gp::parseAny(content, fmt, g.type);
+    imported.id    = g.id;
+    imported.name  = g.name;
+    auto issues    = gl::validate(imported);
+    if (!issues.empty())
+        printIssues(issues);
+    if (gl::hasErrors(issues)) {
+        std::cerr << "rejected: imported graph has structural errors\n";
+        return 3;
+    }
+    gl::layout(imported);
+    int v = store.save(imported, a.get("note", "re-imported after external edit"));
+    std::cout << "imported '" << imported.name
+              << "' id=" << imported.id << " v" << v << " ("
+              << imported.nodes.size() << " nodes, "
+              << imported.edges.size() << " edges)\n";
     return 0;
 }
 
@@ -1128,6 +1180,7 @@ int main(int argc, char** argv) {
         if (a.family == "convert")   return cmdConvert(a);
         if (a.family == "export")    return cmdExport(a, store);
         if (a.family == "edit")      return cmdEdit(a, store);
+        if (a.family == "import")    return cmdImport(a, store);
         if (a.family == "layout")    return cmdLayout(a, store);
         if (a.family == "validate")  return cmdValidate(a, store);
         if (a.family == "store")     return cmdStore(a, store);

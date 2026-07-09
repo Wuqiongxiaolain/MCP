@@ -105,3 +105,14 @@ graph-store/
 | `scripts/export-example-testout.ps1` | Windows 版导出矩阵（同上） |
 
 CI（`.github/workflows/ci.yml`）默认执行 `make test-all` 与 `make smoke`；fixture 几何比对已并入 `smoke_test.sh` 的 `[fixture-regression]` 段。
+
+## 旧版 CLI 与新版 version 语义
+
+旧版扁平命令（`create`/`rollback`/`history` 等，无子命令）经 `handleLegacyCommand` 保留；新版 12 命令族通过子命令分发，二者可共用同一 `graph-store` 目录。
+
+| 操作 | 旧版 `rollback` | 新版 `version checkout` |
+|------|----------------|-------------------------|
+| 行为 | 将指定版本内容**另存为新版本**（版本号递增） | **移动 HEAD 指针**，不新建版本 |
+| 草稿 | 不清理 draft/stage | 默认清理 draft/stage（`--force` 可丢弃未提交修改） |
+
+自本分支起，`storage.save`（含旧版 `create`/`rollback` 与 MCP `graph_rollback`）在写入快照后会同步更新 `<graph-id>/HEAD`，与 `version commit` 一致，避免新旧命令混用后 `version status` 读到过期 HEAD。

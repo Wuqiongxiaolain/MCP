@@ -324,6 +324,7 @@ run_stdout_contains "legacy list" "$LEGACY_ID" list
 run_stdout_contains "legacy history v1" "v1" history --id "$LEGACY_ID"
 run_stdout_contains "legacy history v2" "v2" history --id "$LEGACY_ID"
 run_ok "legacy rollback" rollback --id "$LEGACY_ID" --version 1
+run_stdout_contains "legacy status HEAD" "HEAD:     v3" version status "$LEGACY_ID"
 run_stdout_contains "legacy open" "opening:" open --id "$LEGACY_ID"
 
 # ─── serve (stdio JSON-RPC 集成) ────────────────────────────────

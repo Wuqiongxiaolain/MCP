@@ -46,9 +46,9 @@ Graph {
 | 模块 | 职责 | 关键点 |
 |---|---|---|
 | json.hpp | JSON 解析/序列化 | 递归下降解析，\uXXXX 代理对 → UTF-8，对象保持插入顺序（输出确定性） |
-| parsers.hpp | 输入 → 模型 | 手写 Mermaid 词法（节点形状括号、8 种箭头、subgraph 栈）；迷你 XML 解析器；CSV 引号转义；格式自动识别 |
+| parsers.hpp | 输入 → 模型 | 手写 Mermaid 词法（节点形状括号、8 种箭头、subgraph 栈）；迷你 XML 解析器；CSV 引号转义；drawio XML 反向解析；格式自动识别 |
 | layout.hpp | 校验 + 布局 | 校验：重复 ID/悬空边/层级环/孤立点。布局：Kahn 分层（含环兜底）、递归子树宽度树布局、分组容器包围盒回填 |
-| exporters.hpp | 模型 → 输出 | drawio 子节点相对坐标；Excalidraw 绑定文本 + 箭头绑定；SVG 边裁剪到节点边界；PNG/PDF 自动探测转换器（inkscape/rsvg/magick，或已装的 Chrome/Edge 无头模式），均无则回退 SVG |
+| exporters.hpp | 模型 → 输出 | drawio 子节点相对坐标；Excalidraw 绑定文本 + 箭头绑定；SVG 边裁剪到节点边界；PNG/PDF 自动探测转换器（inkscape/rsvg/magick，或已装的 Chrome/Edge 无头模式），均无则回退 SVG；外部编辑器自动发现（draw.io / VS Code）与调起 |
 | storage.hpp | 版本化存储 | `index.json` 目录 + 每图 `latest.json` + 不可变 `versions/vN.json` 快照；回滚 = 旧快照另存为新版本（非破坏） |
 | mcp.hpp | MCP 协议 | JSON-RPC 2.0，stdio 换行分隔；initialize 握手、tools/list、tools/call；通知不回包 |
 | main.cpp | CLI | 9 个子命令；Windows 下 argv 转 UTF-8（GetCommandLineW）避免中文乱码 |
@@ -61,7 +61,7 @@ graph-store/
   <graphId>/
     latest.json               # 当前版本模型
     versions/v1.json …        # 不可变历史快照 {version, savedAt, note, model}
-    open.drawio / open.svg…   # open 命令生成的临时编辑文件
+    open.drawio / open.svg…   # edit 命令生成的临时编辑文件（import 从此回导）
 ```
 
 ## MCP 工具清单
@@ -71,7 +71,8 @@ graph-store/
 | graph_create | content, format?, type?, name? | 解析+校验+布局+入库，返回图 id |
 | graph_convert | content, format?, to | 一次性转换（不入库） |
 | graph_export | id, to, path?, version? | 导出文件或内联内容 |
-| graph_open | id, editor? | 生成 URL / 文件并调起外部编辑器 |
+| graph_open | id, editor?, editorPath? | 生成 URL / 文件并调起外部编辑器，自动发现本机已安装的编辑器 |
+| graph_import | id, content?, format? | 重新导入外部编辑后的文件，解析→校验→布局→入库新版本 |
 | graph_validate | content \| id | 结构校验，返回 errors/warnings |
 | graph_list | — | 列出库中所有图 |
 | graph_history | id | 版本历史 |

@@ -1,6 +1,6 @@
 # CLI & MCP 指令参考
 
-> graphmcp 1.1.0 — 完整命令行与 MCP 工具接口文档
+> graphmcp 0.1.0 — 完整命令行与 MCP 工具接口文档
 
 ---
 

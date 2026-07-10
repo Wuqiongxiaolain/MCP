@@ -1,99 +1,123 @@
-# graphmcp 功能概览
+# 🎯 graphmcp：一份图，任意格式进出
 
-> **v1.1.0** · C++17 · 零第三方依赖 · 单可执行文件
-> 一个把「任意结构化输入」变成「任意图形输出」的绘图引擎，既是 CLI，也是 MCP 服务器。
+不管你手上是 Mermaid、Markdown、CSV、XML、Excalidraw 还是 draw.io，丢给 graphmcp，它都能读懂；不管你要 SVG、PNG、PDF、drawio 还是 Excalidraw，它都能吐给你。中间那道「先转 A 再转 B」的手工活，从此不用你自己干。
 
-**核心思想：所有格式 → 统一图模型 → 所有输出格式。** N 个解析器 × M 个导出器，只需 N+M 个适配层，而不是 N×M 个转换器。
+**你可能正在遇到这些事**：
 
-<img src="images/pipeline.svg" alt="graphmcp 数据流水线" width="100%">
+- ✍️ 写技术文档，Mermaid 流程图想导出成图片贴进去？
+- 🏗️ draw.io 里画好的架构图，想转成 PDF 塞进设计评审文档？
+- 🤖 用 Claude Code 写代码时，想让 AI 顺手把架构图也一起改了，不用自己再开一次 draw.io？
 
+一句话：格式的事交给 graphmcp，你只管画。
 
+<img src="images/pipeline.svg" alt="graphmcp 数据流水线" width="50%">
 
 <sub>▲ 这张图本身就是 graphmcp 画的：</sub>
 
 ---
 
-## 🧩 六类图形，一套模型
+## 它能画这六种图
 
-流程图、架构图、ER 图、组织架构图、思维导图、白板 —— 六种图共用一个 `Graph` 结构。秘诀是 `node.parent` 一字段三用：树层级、子图分组、容器嵌套。类型字符串随模型存储，往返转换不丢失。
+<table>
+<tr>
+<td align="center"><img src="images/type-flowchart.svg" width="200"><br><b>流程图</b></td>
+<td align="center"><img src="images/type-architecture.svg" width="200"><br><b>架构图</b></td>
+<td align="center"><img src="images/type-er.svg" width="200"><br><b>ER 图</b></td>
+</tr>
+<tr>
+<td align="center"><img src="images/type-orgchart.svg" width="200"><br><b>组织架构图</b></td>
+<td align="center"><img src="images/type-mindmap.svg" width="200"><br><b>思维导图</b></td>
+<td align="center"><img src="images/type-whiteboard.svg" width="200"><br><b>白板</b></td>
+</tr>
+</table>
 
-|        流程图        |       架构图       |     ER 图     |
-| :------------------: | :----------------: | :------------: |
-|                      |                    |                |
-| **组织架构图** | **思维导图** | **白板** |
-|                      |                    |                |
+六种图共用同一套模型，格式之间随便转、不丢信息。
 
 ---
 
-## 🔍 六种输入格式，自动识别
+## 🚀 3 条命令，立刻跑起来
 
-Mermaid、Markdown 大纲、CSV、XML、Excalidraw、draw.io —— 丢给 `from-input` 即可，`detectFormat()` 自己认。图类型也一并推断：`.mmd` 出流程图，`.md` 出思维导图，`.csv` 出组织架构图。Mermaid 解析器是手写词法器，不依赖正则。
+```bash
+graphmcp create from-mermaid --file flow.mmd --name "登录流程"
+graphmcp export to-svg --id <graph-id> -o output.svg
+graphmcp serve                      # 作为 MCP 服务器接入 AI 客户端
+```
+
+第一条建图，第二条导出，第三条把它接进 Claude Code / Claude Desktop。完整参数见 [CLI &amp; MCP 指令参考](CLI_MCP_REFERENCE.md)。
+
+---
+
+## 🧰 核心能力：格式，你不用操心
+
+原始诉求就是「别让我在多个工具之间手动倒腾文件」。
+
+### 📥 丢进去就行，不用管它原来是什么格式
+
+Mermaid、Markdown 大纲、CSV、XML、Excalidraw、draw.io——统统直接丢给 `from-input`，graphmcp 自己认格式、自己猜图类型：给它一个 `.mmd` 就出流程图，给它一个 `.csv` 就出组织架构图。这意味着你再也不用为「先把 A 转成 B、再转成 C」这种破事浪费时间。
 
 <img src="images/cli-create.svg" alt="自动识别格式并入库" width="100%">
 
----
+### 📤 一次建模，想要什么格式都有
 
-## 📤 八种输出格式，一图多投
-
-一次建模，导出 drawio / mermaid / excalidraw / svg / png / pdf / model(JSON)，外加一条 mermaid.live 在线编辑链接。
-
-> ⚠️ **PNG / PDF 需要外部转换器**（inkscape、rsvg-convert、magick，或 Chrome/Edge headless）。都找不到时不会失败退出，而是自动回退，在目标路径旁写一份 SVG —— 下图末尾就是真实的回退输出。
+同一张图，一条命令换一种格式吐出来：drawio、Mermaid、Excalidraw、SVG、PNG、PDF、JSON，外加一条 mermaid.live 在线编辑链接。SVG 永远可靠；PNG/PDF 依赖本机是否装了 inkscape/rsvg/magick 或 Chrome/Edge——都没装也不会失败退出，而是自动帮你留一份 SVG 兜底。
 
 <img src="images/cli-export.svg" alt="一图多格式导出" width="100%">
 
----
+### 📐 排版不用自己摆
 
-## 📐 自动布局，四种策略
-
-流程图走 Kahn 拓扑分层（带成环兜底），思维导图走水平树，组织架构图走垂直树，另有网格布局。`layout auto` 按图类型自选策略。分组容器的包围盒在布局后自动回填。
+新建的图不需要你手动拖节点——流程图自动分层，思维导图自动长成树，组织架构图自动垂直排布，`layout auto` 会照着图的类型自己选策略。
 
 <img src="images/cli-layout.svg" alt="四种自动布局策略" width="100%">
 
+### 🔄 GUI 里改完，一键存回来
+
+不想在命令行改标签？`edit with-drawio` 直接调起 draw.io，你在 GUI 里随便改，改完 `import` 一声，graphmcp 帮你解析、校验、存成新版本——图库版本 +1，改动全程留痕。
+
+<img src="images/cli-import.svg" alt="编辑闭环" width="100%">
+
+### 🎨 白板转出转入，不失真
+
+Excalidraw 手绘的白板——笔迹、图片、字体——原样往返，不是重新画一遍：原始笔迹数据整份保留，导出时优先吐回原始轨迹，连离线字体都内嵌在文件里，换台电脑照样能看。
+
+<img src="images/type-whiteboard.svg" alt="Excalidraw 白板精确导出" height="200">
+
 ---
 
-## ✅ 结构校验，可接入 CI
+## 🎯 进阶能力：让「改图」这件事可控
 
-四条规则：重复节点 ID、悬空边（指向不存在的节点）、层级成环、孤立节点。退出码可直接做 CI 闸门 —— `0` 干净、`3` 有 error、`1` 表示 `--strict` 把 warning 提升成了 error。
+多人协作、AI 代改的场景下，「改错了怎么办」比「能不能改」更重要——这组能力就是解决这个。
+
+### ✅ 图哪里错了，一眼看出来
+
+重复 ID、边指向不存在的节点、层级成环、孤立节点——四条规则一跑就知道。退出码可以直接接 CI：`0` 干净放行，`3` 有硬错误拦截，`--strict` 连警告也当错误处理。
 
 <img src="images/cli-validate.svg" alt="结构校验与退出码" width="100%">
 
----
+### 🗂 每一次修改都能回溯
 
-## 🗂 Git 式版本控制
-
-`draft → stage → commit` 三段式工作流，配 `log` / `diff` / `checkout`。每次提交冻结一份不可变快照 `versions/vN.json`。版本对比精确到字段级：谁被增、谁被改、旧值新值一目了然。
+跟 Git 一个逻辑：改动先进草稿（draft），确认了再暂存（stage）、提交（commit）。谁在什么时候改了什么、旧值新值分别是什么，`diff` 精确到字段级，随时能 `checkout` 回任意历史版本。
 
 <img src="images/cli-version.svg" alt="版本控制工作流" width="100%">
 
----
+### ✏️ 改一个节点，不用重写整份文件
 
-## ✏️ Draft 模式图编辑
-
-不必重写整份源文件 —— 直接对节点和边做增删改，变更先落到 `draft.json`，提交后才成为新版本。支持 `--selector` 按属性批量改（如把所有 `shape=rect` 改成 `round`），删节点时级联删除关联边。
+想改一个标签、挪一个节点位置，不需要把整张图重新描述一遍——直接对着节点/边做增删改，还支持按属性批量改（比如把所有 `shape=rect` 一次性换成 `round`）。
 
 <img src="images/cli-edit.svg" alt="Draft 模式图编辑" width="100%">
 
----
+### 🎯 一个节点、一个节点地推进
 
-## 🎯 游标遍历
-
-数据库游标语义搬到图上：`open / get / next / prev / update / insert / delete / close`。游标状态持久化到磁盘，跨进程存活 —— 特别适合 AI 客户端「读一个节点、改一个节点」地逐步推进，而不必一次性吞下整张图。
+游标语义搬到图上：打开、读当前项、走下一个、走上一个、关闭。特别适合 AI 客户端「读一个、判断一个、改一个」地啃一张大图，而不必把整张图都塞进上下文——状态存在磁盘上，跨进程也不丢。
 
 <img src="images/cli-cursor.svg" alt="游标遍历" width="100%">
 
 ---
 
-## 🔄 编辑闭环：导出 → 外部编辑 → 回导
+## 🔌 高级玩法：让 AI 直接帮你改图
 
-`edit with-drawio` 调起 draw.io（自动发现编辑器路径），你在 GUI 里随手改，`import` 再把它解析、校验、存成新版本。draw.io、Excalidraw、SVG、浏览器四种编辑器均可，改完图库版本 +1。
+### 🤖 MCP 服务器，25 个工具随时待命
 
-<img src="images/cli-import.svg" alt="编辑闭环" width="100%">
-
----
-
-## 🤖 MCP 服务器 · 25 个工具
-
-`graphmcp serve` 通过 stdio 讲 JSON-RPC 2.0，向 Claude Code / Claude Desktop 暴露 25 个工具，覆盖生命周期、查看、编辑、版本、游标五大族。日志只写 stderr，绝不污染 stdout 的协议流。
+`graphmcp serve` 把上面所有能力原样打包成 25 个 MCP 工具，通过 stdio 直接接进 Claude Code / Claude Desktop。你不用记命令、不用切窗口——跟 AI 说一句"把这个流程图里的审批节点删了"，剩下的事它自己调工具办完。
 
 <img src="images/mcp-handshake.svg" alt="MCP 握手与工具列表" width="100%">
 
@@ -103,29 +127,14 @@ Mermaid、Markdown 大纲、CSV、XML、Excalidraw、draw.io —— 丢给 `from
 
 ---
 
-## 🎨 Excalidraw 白板无损往返
+## 🔧 技术规格（供技术选型参考）
 
-白板的原始 `elements[]` 与派生的逻辑节点并排保存，导出时优先吐回原数组 —— 手绘轨迹、仿射变换、图片与字体全部保真，字体以 base64 内嵌，离线可读。上方「白板」示例图即为真实导出结果。
+> v1.1.0 · C++17 · 零第三方依赖 · 单可执行文件
 
-<img src="images/type-whiteboard.svg" alt="Excalidraw 白板精确导出" height="260">
-
----
-
-## 📦 零依赖 · 单文件 · 静态链接
-
-JSON 解析器、XML 解析器、Base64 编解码全部手写。除 `main.cpp` 外皆为 header-only，一条 `g++` 命令构建完毕，没有链接步骤，没有第三方库。Windows 下静态链接 libgcc/libstdc++ —— MCP 客户端用被裁剪的 PATH 拉起它也不会缺 DLL。
+JSON/XML 解析器、Base64 编解码全部手写，一条 `g++` 命令构建完毕——不需要装 Node.js/npm，不需要 Python 运行时，也不用等 JVM 启动。Windows 下静态链接 libgcc/libstdc++，MCP 客户端用被裁剪的 PATH 拉起它也不会缺 DLL。
 
 <img src="images/build.svg" alt="零依赖构建与测试" width="100%">
 
 ---
-
-## 快速上手
-
-```bash
-graphmcp create from-mermaid --file flow.mmd --name "登录流程"
-graphmcp store list
-graphmcp export to-svg --id <graph-id> -o output.svg
-graphmcp serve                      # 作为 MCP 服务器接入 AI 客户端
-```
 
 完整命令与参数见 [CLI &amp; MCP 指令参考](CLI_MCP_REFERENCE.md)，设计细节见 [架构说明](ARCHITECTURE.md)。

@@ -10,6 +10,8 @@
 
 - **graph_open 无编辑器环境兜底**：CI（Ubuntu headless）无 draw.io/VS Code，`availableEditors` 字段被跳过不写，导致单测 `odj.find("availableEditors") != nullptr` 失败。修复为始终写入该字段（空则写 `""`）。
 - **mcp_smoke 工具数断言**：新增 `graph_import` 后工具数 24→25，mcp_smoke.sh 硬编码 24 导致 CI 失败。已修复。
+- **macOS CD 构建失败**：`exporters.hpp` 的 `#elif defined(__APPLE__)` 块缺少 `<dirent.h>` 和 `<unistd.h>`，8 个编译错误。暂时在 CD 矩阵中禁用 macOS，待修复头文件后恢复。
+- **CD 分支测试**：新增 `workflow_dispatch` 手动触发 + `dry_run` 开关，允许在测试分支上构建 CD 制品而不创建 Release。测试通过后 `ah_feng_log` 合并至 main。
 
 ### 今日决策
 
@@ -17,9 +19,9 @@
 
 ### 明日计划
 
-- `exporters.hpp` 已达 2262 行，需拆分为 `editor_launch.hpp` + 保持现有导出函数不变。
-- macOS 和 Linux 编辑器探测路径需 CI 验证（当前仅 Ubuntu 单平台）。
-- `edit` 命令考虑添加 `--watch` 模式（mtime 轮询 + 自动 `import`）。
+- 发布 `v0.1.0-beta2`：Linux + Windows 安装包（macOS 待头文件修复后恢复）。
+- `exporters.hpp` 已达 2262 行，需拆分为 `editor_launch.hpp`。
+- macOS `<dirent.h>`/`<unistd.h>` 补完 + 恢复 CD macOS 构建。
 
 ---
 

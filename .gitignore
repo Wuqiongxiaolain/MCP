@@ -26,3 +26,7 @@ third_party/excalidraw-assets/rough.js
 # 示例测试输出，自动生成，勿纳入版本控制
 examples/example_testout/
 scripts/export-example-testout.ps1
+
+# 本地专属，不纳入版本控制
+.mcp.json
+traffic-light-mindmap.svg

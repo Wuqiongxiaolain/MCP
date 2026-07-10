@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="531" height="268" viewBox="0 0 531 268" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">
+<rect width="531" height="268" rx="10" fill="#1e2430"/>
+<path d="M0 10a10 10 0 0 1 10-10h511a10 10 0 0 1 10 10v28H0z" fill="#161b24"/>
+<circle cx="20" cy="19.0" r="6" fill="#ff5f57"/>
+<circle cx="38" cy="19.0" r="6" fill="#febc2e"/>
+<circle cx="56" cy="19.0" r="6" fill="#28c840"/>
+<text x="265.5" y="23.5" fill="#7d8899" font-size="12.5" text-anchor="middle">零依赖构建 + 测试</text>
+<text x="18" y="68.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#7d8899">#  零第三方依赖：一条 g++ 命令即可构建</tspan>
+</text>
+<text x="18" y="90.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#5fd7a7">$ </tspan>
+<tspan x="34.8" fill="#e8eef6">g++ -std=c++17 -O2 -Wall -Wextra -static \</tspan>
+</text>
+<text x="18" y="112.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#ff6b6b">      -static-libgcc -static-libstdc++ \</tspan>
+</text>
+<text x="18" y="134.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#ff6b6b">      -o bin/graphmcp.exe src/main.cpp</tspan>
+</text>
+<text x="18" y="178.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#7d8899">#  24 秒，3.2 MB，-Wall -Wextra 零告警，无 MinGW 运行时依赖</tspan>
+</text>
+<text x="18" y="222.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#5fd7a7">$ </tspan>
+<tspan x="34.8" fill="#e8eef6">./bin/graphmcp_tests.exe</tspan>
+</text>
+<text x="18" y="244.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#c9d4e3">tests: 452 passed, 0 failed</tspan>
+</text>
+</svg>

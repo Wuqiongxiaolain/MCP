@@ -118,7 +118,7 @@
 | 存储 | JSON 文件版本快照（非 SQLite） |
 | PNG/PDF | 外部转换器 / 浏览器栅格化 + SVG 回退 |
 | URL | mermaid.live `#base64:`（免 deflate） |
-| MCP | stdio + JSON-RPC 2.0（2024-11-05） |
+| MCP | stdio + JSON-RPC 2.0（2026-7-10） |
 | 白板导出 | 精确 SVG 栅格化；不追求 rough.js 手绘风对齐 |
 
 ## 遗留与展望

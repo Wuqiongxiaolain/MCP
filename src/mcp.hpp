@@ -19,8 +19,8 @@ using gm::Graph;
 using gm::Node;
 
 inline const char* SERVER_NAME    = "graphmcp";
-inline const char* SERVER_VERSION = "1.1.0";
-inline const char* PROTOCOL_VERSION = "2024-11-05";
+inline const char* SERVER_VERSION = "0.1.0";
+inline const char* PROTOCOL_VERSION = "2026-7-10";
 
 // ---- 工具 Schema 辅助 ----
 

@@ -4,6 +4,16 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '试运行（仅构建+上传制品，不创建 Release）'
+        type: boolean
+        default: true
+      ref:
+        description: '要构建的分支/commit（留空则用默认分支）'
+        type: string
+        default: ''
 
 permissions: {}
 
@@ -24,9 +34,11 @@ jobs:
           - os: ubuntu-latest
             label: Linux
             platform: linux-x64
-          - os: macos-latest
-            label: macOS
-            platform: macos-x64
+          # macOS 构建暂时禁用（exporters.hpp 缺少 <dirent.h>/<unistd.h> 头文件）
+          # 修复后取消注释下面 3 行即可恢复：
+          # - os: macos-latest
+          #   label: macOS
+          #   platform: macos-x64
           - os: windows-latest
             label: Windows
             platform: windows-x64
@@ -34,6 +46,8 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: 安装构建依赖（Linux）
         if: matrix.os == 'ubuntu-latest'
@@ -122,7 +136,7 @@ jobs:
   release:
     name: 发布 GitHub Release
     needs: build-package
-    if: ${{ !github.event.deleted }}
+    if: ${{ !github.event.deleted && (github.event_name != 'workflow_dispatch' || inputs.dry_run != true) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -150,4 +164,4 @@ jobs:
             本次为 Tag 触发的多平台自动制品发布（CD）。
             - 触发 Tag：`${{ github.ref_name }}`
             - 提交：`${{ github.sha }}`
-            - 平台：Linux / macOS / Windows
+            - 平台：Linux / Windows（macOS 待修复后加入）

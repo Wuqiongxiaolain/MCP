@@ -34,6 +34,8 @@
 | MCP 接口：创建 / 转换 / 打开 / 导出 | ✅ | 9 个 MCP 工具 |
 | 可选：实时画布预览 | ❎ | 列为后续目标 |
 
+能力与目标的思维导图总览见 [MINDMAP.md](MINDMAP.md)。
+
 ---
 
 ## 三、启动方式
@@ -108,6 +110,9 @@ Mermaid/Markdown/CSV/XML 文本输入
 | **功能增强** | 07-07 ~ 07-08 | Excalidraw 白板精确导出、离线字体内嵌、Excalidraw files 保真 |
 | **架构升级** | 07-08 ~ 07-09 | CLI 重构（9 命令→12 命令族）、版本管理（Draft/Stage/Commit）、游标操作、drawio 解析回导 |
 | **收尾完善** | 07-10 | 编辑器自动发现、MCP 协议补全、冒烟测试增强、应用原理文档 |
+
+按阶段编号（P1–P6）的里程碑列表见 [PROJECT_TIMELINE.md](PROJECT_TIMELINE.md)。  
+按提交记录还原的逐日演进见 [开发过程](DEV_PROCESS.md)。
 
 ### 4.2 开发节奏
 

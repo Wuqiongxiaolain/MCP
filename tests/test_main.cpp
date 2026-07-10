@@ -22,7 +22,9 @@ static int g_passed = 0;
     } while (0)
 
 using gj::Json;
+using gm::Edge;
 using gm::Graph;
+using gm::Node;
 
 static void testJson()
 {
@@ -641,9 +643,6 @@ static std::string mcpText(const Json& resp)
     return "";
 }
 
-// TODO: graph_open 当前会触发真实外部打开行为，待能力完善后再恢复到 CI。
-static constexpr bool ENABLE_GRAPH_OPEN_TEST = false;
-
 static void testMcpToolsRemaining()
 {
     gs::Store   store("test-store-tmp");
@@ -736,19 +735,108 @@ static void testMcpToolsRemaining()
     CHECK(de.str("status") == "deleted");
     CHECK(de.str("elementType") == "node");
 
-    if (ENABLE_GRAPH_OPEN_TEST) {
-        Json open = Json::parse(
+    // ── graph_open MCP 冒烟（不依赖 GUI，验证协议层完整性）
+    {
+        // 1. browser 模式：验证生成 mermaid.live URL
+        Json ob = Json::parse(
             R"({"jsonrpc":"2.0","id":24,"method":"tools/call","params":{
             "name":"graph_open","arguments":{"id":")" +
-            gid + R"(","editor":"svg"}}})",
+            gid + R"(","editor":"browser"}}})",
             &err);
-        CHECK(mcp::handleMessage(open, store, resp));
-        Json oj = Json::parse(mcpText(resp), &err);
-        CHECK(!oj.str("target").empty());
+        CHECK(mcp::handleMessage(ob, store, resp));
+        Json obj = Json::parse(mcpText(resp), &err);
+        CHECK(obj.str("target").find("https://mermaid.live/") == 0);
+        CHECK(obj.str("editor") == "browser");
+        CHECK(obj.find("launched") != nullptr);
+
+        // 2. drawio 模式：验证生成 .drawio 文件路径
+        Json od = Json::parse(
+            R"({"jsonrpc":"2.0","id":25,"method":"tools/call","params":{
+            "name":"graph_open","arguments":{"id":")" +
+            gid + R"(","editor":"drawio"}}})",
+            &err);
+        CHECK(mcp::handleMessage(od, store, resp));
+        Json odj = Json::parse(mcpText(resp), &err);
+        CHECK(odj.str("target").find("/open.drawio") != std::string::npos);
+        CHECK(odj.str("editor") == "drawio");
+        CHECK(odj.find("availableEditors") != nullptr);
+
+        // 3. excalidraw 模式：验证生成 .excalidraw 文件路径
+        Json oe = Json::parse(
+            R"({"jsonrpc":"2.0","id":26,"method":"tools/call","params":{
+            "name":"graph_open","arguments":{"id":")" +
+            gid + R"(","editor":"excalidraw"}}})",
+            &err);
+        CHECK(mcp::handleMessage(oe, store, resp));
+        Json oej = Json::parse(mcpText(resp), &err);
+        CHECK(oej.str("target").find("/open.excalidraw") != std::string::npos);
+        CHECK(oej.str("editor") == "excalidraw");
+
+        // 4. svg 模式 + editorPath：验证显式编辑器路径
+        Json os = Json::parse(
+            R"({"jsonrpc":"2.0","id":27,"method":"tools/call","params":{
+            "name":"graph_open","arguments":{"id":")" +
+            gid +
+            R"(","editor":"svg","editorPath":"/usr/bin/code"}}})",
+            &err);
+        CHECK(mcp::handleMessage(os, store, resp));
+        Json osj = Json::parse(mcpText(resp), &err);
+        CHECK(osj.str("target").find("/open.svg") != std::string::npos);
+        CHECK(osj.str("editor") == "svg");
+        CHECK(osj.str("editorPath") == "/usr/bin/code");
+
+        // 5. 不存在的图：验证错误返回
+        Json onf = Json::parse(
+            R"({"jsonrpc":"2.0","id":28,"method":"tools/call","params":{
+            "name":"graph_open","arguments":{"id":"nonexistent-id"}}})",
+            &err);
+        CHECK(mcp::handleMessage(onf, store, resp));
+        CHECK(resp.find("result")->find("content")->a->at(0)
+                  .str("text")
+                  .find("graph not found") != std::string::npos);
+    }
+
+    // ── graph_import MCP 冒烟（编辑回导闭环）
+    {
+        // 1. 自动探测 open.drawio（由上面 graph_open drawio 生成）
+        Json ia = Json::parse(
+            R"({"jsonrpc":"2.0","id":29,"method":"tools/call","params":{
+            "name":"graph_import","arguments":{"id":")" +
+            gid + R"("}}})",
+            &err);
+        CHECK(mcp::handleMessage(ia, store, resp));
+        Json iaj = Json::parse(mcpText(resp), &err);
+        CHECK(iaj.str("status") == "imported");
+        CHECK(iaj.str("id") == gid);
+        CHECK((int)iaj.num("version") >= 2);
+        CHECK(iaj.num("nodes") >= 1);
+
+        // 2. 显式 content（mermaid 格式）
+        Json ic = Json::parse(
+            R"({"jsonrpc":"2.0","id":30,"method":"tools/call","params":{
+            "name":"graph_import","arguments":{"id":")" +
+            gid +
+            R"(","content":"flowchart TD\nX-->Y-->Z","format":"mermaid"}}})",
+            &err);
+        CHECK(mcp::handleMessage(ic, store, resp));
+        Json icj = Json::parse(mcpText(resp), &err);
+        CHECK(icj.str("status") == "imported");
+        CHECK((int)icj.num("version") >= 3);
+        CHECK(icj.num("nodes") == 3);
+
+        // 3. 不存在的 id：验证错误返回
+        Json inf = Json::parse(
+            R"({"jsonrpc":"2.0","id":31,"method":"tools/call","params":{
+            "name":"graph_import","arguments":{"id":"nonexistent-id"}}})",
+            &err);
+        CHECK(mcp::handleMessage(inf, store, resp));
+        CHECK(resp.find("result")->find("content")->a->at(0)
+                  .str("text")
+                  .find("graph not found") != std::string::npos);
     }
 
     Json copen = Json::parse(
-        R"({"jsonrpc":"2.0","id":25,"method":"tools/call","params":{
+        R"({"jsonrpc":"2.0","id":32,"method":"tools/call","params":{
             "name":"graph_cursor_open","arguments":{"id":")" +
             gid + R"(","target":"nodes"}}})",
         &err);
@@ -1034,7 +1122,7 @@ static void testMcpProtocol()
     Json tl =
         Json::parse(R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})", &err);
     CHECK(mcp::handleMessage(tl, store, resp));
-    CHECK(resp.find("result")->find("tools")->size() == 24);
+    CHECK(resp.find("result")->find("tools")->size() == 25);
     // tools/call graph_create
     Json call = Json::parse(
         R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
@@ -1159,6 +1247,95 @@ static void testMcpProtocol()
     CHECK(text.find("deleted") != std::string::npos);
 }
 
+static void testParseDrawio()
+{
+    std::string d =
+        "<mxfile host=\"graphmcp\">\n"
+        "  <diagram name=\"Test\" id=\"d1\">\n"
+        "    <mxGraphModel>\n"
+        "      <root>\n"
+        "        <mxCell id=\"0\"/>\n"
+        "        <mxCell id=\"1\" parent=\"0\"/>\n"
+        "        <mxCell id=\"A\" value=\"Start\" style=\"rounded=1;\" "
+        "vertex=\"1\" parent=\"1\">\n"
+        "          <mxGeometry x=\"100\" y=\"50\" width=\"120\" height=\"60\" "
+        "as=\"geometry\"/>\n"
+        "        </mxCell>\n"
+        "        <mxCell id=\"B\" value=\"End\" style=\"rhombus;\" "
+        "vertex=\"1\" parent=\"1\">\n"
+        "          <mxGeometry x=\"300\" y=\"50\" width=\"120\" height=\"60\" "
+        "as=\"geometry\"/>\n"
+        "        </mxCell>\n"
+        "        <mxCell id=\"edge1\" value=\"ok\" style=\"dashed=1;\" "
+        "edge=\"1\" parent=\"1\" source=\"A\" target=\"B\">\n"
+        "          <mxGeometry relative=\"1\" as=\"geometry\"/>\n"
+        "        </mxCell>\n"
+        "      </root>\n"
+        "    </mxGraphModel>\n"
+        "  </diagram>\n"
+        "</mxfile>";
+    Graph g = gp::parseDrawio(d);
+    CHECK(g.name == "Test");
+    CHECK(g.nodes.size() == 2);
+    CHECK(g.edges.size() == 1);
+    CHECK(g.findNode("A")->shape == "round");
+    CHECK(g.findNode("B")->shape == "diamond");
+    CHECK(g.edges[0].from == "A");
+    CHECK(g.edges[0].style == "dashed");
+    Graph g2 = gp::parseAny(d);
+    CHECK(g2.nodes.size() == 2);
+}
+
+static void testDrawioRoundTrip()
+{
+    Graph g;
+    g.name   = "RoundTrip";
+    g.type   = "flowchart";
+    Node& n1 = g.ensureNode("n1", "Hello");
+    n1.shape = "round";
+    n1.x = 100; n1.y = 100; n1.w = 120; n1.h = 60;
+    Node& n2 = g.ensureNode("n2", "World");
+    n2.shape = "diamond";
+    n2.x = 300; n2.y = 100; n2.w = 120; n2.h = 60;
+    g.addEdge("n1", "n2", "Link", "solid");
+    std::string dx = ge::toDrawio(g);
+    CHECK(!dx.empty());
+    CHECK(dx.find("<mxfile") != std::string::npos);
+    Graph g2 = gp::parseDrawio(dx);
+    CHECK(g2.name == "RoundTrip");
+    CHECK(g2.nodes.size() >= 2);
+    CHECK(g2.edges.size() >= 1);
+}
+
+static void testMcpGraphImport()
+{
+    gs::Store   store("test-store-tmp");
+    std::string err;
+    Json call1 = Json::parse(R"({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"graph_create","arguments":{"content":"flowchart TD\nA-->B","name":"import-test"}}})", &err);
+    CHECK(err.empty());
+    Json resp1;
+    CHECK(mcp::handleMessage(call1, store, resp1));
+    const Json* res1 = resp1.find("result");
+    CHECK(res1 != nullptr);
+    const Json* ct1 = res1->find("content") ? &res1->find("content")->a->at(0) : nullptr;
+    CHECK(ct1 != nullptr);
+    Json j1 = Json::parse(ct1->str("text"), &err);
+    std::string gid = j1.str("id");
+    CHECK(!gid.empty());
+    Graph g;
+    CHECK(store.load(gid, g, 0, &err));
+    std::string fpath = store.root() + "/" + gid + "/open.drawio";
+    CHECK(ge::writeFile(fpath, ge::toDrawio(g)));
+    Json call2 = Json::parse(R"({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"graph_import","arguments":{"id":")" + gid + R"("}}})", &err);
+    Json resp2;
+    CHECK(mcp::handleMessage(call2, store, resp2));
+    const Json* res2 = resp2.find("result");
+    const Json* ct2 = res2 && res2->find("content") ? &res2->find("content")->a->at(0) : nullptr;
+    Json j2 = Json::parse(ct2 ? ct2->str("text") : "", &err);
+    CHECK(j2.str("status") == "imported");
+    CHECK((int)j2.num("version") == 2);
+}
+
 int runAll()
 {
     testJson();
@@ -1183,6 +1360,9 @@ int runAll()
     testMcpExtended();
     testMcpToolsRemaining();
     testMcpErrors();
+    testParseDrawio();
+    testDrawioRoundTrip();
+    testMcpGraphImport();
     std::cout << "tests: " << g_passed << " passed, " << g_failed
               << " failed\n";
     return g_failed == 0 ? 0 : 1;

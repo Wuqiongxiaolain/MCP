@@ -99,9 +99,10 @@ inline Json toolList() {
     // ── 4. graph_open ────────────────────────────────────────
     {
         Json p = Json::obj();
-        p.set("id",     prop("string", "graph id to open"));
-        p.set("editor", prop("string", "target editor: browser | drawio | excalidraw | svg (default browser)"));
-        p.set("version", prop("number", "version to open (default: latest)"));
+        p.set("id",         prop("string", "graph id to open"));
+        p.set("editor",     prop("string", "target editor: browser | drawio | excalidraw | svg (default browser)"));
+        p.set("editorPath", prop("string", "explicit editor executable path (overrides auto-detection and GRAPHMCP_EDITOR env var)"));
+        p.set("version",    prop("number", "version to open (default: latest)"));
         Json req = Json::arr(); req.push(Json("id"));
         tools.push(toolDef("graph_open",
                            "Open a stored graph in an external editor: "
@@ -109,6 +110,19 @@ inline Json toolList() {
                            "or writes a .drawio/.excalidraw/.svg file and "
                            "launches the OS default handler.",
                            p, req));
+    }
+
+    // ── 4b. graph_import ──────────────────────────────────────
+    {
+        Json p = Json::obj();
+        p.set("id",      prop("string", "graph id to re-import after external edit"));
+        p.set("content", prop("string", "edited diagram source (optional; auto-detects open.<ext> from store)"));
+        p.set("format",  prop("string", "input format: drawio|excalidraw|mermaid|markdown|csv|xml|auto (default auto)"));
+        Json req = Json::arr(); req.push(Json("id"));
+        tools.push(toolDef("graph_import",
+            "Re-import an externally edited diagram: reads the open.<ext> file "
+            "(or provided content), parses it, validates, and saves as a new version.",
+            p, req));
     }
 
     // ── 5. graph_validate ────────────────────────────────────
@@ -482,6 +496,7 @@ public:
             if (name == "graph_convert")        return convert(args);
             if (name == "graph_export")         return exportTool(args);
             if (name == "graph_open")           return open(args);
+            if (name == "graph_import")        return importTool(args);
             if (name == "graph_validate")       return validateTool(args);
             if (name == "graph_list")           return list(args);
             if (name == "graph_history")        return history(args);
@@ -606,14 +621,88 @@ public:
             if (!r.ok)
                 return textContent(r.message, true);
         }
-        bool launched = ge::openExternal(target);
+        std::string editorPath = ge::resolveEditor(editor,
+                                                    a.str("editorPath"));
+        bool launched = ge::openExternal(target, editorPath);
         Json out      = Json::obj();
         out.set("target", target);
         out.set("launched", launched);
+        out.set("editor", editor);
+        if (!editorPath.empty())
+            out.set("editorPath", editorPath);
+        // 列出可用编辑器
+        std::string available;
+        if (!ge::findDrawioDesktop().empty())
+            available += "drawio ";
+        if (!ge::findVSCode().empty())
+            available += "vscode";
+        if (!available.empty())
+            out.set("availableEditors", available);
+        else
+            out.set("availableEditors", "");
         out.set("hint",
                 launched ?
-                    "opened with system default handler" :
+                    (editorPath.empty() ? "opened with system default handler"
+                                        : "opened with editor: " + editorPath) :
                     "could not launch automatically; open the target manually");
+        return textContent(out.dump(2));
+    }
+
+    // importTool: 重新导入外部编辑后的图文件
+    Json importTool(const Json& a) {
+        Graph g;
+        std::string err;
+        if (!store_.load(a.str("id"), g, 0, &err))
+            return textContent(err, true);
+        std::string content = a.str("content");
+        std::string fmt     = a.str("format", "auto");
+        if (content.empty())
+            content = ge::readOpenFile(store_.root(), g.id, fmt);
+        if (content.empty())
+            return textContent(
+                "no edited content found: provide 'content' or run 'graph_open' "
+                "first to generate an editable file",
+                true);
+        Graph imported = gp::parseAny(content, fmt, g.type);
+        imported.id    = g.id;
+        imported.name  = g.name;
+        auto issues    = gl::validate(imported);
+        if (gl::hasErrors(issues)) {
+            Json out = Json::obj();
+            out.set("status", "rejected");
+            out.set("reason", "imported graph has structural errors");
+            Json is = Json::arr();
+            for (auto& iss : issues) {
+                Json ji = Json::obj();
+                ji.set("severity", iss.severity);
+                ji.set("message", iss.message);
+                is.push(ji);
+            }
+            out.set("issues", is);
+            return textContent(out.dump(2), true);
+        }
+        gl::layout(imported);
+        int  v   = store_.save(imported, "re-imported after external edit");
+        Json out = Json::obj();
+        out.set("status", "imported");
+        out.set("id", imported.id);
+        out.set("name", imported.name);
+        out.set("type", imported.type);
+        out.set("version", v);
+        out.set("nodes", (double)imported.nodes.size());
+        out.set("edges", (double)imported.edges.size());
+        if (!issues.empty()) {
+            Json ws = Json::arr();
+            for (auto& iss : issues) {
+                Json ji = Json::obj();
+                ji.set("severity", iss.severity);
+                ji.set("message", iss.message);
+                ws.push(ji);
+            }
+            out.set("warnings", ws);
+        }
+        out.set("hint", "use graph_open to edit again or graph_export to "
+                         "save the updated diagram");
         return textContent(out.dump(2));
     }
 

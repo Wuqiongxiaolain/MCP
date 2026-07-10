@@ -26,8 +26,9 @@
 | `csv` | `excalidraw` |
 | `xml` | `svg` |
 | `excalidraw` | `png` |
-| `model` (JSON) | `pdf` |
-| `auto` (自动检测) | `url` (mermaid.live 编辑链接) |
+| `drawio` | `pdf` |
+| `model` (JSON) | `url` (mermaid.live 编辑链接) |
+| `auto` (自动检测) | `model` (JSON) |
 | | `model` (JSON) |
 
 ---
@@ -100,7 +101,23 @@ graphmcp edit with-excalidraw --id my-graph  # .excalidraw 文件
 graphmcp edit with-svg        --id my-graph  # .svg 文件
 ```
 
-选项：`--version <n>`
+选项：`--version <n>`、`--editor-path <path>`（显式指定编辑器，自动发现 draw.io / VS Code）
+
+---
+
+### `import` — 编辑回导
+
+重新导入外部编辑后的文件，解析、校验、入库为新版本。
+
+```bash
+graphmcp import --id my-graph                     # 自动探测 open.* 文件
+graphmcp import --id my-graph --file edited.drawio  # 指定文件
+graphmcp import --id my-graph --content "flowchart TD\nX-->Y" --format mermaid
+```
+
+选项：`--format <fmt>`（drawio|excalidraw|mermaid|markdown|csv|xml|auto，默认 auto）
+
+> **编辑闭环**：`edit with-drawio --id X` → 在 draw.io 中编辑保存 → `import --id X` → 图库版本 +1
 
 ---
 
@@ -276,7 +293,7 @@ MCP 客户端配置示例（`mcp-config.example.json`）：
 
 ---
 
-## 二、MCP 工具（24 个）
+## 二、MCP 工具（25 个）
 
 所有工具通过 `tools/call` 方法调用，参数与 CLI 对应。
 
@@ -287,7 +304,8 @@ MCP 客户端配置示例（`mcp-config.example.json`）：
 | `graph_create` | 解析 → 校验 → 布局 → 存储 | `content` |
 | `graph_convert` | 格式直转（不存储） | `content`, `to` |
 | `graph_export` | 导出已存储图 | `id`, `to` |
-| `graph_open` | 外部编辑器打开 | `id` |
+| `graph_open` | 外部编辑器打开（自动发现编辑器） | `id` |
+| `graph_import` | 重新导入外部编辑后的文件 | `id` |
 | `graph_validate` | 结构校验 | (id 或 content) |
 | `graph_list` | 列出所有图 | (无) |
 | `graph_delete` | 删除图及所有版本 | `id`, `force` |

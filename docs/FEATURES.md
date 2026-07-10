@@ -137,4 +137,4 @@ JSON/XML 解析器、Base64 编解码全部手写，一条 `g++` 命令构建完
 
 ---
 
-完整命令与参数见 [CLI &amp; MCP 指令参考](CLI_MCP_REFERENCE.md)，设计细节见 [架构说明](ARCHITECTURE.md)。
+完整命令与参数见 [CLI &amp; MCP 指令参考](CLI_MCP_REFERENCE.md)，设计细节见 [应用运作逻辑](APPLICATION_LOGIC.md)。

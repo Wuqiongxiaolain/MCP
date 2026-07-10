@@ -175,7 +175,7 @@ int usage(const std::string& hint = "", int exitCode = 1)
         std::cerr << hint << "\n\n";
 
     std::cout
-        << "graphmcp " << mcp::SERVER_VERSION
+        << "graphmcp " << mcp::serverVersion()
         << " - graph design & drawing MCP tool\n"
            "\n"
            "usage: graphmcp <family> <subcommand> [positionals] [options]\n"

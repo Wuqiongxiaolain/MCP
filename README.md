@@ -1,5 +1,7 @@
 # graphmcp — 图形设计与绘图 MCP 工具
 
+> latest update: v0.1.1, 2026-07-10
+
 > Gitlab 为镜像备份仓，活跃项目管理见 GitHub：https://github.com/Wuqiongxiaolain/MCP
 
 用 **C++17** 编写的图形设计与绘图工具：零第三方依赖、单可执行文件。既可作 **CLI**，也可作 **MCP** 服务器接入 Claude Code / Claude Desktop 等客户端。

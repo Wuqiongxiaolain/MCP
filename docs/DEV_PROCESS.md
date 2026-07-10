@@ -1,5 +1,7 @@
 # graphmcp 开发过程
 
+> latest update: v0.1.1, 2026-07-10
+
 > 本文档依据仓库全部提交记录（`git log --all`，截至 2026-07-10，约 **145** 条）事后整理，按日期还原实际演进，**不是**开发当日的实时日记。  
 > 已并入原 `WORKLOG.md`（Keep a Changelog 式变更归档）、`CHANGELOG.md`、`DEV_LOG.md`。  
 > 阶段编号与 [PROJECT_TIMELINE.md](PROJECT_TIMELINE.md) 对齐；项目全景见 [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md)。

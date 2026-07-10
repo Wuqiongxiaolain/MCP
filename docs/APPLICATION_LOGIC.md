@@ -1,6 +1,8 @@
 # graphmcp 应用运作逻辑详解
 
-> 基于 graphmcp **0.1.0**（`SERVER_VERSION`，见 `src/mcp.hpp`）| 2026-07-10  
+> latest update: v0.1.1, 2026-07-10
+
+> 应用运作逻辑说明（版本以根目录 VERSION 为准）  
 > 下文已对照当前源码核对；旧版 `ARCHITECTURE.md` 中过时条目未照搬。
 
 ---
@@ -36,7 +38,7 @@ graphmcp 是一个 **C++17 单可执行文件**，零第三方依赖。核心设
 | 协议 | JSON-RPC 2.0 |
 | 传输 | stdio（行分隔） |
 | 实现文件 | `src/mcp.hpp` |
-| 服务版本 | `SERVER_VERSION = "0.1.0"` |
+| 服务版本 | `SERVER_VERSION（读取根目录 VERSION）` |
 | 启动方式 | `graphmcp serve` |
 | 存储路径 | 环境变量 `GRAPHMCP_STORE`，默认 `./graph-store` |
 

@@ -1,5 +1,7 @@
 # 🎯 graphmcp：一份图，任意格式进出
 
+> latest update: v0.1.1, 2026-07-10
+
 不管你手上是 Mermaid、Markdown、CSV、XML、Excalidraw 还是 draw.io，丢给 graphmcp，它都能读懂；不管你要 SVG、PNG、PDF、drawio 还是 Excalidraw，它都能吐给你。中间那道「先转 A 再转 B」的手工活，从此不用你自己干。
 
 **你可能正在遇到这些事**：
@@ -129,7 +131,7 @@ Excalidraw 手绘的白板——笔迹、图片、字体——原样往返，不
 
 ## 🔧 技术规格（供技术选型参考）
 
-> v1.1.0 · C++17 · 零第三方依赖 · 单可执行文件
+> 技术规格版本以根目录 VERSION 为准
 
 JSON/XML 解析器、Base64 编解码全部手写，一条 `g++` 命令构建完毕——不需要装 Node.js/npm，不需要 Python 运行时，也不用等 JVM 启动。Windows 下静态链接 libgcc/libstdc++，MCP 客户端用被裁剪的 PATH 拉起它也不会缺 DLL。
 

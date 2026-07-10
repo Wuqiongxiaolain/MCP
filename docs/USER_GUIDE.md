@@ -1,6 +1,8 @@
 # graphmcp 用户手册
 
-> 版本 0.1.0 | 2026-07-10  
+> latest update: v0.1.1, 2026-07-10
+
+> 用户手册（版本以根目录 VERSION 为准）  
 > 命令与参数速查（表格）：[CLI & MCP 指令参考](CLI_MCP_REFERENCE.md)
 
 ## 这是什么？

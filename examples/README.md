@@ -1,5 +1,7 @@
 # examples 目录说明
 
+> latest update: v0.1.1, 2026-07-10
+
 本目录按“输入样例 / 导出结果”拆分：
 
 - `example_input/`：所有导入源文件

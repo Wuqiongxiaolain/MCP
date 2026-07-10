@@ -1,5 +1,7 @@
 # graphmcp 项目全景总结
 
+> latest update: v0.1.1, 2026-07-10
+
 
 ## 一、项目来源
 

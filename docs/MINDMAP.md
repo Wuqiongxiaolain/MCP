@@ -1,5 +1,7 @@
 # graphmcp 项目思维导图
 
+> latest update: v0.1.1, 2026-07-10
+
 > 本文件同时是本工具的合法输入：
 > `graphmcp create --input docs/MINDMAP.md --name 项目思维导图`
 > 即可把这份思维导图导入工具本身并导出为 SVG / drawio / Excalidraw。

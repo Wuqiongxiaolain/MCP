@@ -1,6 +1,8 @@
 # CLI & MCP 指令参考
 
-> graphmcp 0.1.0 — 命令行与 MCP 工具速查（表格版）  
+> latest update: v0.1.1, 2026-07-10
+
+> 命令行与 MCP 工具速查（版本以根目录 VERSION 为准）  
 > 操作教程与场景说明见 [USER_GUIDE.md](USER_GUIDE.md)。
 
 ---

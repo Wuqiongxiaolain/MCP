@@ -34,7 +34,7 @@
 </text>
 <text x="18" y="222.0" font-size="14" xml:space="preserve">
 <tspan x="18.0" fill="#6fc3df">    "serverInfo":</tspan>
-<tspan x="160.8" fill="#e0a978"> { "name": "graphmcp", "version": "1.1.0" }</tspan>
+<tspan x="160.8" fill="#e0a978"> { "name": "graphmcp", "version": "v0.1.1" }</tspan>
 </text>
 <text x="18" y="244.0" font-size="14" xml:space="preserve">
 <tspan x="18.0" fill="#c9d4e3">  }</tspan>

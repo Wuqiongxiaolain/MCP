@@ -638,6 +638,8 @@ public:
             available += "vscode";
         if (!available.empty())
             out.set("availableEditors", available);
+        else
+            out.set("availableEditors", "");
         out.set("hint",
                 launched ?
                     (editorPath.empty() ? "opened with system default handler"

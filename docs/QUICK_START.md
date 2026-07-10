@@ -1,6 +1,10 @@
 # Quick Start — 快速接入 graphmcp
 
+> latest update: v0.1.1, 2026-07-10
+
 > 下载 exe → 改一行配置 → Claude 就能画图。不需要 clone 仓库。
+
+场景化教程见 [用户手册](USER_GUIDE.md)；命令与 MCP 工具速查见 [CLI & MCP 指令参考](CLI_MCP_REFERENCE.md)。
 
 ---
 

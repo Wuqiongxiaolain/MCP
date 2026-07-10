@@ -1,6 +1,6 @@
 // mcp.hpp - Model Context Protocol 服务端（基于 stdio 的 JSON-RPC 2.0，
 // 按行分隔消息）。对外提供图创建/转换/导出/打开/校验/布局/版本管理/
-// Cursor 操作等 24 个工具。
+// Cursor 操作等 25 个工具。
 #pragma once
 #include "exporters.hpp"
 #include "parsers.hpp"
@@ -8,6 +8,7 @@
 #include "version_manager.hpp"
 #include "cursor_types.hpp"
 #include <chrono>
+#include <cctype>
 #include <cstdlib>
 #include <iostream>
 
@@ -18,9 +19,25 @@ using gm::Edge;
 using gm::Graph;
 using gm::Node;
 
-inline const char* SERVER_NAME    = "graphmcp";
-inline const char* SERVER_VERSION = "0.1.0";
+inline const char* SERVER_NAME = "graphmcp";
 inline const char* PROTOCOL_VERSION = "2026-7-10";
+
+// serverVersion: 从仓库根目录 VERSION 读取应用版本，作为单一版本来源（SSOT）
+inline const std::string& serverVersion()
+{
+    static const std::string cached = []() {
+        std::string v = ge::readFile("VERSION");
+        while (!v.empty() && std::isspace((unsigned char)v.back()))
+            v.pop_back();
+        size_t p = 0;
+        while (p < v.size() && std::isspace((unsigned char)v[p]))
+            p++;
+        if (p > 0)
+            v = v.substr(p);
+        return v.empty() ? std::string("unknown") : v;
+    }();
+    return cached;
+}
 
 // ---- 工具 Schema 辅助 ----
 
@@ -1362,7 +1379,7 @@ inline bool handleMessage(const Json& msg, gs::Store& store, Json& response) {
         result.set("capabilities", caps);
         Json info = Json::obj();
         info.set("name", SERVER_NAME);
-        info.set("version", SERVER_VERSION);
+        info.set("version", serverVersion());
         result.set("serverInfo", info);
         response = rpcResult(id, result);
         auto ended = std::chrono::steady_clock::now();

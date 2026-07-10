@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="514" height="378" viewBox="0 0 514 378" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">
+<rect width="514" height="378" rx="10" fill="#1e2430"/>
+<path d="M0 10a10 10 0 0 1 10-10h494a10 10 0 0 1 10 10v28H0z" fill="#161b24"/>
+<circle cx="20" cy="19.0" r="6" fill="#ff5f57"/>
+<circle cx="38" cy="19.0" r="6" fill="#febc2e"/>
+<circle cx="56" cy="19.0" r="6" fill="#28c840"/>
+<text x="257.0" y="23.5" fill="#7d8899" font-size="12.5" text-anchor="middle">编辑闭环：导出 → 外部编辑 → 回导</text>
+<text x="18" y="68.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#7d8899">#  1. 导出给外部编辑器</tspan>
+</text>
+<text x="18" y="90.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#5fd7a7">$ </tspan>
+<tspan x="34.8" fill="#e8eef6">graphmcp export to-drawio --id gthy5gjqa -o open.drawio</tspan>
+</text>
+<text x="18" y="112.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#c9d4e3">drawio written: open.drawio</tspan>
+</text>
+<text x="18" y="156.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#7d8899">#  2. 在 draw.io 里把「需求输入」改成「用户下单」并保存</tspan>
+</text>
+<text x="18" y="200.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#7d8899">#  3. 回导：自动解析 + 校验 + 存为新版本</tspan>
+</text>
+<text x="18" y="222.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#5fd7a7">$ </tspan>
+<tspan x="34.8" fill="#e8eef6">graphmcp import --id gthy5gjqa --file open.drawio</tspan>
+</text>
+<text x="18" y="244.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#c9d4e3">imported '订单流程' id=gthy5gjqa v2 (5 nodes, 4 edges)</tspan>
+</text>
+<text x="18" y="288.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#5fd7a7">$ </tspan>
+<tspan x="34.8" fill="#e8eef6">graphmcp export to-mermaid --id gthy5gjqa --stdout</tspan>
+</text>
+<text x="18" y="310.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#c9d4e3">flowchart TD</tspan>
+</text>
+<text x="18" y="332.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#c9d4e3">    A["用户下单"]</tspan>
+</text>
+<text x="18" y="354.0" font-size="14" xml:space="preserve">
+<tspan x="18.0" fill="#c9d4e3">    B{"是否可解析?"}</tspan>
+</text>
+</svg>

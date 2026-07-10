@@ -3,7 +3,7 @@
 
 ## 一、项目来源
 
-本项目来自**课程实践要求**——"图形设计与绘图 MCP 工具"（需求编号 5），是一份完整的软件开发综合训练课题。项目通过接收结构化图形描述内容，实现多种图形类型的生成、编辑、导出与版本管理，并通过 MCP 协议接入 AI 客户端，使用户能以自然语言驱动图形设计。
+本项目来自**课程实践要求**——"图形设计与绘图 MCP 工具"，是一份完整的软件开发综合训练课题。项目通过接收结构化图形描述内容，实现多种图形类型的生成、编辑、导出与版本管理，并通过 MCP 协议接入 AI 客户端，使用户能以自然语言驱动图形设计。
 
 ---
 
@@ -14,11 +14,11 @@
 | 维度 | 规定 | 实际实现 |
 |------|------|---------|
 | 编程语言 | C++ | C++17 |
-| 界面形式 | CLI | ✅ CLI + MCP 双模式 |
+| 界面形式 | CLI | CLI + MCP 双模式 |
 | 数据存储 | JSON 或 SQLite | JSON 文件系统（零依赖） |
-| 版本控制 | Git | ✅ Git + GitHub |
-| 持续集成 | Jenkins + Ansible | ✅ GitHub Actions（已迁移） |
-| 代码质量 | SonarQube | ✅ SonarQube + cppcheck + clang-format |
+| 版本控制 | Git | Git + GitHub |
+| 持续集成 | Jenkins + Ansible | GitHub Actions（已迁移） |
+| 代码质量 | SonarQube | SonarQube + cppcheck + clang-format |
 
 ### 2.2 功能需求完成情况
 
@@ -32,7 +32,7 @@
 | 导出 .drawio / Mermaid / Excalidraw / PNG / SVG / PDF / URL | ✅ | 8 种输出格式 |
 | 图定义保存 + 历史版本管理 + 回溯 | ✅ | 类 Git 工作流（Draft→Stage→Commit→Checkout） |
 | MCP 接口：创建 / 转换 / 打开 / 导出 | ✅ | 9 个 MCP 工具 |
-| 可选：实时画布预览 | ⬜ | 列为后续目标 |
+| 可选：实时画布预览 | ❎ | 列为后续目标 |
 
 ---
 
@@ -42,12 +42,7 @@
 
 ### 3.1 启动路径
 
-开发严格遵循依赖顺序，后一步建立在前一步之上：
-
-```
-第1步          第2步         第3步         第4步          第5步
-基础设施  →   数据模型   →   输入解析  →   输出导出   →   存储与接口
-```
+启动步骤如下：
 
 | 顺序 | 步骤 | 产出 | 说明 |
 |------|------|------|------|
@@ -133,16 +128,16 @@ Mermaid/Markdown/CSV/XML 文本输入
 ```
 main ────────────────────────────────────────────────────────▶ (主线)
   │
-  ├── feature/github-actions-cicd    → PR #10, #11 (CI/CD)
-  ├── feature/excalidraw-export-...  → PR #16     (白板导出)
+  ├── feature/github-actions-cicd    → PR #10, #11       (CI/CD)
+  ├── feature/excalidraw-export-...  → PR #16            (白板导出)
   ├── docs/changelog                 → PR #19, #21, #22
-  ├── docs/cli-mcp-reference         → PR #21     (接口文档)
-  ├── feature/cli-test-pipeline      → PR #24     (CLI 测试)
-  ├── ah_feng-editor-v2              → PR #25     (编辑器)
-  ├── feature/mcp-three-layer-tests  → PR #26     (MCP 测试)
-  ├── CLI                            → 大分支     (CLI 重构+版本+游标)
-  └── docs/app-logic-explanation     → PR         (原理说明)
-```
+  ├── docs/cli-mcp-reference         → PR #21            (接口文档)
+  ├── feature/cli-test-pipeline      → PR #24            (CLI 测试)
+  ├── ah_feng-editor-v2              → PR #25            (编辑器)
+  ├── feature/mcp-three-layer-tests  → PR #26            (MCP 测试)
+  ├── CLI                            → PR #13            (CLI 重构+版本+游标)
+  └── docs/app-logic-explanation     → PR #41            (原理说明)
+```    
 
 ### 5.2 PR 工作流
 
@@ -150,7 +145,7 @@ main ─────────────────────────
 |------|------|
 | 分支命名 | `feature/*` / `docs/*` / `fix/*` 前缀 |
 | PR 合并 | 每个 PR 一个独立主题，通过 GitHub PR 页面合并 |
-| 代码审查 | PR 内审查（review 功能） |
+| 代码审查 | PR 内审查（review ） |
 | 提交规范 | `feat(*): ` / `fix(*): ` / `docs(*): ` / `test(*): ` / `chore(*): ` / `style(*): ` 前缀 |
 
 ### 5.3 质量保障
@@ -178,24 +173,20 @@ main ─────────────────────────
 
 ### 6.1 功能扩展
 
-| 优先级 | 目标 | 说明 |
-|--------|------|------|
-| ⬜ | **实时画布预览** | 通过 SVG + 本地 HTML 轮询 `latest.json` 实现实时预览 |
-| ⬜ | **更多 Mermaid 类型** | classDiagram（类图）、stateDiagram（状态图） |
-| ⬜ | **draw.io URL** | 需要 deflate 压缩，暂以零依赖为由缓做 |
-| ⬜ | **分层布局优化** | 引入 median 启发式减少连线交叉 |
+| 目标 | 说明 |
+|------|------|
+| **实时画布预览** | 通过 SVG + 本地 HTML 轮询 `latest.json` 实现实时预览 |
+| **更多 Mermaid 类型** | classDiagram（类图）、stateDiagram（状态图） |
+| **draw.io URL** | 需要 deflate 压缩，暂以零依赖为由缓做 |
+| **分层布局优化** | 引入 median 启发式减少连线交叉 |
 
 ### 6.2 工程提升
 
-| 优先级 | 目标 | 说明 |
-|--------|------|------|
-| ⬜ | **SQLite 可选后端** | 大图检索场景下替代 JSON 文件存储 |
-| ⬜ | **贡献指南** | 开源协作规范文档（`CONTRIBUTING.md`） |
-| ⬜ | **Release 制品** | Tag 触发多平台二进制发布（Windows/Linux/macOS） |
-
-### 6.3 项目定位
-
-项目当前处于 **"课程实践完整交付"** 阶段：核心功能全部实现、测试覆盖充分、文档齐全。后续演进方向是从课程项目走向可长期维护的实用工具——补充画布预览交互层、拓展图类型支持、建立开源社区贡献机制。
+| 目标 | 说明 |
+|------|------|
+| **SQLite 可选后端** | 大图检索场景下替代 JSON 文件存储 |
+| **贡献指南** | 开源协作规范文档（`CONTRIBUTING.md`） |
+| **Release 制品** | Tag 触发多平台二进制发布（Windows/Linux/macOS） |
 
 ---
 
@@ -211,5 +202,5 @@ main ─────────────────────────
 | 6 | 导出 .drawio / Mermaid / Excalidraw / PNG / SVG / PDF / URL | ✅ |
 | 7 | 图定义保存 + 历史版本管理 + 回溯 | ✅ |
 | 8 | MCP 接口：创建 / 转换 / 打开 / 导出 | ✅ |
-| 9 | 可选：实时画布 | ⬜ |
+| 9 | 可选：实时画布 | ❎ |
 | 10 | C++ / CLI / JSON 存储 / Git | ✅ |

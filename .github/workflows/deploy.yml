@@ -24,9 +24,11 @@ jobs:
           - os: ubuntu-latest
             label: Linux
             platform: linux-x64
-          - os: macos-latest
-            label: macOS
-            platform: macos-x64
+          # macOS 构建暂时禁用（exporters.hpp 缺少 <dirent.h>/<unistd.h> 头文件）
+          # 修复后取消注释下面 3 行即可恢复：
+          # - os: macos-latest
+          #   label: macOS
+          #   platform: macos-x64
           - os: windows-latest
             label: Windows
             platform: windows-x64
@@ -150,4 +152,4 @@ jobs:
             本次为 Tag 触发的多平台自动制品发布（CD）。
             - 触发 Tag：`${{ github.ref_name }}`
             - 提交：`${{ github.sha }}`
-            - 平台：Linux / macOS / Windows
+            - 平台：Linux / Windows（macOS 待修复后加入）

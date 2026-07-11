@@ -112,7 +112,7 @@ start_server
 
 rpc_call '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
 PROTO="$(jq -r '.result.protocolVersion // empty' "$TMP_RESP")"
-check_eq "initialize" "$PROTO" "2026-7-10" "protocolVersion=$PROTO"
+check_eq "initialize" "$PROTO" "2024-11-05" "protocolVersion=$PROTO"
 
 rpc_call '{"jsonrpc":"2.0","method":"notifications/initialized"}' 0
 if [ ! -s "$TMP_RESP" ]; then

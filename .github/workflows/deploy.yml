@@ -34,11 +34,9 @@ jobs:
           - os: ubuntu-latest
             label: Linux
             platform: linux-x64
-          # macOS 构建暂时禁用（exporters.hpp 缺少 <dirent.h>/<unistd.h> 头文件）
-          # 修复后取消注释下面 3 行即可恢复：
-          # - os: macos-latest
-          #   label: macOS
-          #   platform: macos-x64
+          - os: macos-latest
+            label: macOS
+            platform: macos-x64
           - os: windows-latest
             label: Windows
             platform: windows-x64

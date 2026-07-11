@@ -22,7 +22,9 @@
 
 #    include <shellapi.h>
 #elif defined(__APPLE__)
+#    include <dirent.h>
 #    include <limits.h>
+#    include <unistd.h>
 
 #    include <mach-o/dyld.h>
 #    include <sys/stat.h>

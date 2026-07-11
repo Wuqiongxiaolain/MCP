@@ -569,10 +569,15 @@ int cmdEdit(Args& a, gs::Store& store)
 
     Graph       g;
     std::string err;
-    if (!store.load(id, g, atoi(a.get("version", "0").c_str()), &err)) {
+    int         ver = atoi(a.get("version", "0").c_str());
+    if (!store.load(id, g, ver, &err)) {
         std::cerr << "error: " << err << "\n";
         return 5;
     }
+    int currentVer = ver > 0 ? ver : (int)store.history(id).size();
+    std::cout << "editing graph '" << g.name << "' v"
+              << currentVer << " (" << g.nodes.size() << " nodes, "
+              << g.edges.size() << " edges)\n";
 
     std::string target;
     if (editor == "browser") {
@@ -586,6 +591,13 @@ int cmdEdit(Args& a, gs::Store& store)
                           editor == "excalidraw" ? ".excalidraw" :
                                                    ".svg";
         target = a.get("output", store.root() + "/" + g.id + "/open" + ext);
+        // 检查是否已有编辑中的文件，提醒用户先 import 保存
+        std::string existing = ge::readFile(target);
+        if (!existing.empty())
+            std::cout << "note: " << target
+                      << " already exists and will be overwritten.\n"
+                      << "  run 'graphmcp import --id " << id
+                      << "' first to save changes.\n";
         ge::ExportResult r = ge::exportGraph(g, fmt, target);
         if (!r.ok) {
             std::cerr << "error: " << r.message << "\n";
@@ -626,8 +638,11 @@ int cmdImport(Args& a, gs::Store& store) {
     if (content.empty())
         content = ge::readOpenFile(store.root(), g.id, fmt);
     if (content.empty()) {
-        std::cerr << "error: no input provided (use --file, --content, or pipe; "
-                     "or run 'edit' first to generate an editable file)\n";
+        std::cerr << "error: no input provided.\n"
+                     "  graphmcp import --id <id>\n"
+                     "  graphmcp import --id <id> --file <edited-file>\n"
+                     "  graphmcp import --id <id> --content \"...\" --format "
+                     "<fmt>\n";
         return 1;
     }
 

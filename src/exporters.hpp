@@ -1229,6 +1229,10 @@ inline std::string sanitizeMermaidId(const std::string& id)
 // 关键步骤：按图类型分支（mindmap/er/flowchart）-> 输出节点 -> 输出边
 inline std::string toMermaid(const Graph& g)
 {
+    // 透传模式：如果存有原始 Mermaid 文本（无法深度解析的类型），直接返回
+    if (!g.rawMermaid.empty())
+        return g.rawMermaid;
+
     std::ostringstream os;
     if (g.type == "mindmap") {
         os << "mindmap\n";
@@ -1269,6 +1273,45 @@ inline std::string toMermaid(const Graph& g)
             for (auto& a : n.attrs)
                 os << "        " << a << "\n";
             os << "    }\n";
+        }
+        return os.str();
+    }
+    if (g.type == "classDiagram") {
+        os << "classDiagram\n";
+        // 输出关系边
+        for (auto& e : g.edges) {
+            os << "    " << sanitizeMermaidId(e.from);
+            // 根据 label 推断关系箭头
+            std::string rel = e.label;
+            if (rel == "inheritance")      os << " <|-- ";
+            else if (rel == "composition")  os << " *-- ";
+            else if (rel == "aggregation")  os << " o-- ";
+            else if (rel == "bidirectional") os << " <--> ";
+            else if (rel == "realization")   os << " ..|> ";
+            else if (rel == "dependency")    os << " ..> ";
+            else if (rel == "dotted")        os << " .. ";
+            else if (rel == "link")          os << " -- ";
+            else                             os << " --> ";
+            os << sanitizeMermaidId(e.to) << " : \"" << rel << "\"\n";
+        }
+        // 输出类定义
+        for (auto& n : g.nodes) {
+            os << "    class " << sanitizeMermaidId(n.id) << " {\n";
+            for (auto& a : n.attrs)
+                os << "        " << a << "\n";
+            os << "    }\n";
+        }
+        return os.str();
+    }
+    if (g.type == "stateDiagram") {
+        os << "stateDiagram-v2\n";
+        // 输出转移
+        for (auto& e : g.edges) {
+            os << "    " << sanitizeMermaidId(e.from)
+               << " --> " << sanitizeMermaidId(e.to);
+            if (!e.label.empty())
+                os << " : " << e.label;
+            os << "\n";
         }
         return os.str();
     }
@@ -1618,6 +1661,24 @@ inline std::string toExcalidraw(Graph g)
 // 关键步骤：白板走 elements 原样渲染；其它图走 nodes/edges 布局渲染
 inline std::string toSVG(Graph g)
 {
+    // rawMermaid 类型：生成嵌入式 SVG（提示使用 mermaid.live 或 PNG 导出查看）
+    if (!g.rawMermaid.empty()) {
+        std::ostringstream os;
+        os << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"800\" height=\"200\""
+              " viewBox=\"0 0 800 200\">\n";
+        os << "  <rect width=\"800\" height=\"200\" fill=\"#fafafa\" rx=\"8\"/>\n";
+        os << "  <text x=\"400\" y=\"60\" text-anchor=\"middle\" font-size=\"18\""
+              " fill=\"#333\" font-family=\"sans-serif\">";
+        os << "Mermaid Diagram (" << xmlEscape(g.type) << ")</text>\n";
+        os << "  <text x=\"400\" y=\"100\" text-anchor=\"middle\" font-size=\"13\""
+              " fill=\"#666\" font-family=\"sans-serif\">";
+        os << "Use 'graph_export to=png' for rendered output, or 'to=url' for mermaid.live</text>\n";
+        os << "  <text x=\"400\" y=\"140\" text-anchor=\"middle\" font-size=\"11\""
+              " fill=\"#999\" font-family=\"monospace\">";
+        os << xmlEscape(g.type) << " (" << g.rawMermaid.size() << " bytes)</text>\n";
+        os << "</svg>\n";
+        return os.str();
+    }
     if (isWhiteboardElements(g))
         return toSVGExcalidraw(g);
 
@@ -1763,8 +1824,9 @@ inline std::string toSVG(Graph g)
 // toMermaidLiveUrl: 生成可直接打开的 mermaid.live 编辑链接
 inline std::string toMermaidLiveUrl(const Graph& g)
 {
+    std::string code = g.rawMermaid.empty() ? toMermaid(g) : g.rawMermaid;
     Json payload = Json::obj();
-    payload.set("code", toMermaid(g));
+    payload.set("code", code);
     payload.set("mermaid", "{\"theme\":\"default\"}");
     payload.set("autoSync", true);
     payload.set("updateDiagram", true);
@@ -2011,6 +2073,95 @@ inline std::string rasterize(const std::string& svgPathIn,
     return "";
 }
 
+// toMermaidBrowserPage: 为 rawMermaid 类型生成内嵌 Mermaid.js 的完整 HTML 页面
+// 可由浏览器渲染 SVG，进而截图/打印为 PNG/PDF
+inline std::string toMermaidBrowserPage(const Graph& g)
+{
+    std::string code = g.rawMermaid.empty() ? toMermaid(g) : g.rawMermaid;
+    std::string escaped;
+    for (char c : code) {
+        switch (c) {
+            case '<': escaped += "&lt;"; break;
+            case '&': escaped += "&amp;"; break;
+            default: escaped += c;
+        }
+    }
+    return R"(<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>graphmcp Mermaid</title>
+<style>
+  body{margin:0;padding:20px;background:#fff;font-family:sans-serif;}
+  .mermaid{display:flex;justify-content:center;}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({startOnLoad:true,theme:'default',securityLevel:'loose'});
+</script>
+</head>
+<body>
+<pre class="mermaid">
+)" + escaped + R"(
+</pre>
+</body>
+</html>)";
+}
+
+// rasterizeMermaid: 将 rawMermaid 图表通过 headless 浏览器渲染为 PNG 或 PDF
+// 关键步骤：生成 HTML -> 写临时文件 -> 浏览器截图/打印 -> 校验输出
+inline std::string rasterizeMermaid(const Graph& g,
+                                    const std::string& outPath,
+                                    const std::string& fmt)
+{
+    std::string html     = toMermaidBrowserPage(g);
+    std::string htmlPath = outPath + ".mermaid.html";
+    if (!writeFile(htmlPath, html))
+        return "";
+
+    std::string absOut  = absPath(outPath);
+    std::string browser = findBrowser();
+    if (browser.empty()) {
+        std::remove(htmlPath.c_str());
+        return "";
+    }
+
+    std::string tmp = getEnvVar("TEMP");
+    if (tmp.empty())
+        tmp = getEnvVar("TMP");
+    std::string profile = (!tmp.empty() ? tmp + "/graphmcp-chrome-profile" :
+                                          outPath + ".chromeprofile");
+
+    int         w    = 1400, h = 1000;
+    std::string url  = fileUrl(htmlPath);
+    std::string args = "--headless=new --disable-gpu --no-sandbox "
+                       "--virtual-time-budget=5000 "
+                       "--user-data-dir=\"" + profile + "\" ";
+    if (fmt == "pdf") {
+        args += "--no-pdf-header-footer --print-to-pdf=\"" + absOut +
+                "\" \"" + url + "\"";
+    } else {
+        args += "--force-device-scale-factor=2 --window-size=" +
+                std::to_string(w) + "," + std::to_string(h) +
+                " --screenshot=\"" + absOut + "\" \"" + url + "\"";
+    }
+
+    std::remove(outPath.c_str());
+    launchBrowser(browser, args);
+    std::remove(htmlPath.c_str());
+
+    std::ifstream check(outPath, std::ios::binary);
+    if (check.good() && check.peek() != std::ifstream::traits_type::eof()) {
+#ifdef _WIN32
+        return browser.find("msedge") != std::string::npos ? "edge" : "chrome";
+#else
+        return "chromium";
+#endif
+    }
+    return "";
+}
+
 // --------------------------------------------------------------- 分发入口 --
 
 // ExportResult: 导出结果对象（ok/message/content/path 四元信息）
@@ -2050,6 +2201,23 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
     }
     else if (to == "png" || to == "pdf") {
         std::string base = outPath.empty() ? ("graph_export." + to) : outPath;
+        // rawMermaid 类型：通过浏览器渲染 Mermaid.js -> 截图/打印
+        if (!g.rawMermaid.empty()) {
+            std::string tool = rasterizeMermaid(g, base, to);
+            if (!tool.empty()) {
+                r.ok      = true;
+                r.path    = base;
+                r.message = to + " written via " + tool + " (mermaid browser render): " + base;
+                return r;
+            }
+            // 降级：生成 Mermaid 文本
+            std::string fallback = base + ".mmd";
+            writeFile(fallback, g.rawMermaid);
+            r.message = "no browser found for mermaid render; wrote raw mermaid to " +
+                        fallback + " - open in mermaid.live to view";
+            r.path = fallback;
+            return r;
+        }
         // PNG/PDF：统一走精确 SVG 再栅格化（不尝试近似 rough 叠加）。
         std::string svg     = toSVG(g);
         std::string svgPath = base + ".tmp.svg";

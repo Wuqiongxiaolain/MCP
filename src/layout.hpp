@@ -25,6 +25,10 @@ inline std::vector<Issue> validate(const Graph& g)
     auto err  = [&](const std::string& m) { issues.push_back({"error", m}); };
     auto warn = [&](const std::string& m) { issues.push_back({"warning", m}); };
 
+    // rawMermaid 透传类型没有可验证的节点/边结构，跳过校验
+    if (!g.rawMermaid.empty())
+        return issues;
+
     if (g.nodes.empty() && g.elements.empty())
         err("graph has no nodes or whiteboard elements");
 
@@ -280,6 +284,11 @@ inline void layoutGrid(Graph& g)
 // 关键步骤：补默认尺寸 -> 策略分发 -> 坐标归一化到正区间
 inline void layout(Graph& g, bool force = false,
                    const std::string& strategy = "") {
+    // rawMermaid 透传类型无节点坐标可布局，直接标记完成
+    if (!g.rawMermaid.empty()) {
+        g.laidOut = true;
+        return;
+    }
     if (g.laidOut && !force)
         return;
     for (auto& n : g.nodes)

@@ -324,7 +324,229 @@ inline Graph parseMermaidER(const std::vector<std::string>& lines, size_t first)
     return g;
 }
 
+// parseMermaidClass: 解析 classDiagram 语法 -> 统一 Graph 模型
+// 关键步骤：解析 class 块提取属性和方法 -> 解析关系箭头（继承/组合/聚合/关联）
+// -> 节点存 attrs，边存关系类型标签
+inline Graph parseMermaidClass(const std::vector<std::string>& lines, size_t first)
+{
+    Graph g;
+    g.type = "classDiagram";
+    std::string curClass;
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%"))
+            continue;
+        // 注解：<<interface>> / <<abstract>>
+        if (startsWith(line, "<<") && line.find(">>") != std::string::npos) {
+            if (!curClass.empty()) {
+                Node* n = g.findNode(curClass);
+                if (n)
+                    n->attrs.push_back(line);
+            }
+            continue;
+        }
+        // class 块起始
+        if (startsWith(line, "class ")) {
+            std::string rest = trim(line.substr(6));
+            // 去掉末尾的 {
+            if (!rest.empty() && rest.back() == '{')
+                rest = trim(rest.substr(0, rest.size() - 1));
+            curClass = rest;
+            g.ensureNode(curClass, curClass).shape = "rect";
+            continue;
+        }
+        // class 块结束
+        if (line == "}") {
+            curClass.clear();
+            continue;
+        }
+        // 成员/方法（在 class 块内）
+        if (!curClass.empty()) {
+            Node& n = g.ensureNode(curClass);
+            n.attrs.push_back(line);
+            continue;
+        }
+        // 关系语句：支持 <|-- *-- o-- --> -- ..> ..|> <-->
+        std::string relLabel;
+        size_t colon = line.find(':');
+        if (colon != std::string::npos) {
+            relLabel = trim(line.substr(colon + 1));
+            if (relLabel.size() >= 2 && relLabel.front() == '"' && relLabel.back() == '"')
+                relLabel = relLabel.substr(1, relLabel.size() - 2);
+            line = trim(line.substr(0, colon));
+        }
+        // 尝试匹配各种关系箭头
+        struct RelArrow { const char* tok; const char* name; };
+        static const RelArrow arrows[] = {
+            {"<|--", "inheritance"},   {"--|>", "inheritance"},
+            {"*--", "composition"},    {"--*", "composition"},
+            {"o--", "aggregation"},    {"--o", "aggregation"},
+            {"<-->", "bidirectional"}, {"-->", "association"},
+            {"--", "link"},
+            {"..|>", "realization"},   {"<|..", "realization"},
+            {"..>", "dependency"},     {"<..", "dependency"},
+            {"..", "dotted"},
+        };
+        for (auto& ar : arrows) {
+            size_t ap = line.find(ar.tok);
+            if (ap != std::string::npos) {
+                std::string left  = trim(line.substr(0, ap));
+                size_t      after = ap + strlen(ar.tok);
+                std::string right = trim(line.substr(after));
+                if (!left.empty() && !right.empty()) {
+                    g.ensureNode(left).shape = "rect";
+                    g.ensureNode(right).shape = "rect";
+                    std::string label = relLabel.empty() ? std::string(ar.name) : relLabel;
+                    g.addEdge(left, right, label, "solid",
+                              std::string(ar.name) == "bidirectional" ? "both" : "arrow");
+                }
+                break;
+            }
+        }
+    }
+    return g;
+}
+
+// parseMermaidState: 解析 stateDiagram-v2 语法 -> 统一 Graph 模型
+// 关键步骤：解析 state 块 -> 处理复合状态 -> 解析转移/守卫/动作
+inline Graph parseMermaidState(const std::vector<std::string>& lines, size_t first)
+{
+    Graph g;
+    g.type = "stateDiagram";
+    std::vector<std::string> stateStack;  // 复合状态嵌套栈
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%"))
+            continue;
+        // 复合状态: state "Name" as id {
+        if (startsWith(line, "state ")) {
+            std::string rest   = trim(line.substr(6));
+            std::string sid, slabel;
+            // 检查是否有 { 结尾
+            bool hasBlock = !rest.empty() && rest.back() == '{';
+            if (hasBlock)
+                rest = trim(rest.substr(0, rest.size() - 1));
+            // 检查 "label" as id 语法
+            size_t asPos = rest.find(" as ");
+            if (asPos != std::string::npos) {
+                slabel = trim(rest.substr(0, asPos));
+                if (slabel.size() >= 2 && slabel.front() == '"' && slabel.back() == '"')
+                    slabel = slabel.substr(1, slabel.size() - 2);
+                sid = trim(rest.substr(asPos + 4));
+            } else {
+                sid = rest;
+                slabel = rest;
+                if (slabel.size() >= 2 && slabel.front() == '"' && slabel.back() == '"')
+                    slabel = slabel.substr(1, slabel.size() - 2);
+            }
+            if (sid.empty()) {
+                sid = "s" + std::to_string(g.nodes.size() + 1);
+            }
+            Node& n = g.ensureNode(sid, slabel);
+            n.shape = hasBlock ? "group" : "round";
+            if (!stateStack.empty())
+                n.parent = stateStack.back();
+            if (hasBlock)
+                stateStack.push_back(sid);
+            continue;
+        }
+        // 复合状态结束
+        if (line == "}" && !stateStack.empty()) {
+            stateStack.pop_back();
+            continue;
+        }
+        // 状态描述（note-like）
+        if (startsWith(line, "note ") || startsWith(line, "--")) {
+            continue;
+        }
+        // 转移: [*] --> state  或  state --> [*]  或  state --> state
+        size_t arrowPos = line.find("-->");
+        if (arrowPos == std::string::npos)
+            arrowPos = line.find("->");
+        if (arrowPos != std::string::npos) {
+            int     alen = (arrowPos + 3 < line.size() && line[arrowPos + 2] == '>') ? 3 : 2;
+            std::string left  = trim(line.substr(0, arrowPos));
+            std::string right = trim(line.substr(arrowPos + alen));
+            std::string elabel;
+            // 提取 : label 部分
+            size_t colonPos = right.find(':');
+            if (colonPos != std::string::npos) {
+                elabel = trim(right.substr(colonPos + 1));
+                right  = trim(right.substr(0, colonPos));
+            }
+            if (elabel.size() >= 2 && elabel.front() == '"' && elabel.back() == '"')
+                elabel = elabel.substr(1, elabel.size() - 2);
+            if (!left.empty() && !right.empty()) {
+                // [*] 是特殊起始/终止状态
+                if (left != "[*]") {
+                    Node& n = g.ensureNode(left);
+                    if (n.shape.empty() || n.shape == "rect")
+                        n.shape = "round";
+                    if (!stateStack.empty() && n.parent.empty())
+                        n.parent = stateStack.back();
+                }
+                if (right != "[*]") {
+                    Node& n = g.ensureNode(right);
+                    if (n.shape.empty() || n.shape == "rect")
+                        n.shape = "round";
+                    if (!stateStack.empty() && n.parent.empty())
+                        n.parent = stateStack.back();
+                }
+                g.addEdge(left, right, elabel, "solid", "arrow");
+            }
+        }
+    }
+    return g;
+}
+
 // parseMermaid: Mermaid 分发入口，根据首个有效指令选择具体子解析器
+// mermaidTypeFromFirstLine: 从首行关键字推断 Mermaid 类型名
+inline std::string mermaidTypeFromFirstLine(const std::string& lowerLine)
+{
+    if (startsWith(lowerLine, "graph") || startsWith(lowerLine, "flowchart"))
+        return "flowchart";
+    if (startsWith(lowerLine, "mindmap"))
+        return "mindmap";
+    if (startsWith(lowerLine, "erdiagram"))
+        return "er";
+    if (startsWith(lowerLine, "sequencediagram"))
+        return "sequenceDiagram";
+    if (startsWith(lowerLine, "classdiagram") || startsWith(lowerLine, "classdiagram-v2"))
+        return "classDiagram";
+    if (startsWith(lowerLine, "statediagram"))
+        return "stateDiagram";
+    if (startsWith(lowerLine, "gantt"))
+        return "gantt";
+    if (startsWith(lowerLine, "pie"))
+        return "pie";
+    if (startsWith(lowerLine, "gitgraph"))
+        return "gitGraph";
+    if (startsWith(lowerLine, "journey"))
+        return "journey";
+    if (startsWith(lowerLine, "timeline"))
+        return "timeline";
+    if (startsWith(lowerLine, "kanban"))
+        return "kanban";
+    if (startsWith(lowerLine, "quadrantchart"))
+        return "quadrantChart";
+    if (startsWith(lowerLine, "xychart-beta"))
+        return "xychart";
+    if (startsWith(lowerLine, "architecture-beta"))
+        return "architecture-beta";
+    if (startsWith(lowerLine, "packet-beta"))
+        return "packet";
+    if (startsWith(lowerLine, "block-beta"))
+        return "block";
+    if (startsWith(lowerLine, "sankey-beta"))
+        return "sankey";
+    if (startsWith(lowerLine, "requirementdiagram"))
+        return "requirement";
+    return "";
+}
+
+// parseMermaid: Mermaid 分发入口，根据首个有效指令选择具体子解析器
+// 对于能深度解析的类型（flowchart/mindmap/er）走专用解析器；
+// 其余类型走 rawMermaid 透传模式，保留原始文本供 Mermaid/URL 导出。
 inline Graph parseMermaid(const std::string& text)
 {
     auto lines = splitLines(text);
@@ -338,6 +560,18 @@ inline Graph parseMermaid(const std::string& text)
             return parseMermaidMindmap(lines, i + 1);
         if (startsWith(t, "erdiagram"))
             return parseMermaidER(lines, i + 1);
+        if (startsWith(t, "classdiagram"))
+            return parseMermaidClass(lines, i + 1);
+        if (startsWith(t, "statediagram"))
+            return parseMermaidState(lines, i + 1);
+        // 透传模式：不支持的 Mermaid 类型保存原始文本，不做深度解析
+        std::string detected = mermaidTypeFromFirstLine(t);
+        if (!detected.empty()) {
+            Graph g;
+            g.type       = detected;
+            g.rawMermaid = text;
+            return g;
+        }
         throw ParseError("unsupported mermaid diagram type: " +
                          t.substr(0, 20));
     }
@@ -1033,7 +1267,16 @@ inline std::string detectFormat(const std::string& text)
         if (s.empty() || startsWith(s, "%%"))
             continue;
         if (startsWith(s, "graph ") || startsWith(s, "flowchart") ||
-            startsWith(s, "mindmap") || startsWith(s, "erdiagram"))
+            startsWith(s, "mindmap") || startsWith(s, "erdiagram") ||
+            startsWith(s, "sequencediagram") || startsWith(s, "classdiagram") ||
+            startsWith(s, "statediagram") || startsWith(s, "gantt") ||
+            startsWith(s, "pie ") || startsWith(s, "pie\n") ||
+            startsWith(s, "gitgraph") || startsWith(s, "journey") ||
+            startsWith(s, "timeline") || startsWith(s, "kanban") ||
+            startsWith(s, "quadrantchart") || startsWith(s, "xychart-beta") ||
+            startsWith(s, "architecture-beta") || startsWith(s, "packet-beta") ||
+            startsWith(s, "block-beta") || startsWith(s, "sankey-beta") ||
+            startsWith(s, "requirementdiagram"))
             return "mermaid";
         break;
     }

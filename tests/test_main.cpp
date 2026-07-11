@@ -1336,6 +1336,255 @@ static void testMcpGraphImport()
     CHECK((int)j2.num("version") == 2);
 }
 
+// 测试所有 13 种新 Mermaid 类型的 rawMermaid 透传模式
+static void testMermaidRawPassthrough()
+{
+    // 每种类型的测试：(mermaid文本, 期望type)
+    struct
+    {
+        std::string text;
+        std::string expectedType;
+        const char* name;
+    } cases[] = {
+        {"sequenceDiagram\nAlice->>Bob: Hello", "sequenceDiagram", "sequenceDiagram"},
+        // classDiagram 和 stateDiagram 走深度解析，见 testMermaidClass/testMermaidState
+        {"gantt\ntitle Project\ndateFormat YYYY-MM-DD\nsection Dev\nTask: 1d", "gantt", "gantt"},
+        {"pie title Pets\n\"Dog\": 50\n\"Cat\": 30", "pie", "pie"},
+        {"gitGraph\ncommit\nbranch dev\ncheckout dev\ncommit", "gitGraph", "gitGraph"},
+        {"journey\ntitle My Day\nsection Morning\nWake: 5: Me", "journey", "journey"},
+        {"timeline\ntitle History\nsection Era\nEvent: detail", "timeline", "timeline"},
+        {"kanban\ncolumns\n  column Todo\n  column Done", "kanban", "kanban"},
+        {"quadrantChart\ntitle Quad\nx-axis Low --> High\ny-axis Low --> High\nA: [0.3, 0.5]", "quadrantChart", "quadrantChart"},
+        {"xychart-beta\ntitle Sales\nx-axis [A,B]\ny-axis 0 --> 100\nbar [10,20]", "xychart", "xychart-beta"},
+        {"architecture-beta\ngroup api(cloud)[API]\nservice db(database)[DB]", "architecture-beta", "architecture-beta"},
+        {"packet-beta\ntitle Frame\n0-7: Header\n8-15: Data", "packet", "packet-beta"},
+    };
+
+    for (auto& c : cases) {
+        // 测试 1：parseMermaid 正确识别类型并存储 rawMermaid
+        Graph g = gp::parseMermaid(c.text);
+        CHECK(g.type == c.expectedType);
+        CHECK(!g.rawMermaid.empty());
+        CHECK(g.rawMermaid == c.text);
+
+        // 测试 2：toMermaid 返回原始文本（无损往返）
+        std::string exported = ge::toMermaid(g);
+        CHECK(exported == c.text);
+
+        // 测试 3：toMermaidLiveUrl 包含原始文本
+        std::string url = ge::toMermaidLiveUrl(g);
+        CHECK(!url.empty());
+        CHECK(url.find("mermaid.live") != std::string::npos);
+
+        // 测试 4：detectFormat 识别为 mermaid
+        std::string fmt = gp::detectFormat(c.text);
+        CHECK(fmt == "mermaid");
+
+        // 测试 5：parseAny 也能正确处理
+        Graph g2 = gp::parseAny(c.text, "auto", "");
+        CHECK(g2.type == c.expectedType);
+        CHECK(g2.rawMermaid == c.text);
+
+        // 测试 6：验证跳过 rawMermaid 类型（无错误）
+        auto issues = gl::validate(g);
+        CHECK(issues.empty());
+
+        // 测试 7：布局跳过 rawMermaid 类型
+        gl::layout(g);
+        CHECK(g.laidOut == true);
+
+        // 测试 8：Graph JSON 往返（含 rawMermaid）
+        Json j = g.toJson();
+        Graph g3 = Graph::fromJson(j);
+        CHECK(g3.type == c.expectedType);
+        CHECK(g3.rawMermaid == c.text);
+
+        // 测试 9：MCP graph_convert 工具能处理
+        {
+            Json call  = Json::obj();
+            call.set("jsonrpc", "2.0");
+            call.set("id", 1);
+            call.set("method", "tools/call");
+            Json params = Json::obj();
+            params.set("name", "graph_convert");
+            Json args = Json::obj();
+            args.set("content", c.text);
+            args.set("to", "mermaid");
+            params.set("arguments", args);
+            call.set("params", params);
+            gs::Store store("test-store-tmp");
+            Json resp;
+            CHECK(mcp::handleMessage(call, store, resp));
+            const Json* r = resp.find("result");
+            CHECK(r != nullptr);
+            CHECK(!r->boolean("isError", false));
+        }
+
+        // 测试 10：MCP graph_create 在透传模式下也能工作
+        {
+            Json call  = Json::obj();
+            call.set("jsonrpc", "2.0");
+            call.set("id", 2);
+            call.set("method", "tools/call");
+            Json params = Json::obj();
+            params.set("name", "graph_create");
+            Json args = Json::obj();
+            args.set("content", c.text);
+            args.set("name", std::string(c.name));
+            params.set("arguments", args);
+            call.set("params", params);
+            gs::Store store("test-store-tmp");
+            Json resp;
+            CHECK(mcp::handleMessage(call, store, resp));
+            const Json* r = resp.find("result");
+            CHECK(r != nullptr);
+            CHECK(!r->boolean("isError", false));
+        }
+    }
+}
+
+// 测试 classDiagram 深度解析
+static void testMermaidClass()
+{
+    // 基本类图解析
+    std::string text = R"(classDiagram
+class Animal {
+  +int age
+  +String gender
+  +mate(Animal)
+}
+class Dog {
+  +String breed
+  +bark()
+}
+Animal <|-- Dog : Inheritance
+class Car {
+  -Engine engine
+}
+Car *-- Engine : Composition)";
+
+    Graph g = gp::parseMermaid(text);
+    CHECK(g.type == "classDiagram");
+    CHECK(g.rawMermaid.empty());  // 深度解析不应走透传
+
+    // 节点验证
+    CHECK(g.nodes.size() >= 4);
+    Node* animal = g.findNode("Animal");
+    CHECK(animal != nullptr);
+    CHECK(animal->shape == "rect");
+    CHECK(animal->attrs.size() >= 2);  // 有属性/方法
+
+    Node* dog = g.findNode("Dog");
+    CHECK(dog != nullptr);
+    CHECK(dog->attrs.size() >= 1);
+
+    // 边验证
+    CHECK(g.edges.size() >= 2);
+    bool foundInheritance = false, foundComp = false;
+    for (auto& e : g.edges) {
+        std::string el = gm::toLower(e.label);
+        if (e.from == "Animal" && e.to == "Dog") {
+            CHECK(el.find("inheritance") != std::string::npos);
+            foundInheritance = true;
+        }
+        if (e.from == "Car" && e.to == "Engine") {
+            CHECK(el.find("composition") != std::string::npos);
+            foundComp = true;
+        }
+    }
+    CHECK(foundInheritance);
+    CHECK(foundComp);
+
+    // Mermaid 往返导出
+    std::string exported = ge::toMermaid(g);
+    CHECK(exported.find("classDiagram") != std::string::npos);
+    CHECK(exported.find("class Animal") != std::string::npos);
+    CHECK(exported.find("Dog") != std::string::npos);
+
+    // 测试各类关系箭头
+    const char* relTests[] = {
+        "classDiagram\nA <|-- B : Inheritance",
+        "classDiagram\nA *-- B : Composition",
+        "classDiagram\nA o-- B : Aggregation",
+        "classDiagram\nA --> B : Association",
+        "classDiagram\nA <--> B : Bidirectional",
+        "classDiagram\nA ..|> B : Realization",
+        "classDiagram\nA ..> B : Dependency",
+        "classDiagram\nA -- B : Link",
+    };
+    for (auto& rt : relTests) {
+        Graph rg = gp::parseMermaid(std::string(rt));
+        CHECK(rg.type == "classDiagram");
+        CHECK(rg.edges.size() >= 1);
+        // 往返不应丢边
+        std::string re = ge::toMermaid(rg);
+        CHECK(!re.empty());
+    }
+}
+
+// 测试 stateDiagram 深度解析
+static void testMermaidState()
+{
+    std::string text = R"(stateDiagram-v2
+    [*] --> Idle
+    Idle --> Processing : start
+    Processing --> Done : finish
+    Processing --> Error : [failed] / retry
+    Done --> [*]
+    Error --> Idle : reset)";
+
+    Graph g = gp::parseMermaid(text);
+    CHECK(g.type == "stateDiagram");
+    CHECK(g.rawMermaid.empty());
+
+    // 节点验证
+    Node* idle = g.findNode("Idle");
+    CHECK(idle != nullptr);
+    CHECK(idle->shape == "round");
+
+    Node* processing = g.findNode("Processing");
+    CHECK(processing != nullptr);
+    CHECK(processing->shape == "round");
+
+    // 边验证
+    CHECK(g.edges.size() >= 5);
+    // 验证带标签的边
+    bool foundStart = false, foundFinish = false;
+    for (auto& e : g.edges) {
+        if (e.from == "Processing" && e.to == "Done")
+            foundFinish = true;
+        if (e.from == "[*]" && e.to == "Idle")
+            foundStart = true;
+    }
+    CHECK(foundStart);
+    CHECK(foundFinish);
+
+    // Mermaid 往返导出
+    std::string exported = ge::toMermaid(g);
+    CHECK(exported.find("stateDiagram-v2") != std::string::npos);
+    CHECK(exported.find("Idle") != std::string::npos);
+
+    // 测试复合状态
+    std::string compText = R"(stateDiagram-v2
+    [*] --> s1
+    state "My State" as s1 {
+        [*] --> s2
+        s2 --> [*]
+    }
+    s1 --> s3 : transition)";
+
+    Graph cg = gp::parseMermaid(compText);
+    CHECK(cg.type == "stateDiagram");
+    // s1 是复合状态（有 { } 块）-> shape="group"
+    Node* s1 = cg.findNode("s1");
+    CHECK(s1 != nullptr);
+    CHECK(s1->shape == "group");
+
+    // 双向往返
+    std::string re = ge::toMermaid(cg);
+    CHECK(!re.empty());
+}
+
 int runAll()
 {
     testJson();
@@ -1363,6 +1612,9 @@ int runAll()
     testParseDrawio();
     testDrawioRoundTrip();
     testMcpGraphImport();
+    testMermaidRawPassthrough();
+    testMermaidClass();
+    testMermaidState();
     std::cout << "tests: " << g_passed << " passed, " << g_failed
               << " failed\n";
     return g_failed == 0 ? 0 : 1;

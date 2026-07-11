@@ -48,6 +48,7 @@ struct Graph
     std::string       id;
     std::string       name;
     std::string       type = "flowchart";
+    std::string       rawMermaid;  // 不支持深度解析的 Mermaid 类型原始文本
     std::vector<Node> nodes;
     std::vector<Edge> edges;
     std::vector<Json> elements;  // 原始白板元素（类似 excalidraw）
@@ -118,6 +119,8 @@ struct Graph
         j.set("id", id);
         j.set("name", name);
         j.set("type", type);
+        if (!rawMermaid.empty())
+            j.set("rawMermaid", rawMermaid);
         j.set("laidOut", laidOut);
         Json ns = Json::arr();
         for (auto& n : nodes) {
@@ -176,8 +179,9 @@ struct Graph
         Graph g;
         g.id      = j.str("id");
         g.name    = j.str("name");
-        g.type    = j.str("type", "flowchart");
-        g.laidOut = j.boolean("laidOut", false);
+        g.type       = j.str("type", "flowchart");
+        g.rawMermaid = j.str("rawMermaid");
+        g.laidOut    = j.boolean("laidOut", false);
         g.edgeCounter_ = (int)j.num("edgeCounter", 0);
         g.nodeCounter_ = (int)j.num("nodeCounter", 0);
         if (const Json* ns = j.find("nodes")) {

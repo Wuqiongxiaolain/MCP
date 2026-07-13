@@ -9,6 +9,38 @@
 #include <cstdlib>
 #include <exception>
 #include <iostream>
+#include <string>
+
+// EnvGuard: 测试内临时设置环境变量，析构时恢复（避免污染后续用例）
+struct EnvGuard {
+    std::string name_;
+    std::string old_;
+
+    EnvGuard(const char* name, const char* value) : name_(name)
+    {
+        old_ = ge::getEnvVar(name);
+#ifdef _WIN32
+        _putenv_s(name_.c_str(), value);
+#else
+        setenv(name_.c_str(), value, 1);
+#endif
+    }
+
+    ~EnvGuard()
+    {
+#ifdef _WIN32
+        _putenv_s(name_.c_str(), old_.c_str());
+#else
+        if (old_.empty())
+            unsetenv(name_.c_str());
+        else
+            setenv(name_.c_str(), old_.c_str(), 1);
+#endif
+    }
+
+    EnvGuard(const EnvGuard&)            = delete;
+    EnvGuard& operator=(const EnvGuard&) = delete;
+};
 
 static int g_failed = 0;
 static int g_passed = 0;
@@ -1458,22 +1490,21 @@ static void testTableMcpTools()
     Json dupRes = runner.call("table_create", dup);
     CHECK(dupRes.boolean("isError", false));
 
-    // 向后兼容：LEGACY_UPSERT 允许同 id 覆盖
-#ifdef _WIN32
-    _putenv_s("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT", "1");
-#else
-    setenv("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT", "1", 1);
-#endif
-    Json legacyCreate = runner.call("table_create", dup);
-    CHECK(!legacyCreate.boolean("isError", false));
-    Json legacyBody =
-        Json::parse(legacyCreate.find("content")->a->at(0).str("text"), &err);
-    CHECK(legacyBody.find("compat_warnings") != nullptr);
-#ifdef _WIN32
-    _putenv_s("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT", "0");
-#else
-    setenv("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT", "0", 1);
-#endif
+    // 向后兼容：LEGACY_UPSERT 允许同 id 覆盖（仅 1/true 生效）
+    {
+        EnvGuard legacy("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT", "1");
+        Json     legacyCreate = runner.call("table_create", dup);
+        CHECK(!legacyCreate.boolean("isError", false));
+        Json legacyBody = Json::parse(
+            legacyCreate.find("content")->a->at(0).str("text"), &err);
+        CHECK(legacyBody.find("compat_warnings") != nullptr);
+    }
+    {
+        // "false" 不应启用 legacy upsert
+        EnvGuard bogus("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT", "false");
+        Json     stillFail = runner.call("table_create", dup);
+        CHECK(stillFail.boolean("isError", false));
+    }
 
     // 恢复边表内容供后续用例
     Json restore = Json::obj();
@@ -1495,15 +1526,18 @@ static void testTableMcpTools()
     Json badRes = runner.call("table_update", badUpdate);
     CHECK(badRes.boolean("isError", false));
 
-    // 向后兼容：旧字段 col 仍可用
+    // 向后兼容：旧字段 col 仍可用；批量时 warning 去重为 1 条
     Json colUpdate = Json::obj();
     colUpdate.set("id", tid);
-    colUpdate.set("set_cells", R"([{"row":0,"col":"from","value":"AA"}])");
+    colUpdate.set(
+        "set_cells",
+        R"([{"row":0,"col":"from","value":"AA"},{"row":0,"col":"to","value":"BB"}])");
     Json colRes = runner.call("table_update", colUpdate);
     CHECK(!colRes.boolean("isError", false));
     Json colBody =
         Json::parse(colRes.find("content")->a->at(0).str("text"), &err);
     CHECK(colBody.find("compat_warnings") != nullptr);
+    CHECK(colBody.find("compat_warnings")->size() == 1);
 
     Json gf = Json::obj();
     gf.set("table_id", tid);
@@ -1559,23 +1593,14 @@ static void testTableMcpTools()
             Json::parse(ckr.find("content")->a->at(0).str("text"), &err);
         CHECK((int)ckj.num("violations") == 0);
 
-#ifdef _WIN32
-        _putenv_s("GRAPHMCP_TABLE_CHECK_LEGACY_HINT", "1");
-#else
-        setenv("GRAPHMCP_TABLE_CHECK_LEGACY_HINT", "1", 1);
-#endif
-        Json ckr2 = runner.call("table_check", ck);
+        EnvGuard legacyHint("GRAPHMCP_TABLE_CHECK_LEGACY_HINT", "1");
+        Json     ckr2 = runner.call("table_check", ck);
         CHECK(!ckr2.boolean("isError", false));
         Json ckj2 =
             Json::parse(ckr2.find("content")->a->at(0).str("text"), &err);
         CHECK((int)ckj2.num("violations") == 1);
         CHECK(ckj2.find("compat_warnings") != nullptr);
         CHECK(ckj2.boolean("ignore_hint_row") == false);
-#ifdef _WIN32
-        _putenv_s("GRAPHMCP_TABLE_CHECK_LEGACY_HINT", "0");
-#else
-        setenv("GRAPHMCP_TABLE_CHECK_LEGACY_HINT", "0", 1);
-#endif
     }
 
     // writeFileAtomic 轻量回环

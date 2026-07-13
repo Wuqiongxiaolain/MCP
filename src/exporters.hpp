@@ -2214,9 +2214,14 @@ inline std::string readOpenFile(const std::string& storeRoot,
 
 // openExternal: 用系统默认处理器或指定编辑器打开 URL/文件
 // 当指定编辑器失败时，自动降级为系统默认关联打开
+// 设置环境变量 GRAPHMCP_NO_LAUNCH=1 时跳过实际拉起（供单元测试/CI）
 inline bool openExternal(const std::string& target,
                          const std::string& editor = "")
 {
+    // GRAPHMCP_NO_LAUNCH=1 时跳过 ShellExecute/xdg-open（单元测试与无头 CI）
+    const char* no_launch = std::getenv("GRAPHMCP_NO_LAUNCH");
+    if (no_launch && no_launch[0] != '\0' && no_launch[0] != '0')
+        return false;
 #ifdef _WIN32
     std::wstring wtarget = widen(target);
     if (!editor.empty()) {

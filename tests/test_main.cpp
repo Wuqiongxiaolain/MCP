@@ -738,60 +738,63 @@ static void testMcpToolsRemaining()
     CHECK(de.str("status") == "deleted");
     CHECK(de.str("elementType") == "node");
 
-    // ── graph_open MCP 冒烟（不依赖 GUI，验证协议层完整性）
+    // ── graph_open MCP 冒烟（launch=false，不拉起外部编辑器）
     {
         // 1. browser 模式：验证生成 mermaid.live URL
         Json ob = Json::parse(
             R"({"jsonrpc":"2.0","id":24,"method":"tools/call","params":{
             "name":"graph_open","arguments":{"id":")" +
-            gid + R"(","editor":"browser"}}})",
+            gid + R"(","editor":"browser","launch":false}}})",
             &err);
         CHECK(mcp::handleMessage(ob, store, resp));
         Json obj = Json::parse(mcpText(resp), &err);
         CHECK(obj.str("target").find("https://mermaid.live/") == 0);
         CHECK(obj.str("editor") == "browser");
-        CHECK(obj.find("launched") != nullptr);
+        CHECK(obj.boolean("launched") == false);
 
         // 2. drawio 模式：验证生成 .drawio 文件路径
         Json od = Json::parse(
             R"({"jsonrpc":"2.0","id":25,"method":"tools/call","params":{
             "name":"graph_open","arguments":{"id":")" +
-            gid + R"(","editor":"drawio"}}})",
+            gid + R"(","editor":"drawio","launch":false}}})",
             &err);
         CHECK(mcp::handleMessage(od, store, resp));
         Json odj = Json::parse(mcpText(resp), &err);
         CHECK(odj.str("target").find("/open.drawio") != std::string::npos);
         CHECK(odj.str("editor") == "drawio");
+        CHECK(odj.boolean("launched") == false);
         CHECK(odj.find("availableEditors") != nullptr);
 
         // 3. excalidraw 模式：验证生成 .excalidraw 文件路径
         Json oe = Json::parse(
             R"({"jsonrpc":"2.0","id":26,"method":"tools/call","params":{
             "name":"graph_open","arguments":{"id":")" +
-            gid + R"(","editor":"excalidraw"}}})",
+            gid + R"(","editor":"excalidraw","launch":false}}})",
             &err);
         CHECK(mcp::handleMessage(oe, store, resp));
         Json oej = Json::parse(mcpText(resp), &err);
         CHECK(oej.str("target").find("/open.excalidraw") != std::string::npos);
         CHECK(oej.str("editor") == "excalidraw");
+        CHECK(oej.boolean("launched") == false);
 
         // 4. svg 模式 + editorPath：验证显式编辑器路径
         Json os = Json::parse(
             R"({"jsonrpc":"2.0","id":27,"method":"tools/call","params":{
             "name":"graph_open","arguments":{"id":")" +
             gid +
-            R"(","editor":"svg","editorPath":"/usr/bin/code"}}})",
+            R"(","editor":"svg","editorPath":"/usr/bin/code","launch":false}}})",
             &err);
         CHECK(mcp::handleMessage(os, store, resp));
         Json osj = Json::parse(mcpText(resp), &err);
         CHECK(osj.str("target").find("/open.svg") != std::string::npos);
         CHECK(osj.str("editor") == "svg");
         CHECK(osj.str("editorPath") == "/usr/bin/code");
+        CHECK(osj.boolean("launched") == false);
 
         // 5. 不存在的图：验证错误返回
         Json onf = Json::parse(
             R"({"jsonrpc":"2.0","id":28,"method":"tools/call","params":{
-            "name":"graph_open","arguments":{"id":"nonexistent-id"}}})",
+            "name":"graph_open","arguments":{"id":"nonexistent-id","launch":false}}})",
             &err);
         CHECK(mcp::handleMessage(onf, store, resp));
         CHECK(resp.find("result")->find("content")->a->at(0)
@@ -1360,6 +1363,11 @@ static void testTableModel()
     Json j = t.toJson();
     gt::Table t3 = gt::Table::fromJson(j);
     CHECK(t3.columns.size() == 4);
+
+    // BOM CSV（Excel CSV UTF-8）应能正确识别首列
+    gt::Table bom = gt::Table::fromCsv("\xEF\xBB\xBF编号,名称\n1,爬虫\n");
+    CHECK(bom.colIndex("编号") == 0);
+    CHECK(bom.cell(0, 1) == "爬虫");
 }
 
 static void testTableStoreAndBridge()
@@ -1390,6 +1398,7 @@ static void testTableStoreAndBridge()
 
     gt::Table sk = gtb::tableFromGraph(g, "skeleton", true);
     CHECK(!sk.columns.empty());
+    CHECK(sk.hasHintRow);
 
     // align
     gt::Table drop = gt::Table::fromCsv("enemy_id,item\n");
@@ -1412,6 +1421,9 @@ static void testTableStoreAndBridge()
     gt::Table bad = gt::Table::fromCsv("层级\n小怪\n精英\n");
     gt::Table rep = gtb::tableCheck(bad, allowed, nullptr);
     CHECK(rep.rows.size() == 1);
+    bad.hasHintRow = true;
+    gt::Table rep2 = gtb::tableCheck(bad, allowed, nullptr, true);
+    CHECK(rep2.rows.size() == 1);  // 忽略首行后仍有一条违规（第二数据行）
 
     CHECK(ts.remove(t.id));
     ge::removeDirectory("test-table-store-tmp");
@@ -1438,11 +1450,25 @@ static void testTableMcpTools()
     std::string tid = body.str("id");
     CHECK(!tid.empty());
 
+    // create 语义：同 id 重复创建应失败（无 force）
+    Json dup = Json::obj();
+    dup.set("id", tid);
+    dup.set("content", "a,b\n1,2\n");
+    Json dupRes = runner.call("table_create", dup);
+    CHECK(dupRes.boolean("isError", false));
+
     Json u = Json::obj();
     u.set("id", tid);
     u.set("add_rows", R"([["B","C","next"]])");
     Json ur = runner.call("table_update", u);
     CHECK(!ur.boolean("isError", false));
+
+    // set_cells 语义：缺 column/col_index 应失败
+    Json badUpdate = Json::obj();
+    badUpdate.set("id", tid);
+    badUpdate.set("set_cells", R"([{"row":0,"value":"x"}])");
+    Json badRes = runner.call("table_update", badUpdate);
+    CHECK(badRes.boolean("isError", false));
 
     Json gf = Json::obj();
     gf.set("table_id", tid);
@@ -1452,11 +1478,28 @@ static void testTableMcpTools()
     CHECK(gb.str("status") == "ok");
     CHECK((int)gb.num("nodes") >= 2);
 
+    // from_graph 预览截断
+    Json tf = Json::obj();
+    tf.set("graph_id", gb.str("id"));
+    tf.set("mode", "nodelist");
+    tf.set("preview_rows", 1);
+    Json tfr = runner.call("table_from_graph", tf);
+    CHECK(!tfr.boolean("isError", false));
+    Json tfj = Json::parse(tfr.find("content")->a->at(0).str("text"), &err);
+    CHECK(tfj.boolean("truncated", false) || (int)tfj.num("rows") <= 1);
+
     ge::removeDirectory("test-table-mcp-tmp");
 }
 
 int runAll()
 {
+    // 防止 graph_open / export 等路径意外拉起浏览器或外部编辑器
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_NO_LAUNCH", "1");
+#else
+    setenv("GRAPHMCP_NO_LAUNCH", "1", 1);
+#endif
+
     testJson();
     testMermaidFlowchart();
     testMermaidMindmapAndER();

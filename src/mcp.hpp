@@ -541,7 +541,9 @@ inline Json toolList()
         p.set("id", prop("string", "optional table id"));
         p.set("force",
               prop("boolean",
-                   "allow create to overwrite existing table id (default false)"));
+                   "allow create to overwrite existing table id (default false; "
+                   "GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT=1|true restores upsert "
+                   "without force)"));
         p.set("note", prop("string", "version note"));
         Json req = Json::arr();
         req.push(Json("content"));
@@ -668,7 +670,9 @@ inline Json toolList()
         p.set("name", prop("string", "output table name"));
         p.set("save", prop("boolean", "save table to store (default true)"));
         p.set("preview_rows",
-              prop("number", "max rows in csv_preview (default 20)"));
+              prop("number",
+                   "max rows in csv_preview (default 20; truncated responses "
+                   "include hint)"));
         Json req = Json::arr();
         req.push(Json("graph_id"));
         tools.push(toolDef(
@@ -724,7 +728,8 @@ inline Json toolList()
         p.set("ignore_hint_row",
               prop("boolean",
                    "skip first row when target.hasHintRow (default true if "
-                   "target has hint row)"));
+                   "target has hint row; GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1|true "
+                   "forces default false)"));
         p.set("name", prop("string", "report table name"));
         Json req = Json::arr();
         req.push(Json("id"));

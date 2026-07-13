@@ -128,7 +128,7 @@ paths:
                   description: "version to open (default: latest)"
                 launch:
                   type: boolean
-                  description: "actually launch the OS handler (default true; set false to only generate URL/file; also honored via GRAPHMCP_NO_LAUNCH=1)"
+                  description: actually launch the OS handler (default true; set false to only generate URL/file; also honored via GRAPHMCP_NO_LAUNCH=1)
               required:
                 - id
       responses:
@@ -727,7 +727,7 @@ paths:
                   description: optional table id
                 force:
                   type: boolean
-                  description: "allow create to overwrite existing table id (default false; GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT=1|true restores upsert without force)"
+                  description: allow create to overwrite existing table id (default false; GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT=1|true restores upsert without force)
                 note:
                   type: string
                   description: version note
@@ -1003,7 +1003,7 @@ paths:
                   description: save table to store (default true)
                 preview_rows:
                   type: number
-                  description: "max rows in csv_preview (default 20; truncated responses include hint)"
+                  description: max rows in csv_preview (default 20; truncated responses include hint)
               required:
                 - graph_id
       responses:
@@ -1113,7 +1113,7 @@ paths:
                   description: save report as a new table
                 ignore_hint_row:
                   type: boolean
-                  description: "skip first row when target.hasHintRow (default true if target has hint row; GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1|true forces default false)"
+                  description: skip first row when target.hasHintRow (default true if target has hint row; GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1|true forces default false)
                 name:
                   type: string
                   description: report table name

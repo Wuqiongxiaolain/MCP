@@ -718,7 +718,7 @@ paths:
               properties:
                 content:
                   type: string
-                  description: table source — CSV, table XML (root table), or model JSON
+                  description: "table source: CSV, table XML (<table>), or model JSON"
                 format:
                   type: string
                   description: csv|xml|model (default csv; not auto)
@@ -756,7 +756,7 @@ paths:
                   description: existing table id to overwrite (optional)
                 content:
                   type: string
-                  description: table source — CSV, table XML (root table), or model JSON
+                  description: "table source: CSV, table XML (<table>), or model JSON"
                 format:
                   type: string
                   description: csv|xml|model (default csv)
@@ -775,7 +775,7 @@ paths:
     post:
       operationId: table_export
       summary: table_export
-      description: Export a stored table to CSV, JSON model, or table XML.
+      description: "Export a stored table to CSV, JSON model, or table XML."
       requestBody:
         required: true
         content:
@@ -955,7 +955,7 @@ paths:
     post:
       operationId: table_diff
       summary: table_diff
-      description: "Diff two table versions, or latest vs provided table content (CSV / table XML / model)."
+      description: "Diff two table versions, or latest vs provided table content."
       requestBody:
         required: true
         content:

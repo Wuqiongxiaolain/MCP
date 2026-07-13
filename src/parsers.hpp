@@ -1431,8 +1431,8 @@ inline Graph parseMermaidGit(const std::vector<std::string>& lines,
             commits.push(cm);
             continue;
         }
-        // commit 行
-        if (startsWith(lower, "commit")) {
+        // commit 行：精确匹配 "commit" 开头（避免误匹配 committed 等）
+        if (lower == "commit" || startsWith(lower, "commit ")) {
             std::string rest = trim(line.substr(6));
             Json cm = Json::obj();
             cm.set("branch", curBranch);

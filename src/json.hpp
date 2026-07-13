@@ -612,6 +612,11 @@ inline std::vector<std::string> parseJsonPath(const std::string& path)
             if (!cur.empty()) { segs.push_back(cur); cur.clear(); }
         } else if (c == ']') {
             if (!cur.empty()) { segs.push_back(cur); cur.clear(); }
+            // 要求 ']' 之后紧跟 '.' 或 '[' 或结束
+            if (i + 1 < path.size() && path[i+1] != '.' && path[i+1] != '[')
+                return segs; // 非法路径，截断
+        } else if (c == ' ') {
+            continue; // 忽略空格
         } else {
             cur += c;
         }

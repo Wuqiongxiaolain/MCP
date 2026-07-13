@@ -64,8 +64,9 @@ for inp in examples/example_input/*; do
         continue
     fi
 
-    # 通用表 CSV：不做盲目 graph convert（见 scripts/export-table-examples.sh）
-    if [ "$name" = "enemy_sample.csv" ] || [ "$name" = "skill_relations.csv" ]; then
+    # 通用表 CSV / 表 XML：不做盲目 graph convert（见 scripts/export-table-examples.sh）
+    if [ "$name" = "enemy_sample.csv" ] || [ "$name" = "enemy_sample.xml" ] || \
+       [ "$name" = "skill_relations.csv" ]; then
         for f in "${FORMATS[@]}"; do
             record_row "$name" "$f" SKIP "-" "generic-table; use export-table-examples.sh → example_output"
         done

@@ -35,18 +35,33 @@ echo "=== export table examples ==="
 echo "binary: $BIN"
 echo "store:  $STORE"
 
-# ── enemy_sample：仅表原生 + check 报告（无边列，不做图导出）──
-ENEMY_IN="examples/example_input/enemy_sample.csv"
-ENEMY_OUT="examples/example_output/enemy_sample.csv_out"
-ENEMY_ID="ex-enemy-sample"
-mkdir -p "$ENEMY_OUT"
+# ── enemy_sample.csv：表原生交换格式 + check（无边列，不做图导出）──
+ENEMY_CSV_IN="examples/example_input/enemy_sample.csv"
+ENEMY_CSV_OUT="examples/example_output/enemy_sample.csv_out"
+ENEMY_CSV_ID="ex-enemy-sample"
+mkdir -p "$ENEMY_CSV_OUT"
 
-"$BIN" table create --file "$ENEMY_IN" --id "$ENEMY_ID" --name enemies
-"$BIN" table export --id "$ENEMY_ID" --to csv -o "$ENEMY_OUT/enemy_sample.csv.csv"
-"$BIN" table export --id "$ENEMY_ID" --to model -o "$ENEMY_OUT/enemy_sample.csv.model.json"
-"$BIN" table check "$ENEMY_ID" --allowed '{"层级":["小怪","Boss"]}' \
-    > "$ENEMY_OUT/enemy_sample.csv.check_report.csv"
-echo "wrote $ENEMY_OUT (csv, model.json, check_report.csv)"
+"$BIN" table create --file "$ENEMY_CSV_IN" --id "$ENEMY_CSV_ID" --name enemies --format csv
+"$BIN" table export --id "$ENEMY_CSV_ID" --to csv -o "$ENEMY_CSV_OUT/enemy_sample.csv.csv"
+"$BIN" table export --id "$ENEMY_CSV_ID" --to model -o "$ENEMY_CSV_OUT/enemy_sample.csv.model.json"
+"$BIN" table export --id "$ENEMY_CSV_ID" --to xml -o "$ENEMY_CSV_OUT/enemy_sample.csv.xml"
+"$BIN" table check "$ENEMY_CSV_ID" --allowed '{"层级":["小怪","Boss"]}' \
+    > "$ENEMY_CSV_OUT/enemy_sample.csv.check_report.csv"
+echo "wrote $ENEMY_CSV_OUT (csv, model.json, xml, check_report.csv)"
+
+# ── enemy_sample.xml：同上，验证表 XML 导入后的互通导出 ──
+ENEMY_XML_IN="examples/example_input/enemy_sample.xml"
+ENEMY_XML_OUT="examples/example_output/enemy_sample.xml_out"
+ENEMY_XML_ID="ex-enemy-sample-xml"
+mkdir -p "$ENEMY_XML_OUT"
+
+"$BIN" table create --file "$ENEMY_XML_IN" --id "$ENEMY_XML_ID" --name enemies --format xml
+"$BIN" table export --id "$ENEMY_XML_ID" --to csv -o "$ENEMY_XML_OUT/enemy_sample.xml.csv"
+"$BIN" table export --id "$ENEMY_XML_ID" --to model -o "$ENEMY_XML_OUT/enemy_sample.xml.model.json"
+"$BIN" table export --id "$ENEMY_XML_ID" --to xml -o "$ENEMY_XML_OUT/enemy_sample.xml.xml"
+"$BIN" table check "$ENEMY_XML_ID" --allowed '{"层级":["小怪","Boss"]}' \
+    > "$ENEMY_XML_OUT/enemy_sample.xml.check_report.csv"
+echo "wrote $ENEMY_XML_OUT (csv, model.json, xml, check_report.csv)"
 
 # ── skill_relations：表原生 + 可投影图格式 ──
 SKILL_IN="examples/example_input/skill_relations.csv"
@@ -54,9 +69,10 @@ SKILL_OUT="examples/example_output/skill_relations.csv_out"
 SKILL_TID="ex-skill-relations"
 mkdir -p "$SKILL_OUT"
 
-"$BIN" table create --file "$SKILL_IN" --id "$SKILL_TID" --name skills
+"$BIN" table create --file "$SKILL_IN" --id "$SKILL_TID" --name skills --format csv
 "$BIN" table export --id "$SKILL_TID" --to csv -o "$SKILL_OUT/skill_relations.csv.csv"
 "$BIN" table export --id "$SKILL_TID" --to model -o "$SKILL_OUT/skill_relations.csv.model.json"
+"$BIN" table export --id "$SKILL_TID" --to xml -o "$SKILL_OUT/skill_relations.csv.xml"
 
 gline=$("$BIN" table from-table --file "$SKILL_IN" --name skill-graph)
 # 输出形如: graph <id> v1 nodes=N edges=M

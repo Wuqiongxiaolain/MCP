@@ -873,16 +873,16 @@ int cmdTable(Args& a, gs::Store& store)
         if (a.subcommand == "create" && !t.id.empty() && tables.exists(t.id) &&
             !a.has("force")) {
             // 向后兼容接口，等待后续处理或删除
-            std::string legacy =
-                ge::getEnvVar("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT");
-            if (legacy.empty() || legacy == "0") {
+            if (ge::envFlagEnabled("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT")) {
+                std::cerr
+                    << "warning: GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT enabled; "
+                       "overwriting existing table\n";
+            }
+            else {
                 std::cerr << "error: table already exists: " << t.id
                           << " (use --force or table import)\n";
                 return 1;
             }
-            std::cerr
-                << "warning: GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT enabled; "
-                   "overwriting existing table\n";
         }
         std::string err;
         int v = tables.save(t, a.get("note", a.subcommand + " via CLI"), &err);
@@ -1139,13 +1139,12 @@ int cmdTable(Args& a, gs::Store& store)
         }
         bool ignore_hint_row = false;
         if (a.has("ignore-hint-row")) {
-            ignore_hint_row = true;
+            // 支持 --ignore-hint-row / --ignore-hint-row=true|false
+            ignore_hint_row = ge::parseTruthy(a.get("ignore-hint-row", "true"));
         }
         else {
             // 向后兼容接口，等待后续处理或删除
-            std::string legacy =
-                ge::getEnvVar("GRAPHMCP_TABLE_CHECK_LEGACY_HINT");
-            if (!legacy.empty() && legacy != "0")
+            if (ge::envFlagEnabled("GRAPHMCP_TABLE_CHECK_LEGACY_HINT"))
                 ignore_hint_row = false;
             else
                 ignore_hint_row = target.hasHintRow;

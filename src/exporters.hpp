@@ -3,6 +3,8 @@
 #pragma once
 #include "layout.hpp"
 #include "model.hpp"
+#include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -159,6 +161,27 @@ inline std::string getEnvVar(const char* name)
 #endif
 }
 
+// envFlagEnabled: 仅 "1" / "true"（大小写不敏感）视为启用
+inline bool envFlagEnabled(const char* name)
+{
+    std::string v = getEnvVar(name);
+    std::string lower;
+    lower.reserve(v.size());
+    for (unsigned char c : v)
+        lower.push_back((char)std::tolower(c));
+    return lower == "1" || lower == "true";
+}
+
+// parseTruthy: 解析布尔字面量；仅 "1"/"true"（大小写不敏感）为真
+inline bool parseTruthy(const std::string& raw)
+{
+    std::string lower;
+    lower.reserve(raw.size());
+    for (unsigned char c : raw)
+        lower.push_back((char)std::tolower(c));
+    return lower == "1" || lower == "true";
+}
+
 // 创建文件路径的所有父目录（尽力而为）
 // ensureParentDirs: 按路径逐级创建父目录（best-effort）
 inline void ensureParentDirs(const std::string& path)
@@ -188,22 +211,37 @@ inline bool writeFile(const std::string& path, const std::string& content)
     return f.good();
 }
 
-// writeFileAtomic: 先写 path.tmp 再原子替换到 path，降低半写入风险
+// writeFileAtomic: 先写唯一 tmp 再原子替换到 path；失败时清理残留
 inline bool writeFileAtomic(const std::string& path, const std::string& content)
 {
-    std::string tmp = path + ".tmp";
-    if (!writeFile(tmp, content))
-        return false;
+    auto stamp =
+        std::chrono::steady_clock::now().time_since_epoch().count();
 #ifdef _WIN32
-    auto toWide = [](const std::string& s) {
+    unsigned long pid = GetCurrentProcessId();
+    auto          toWidePath = [](const std::string& s) {
         int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
         std::wstring w((size_t)(n > 0 ? n - 1 : 0), L'\0');
         if (n > 0)
             MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &w[0], n);
         return w;
     };
-    std::wstring wtmp  = toWide(tmp);
-    std::wstring wpath = toWide(path);
+#else
+    long pid = (long)getpid();
+#endif
+    std::string tmp = path + ".tmp." + std::to_string(pid) + "." +
+                      std::to_string((long long)stamp);
+
+    if (!writeFile(tmp, content)) {
+#ifdef _WIN32
+        DeleteFileW(toWidePath(tmp).c_str());
+#else
+        std::remove(tmp.c_str());
+#endif
+        return false;
+    }
+#ifdef _WIN32
+    std::wstring wtmp  = toWidePath(tmp);
+    std::wstring wpath = toWidePath(path);
     if (!MoveFileExW(wtmp.c_str(), wpath.c_str(),
                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
         DeleteFileW(wtmp.c_str());

@@ -44,21 +44,21 @@ inline Json parseJsonField(const Json& args, const std::string& key)
     return j;
 }
 
-// envFlagEnabled: 非空且非 "0" 视为启用
-inline bool envFlagEnabled(const char* name)
-{
-    std::string v = ge::getEnvVar(name);
-    return !v.empty() && v != "0";
-}
-
-// appendCompatWarning: 向响应对象追加 compat_warnings 字符串
+// appendCompatWarning: 向响应追加 compat_warnings（同文案去重）
 inline void appendCompatWarning(Json& out, const std::string& msg)
 {
-    Json warnings = Json::arr();
     if (const Json* existing = out.find("compat_warnings")) {
-        if (existing->isArr())
-            warnings = *existing;
+        if (existing->isArr()) {
+            for (auto& w : *existing->a)
+                if (w.isStr() && w.s == msg)
+                    return;
+            Json warnings = *existing;
+            warnings.push(Json(msg));
+            out.set("compat_warnings", warnings);
+            return;
+        }
     }
+    Json warnings = Json::arr();
     warnings.push(Json(msg));
     out.set("compat_warnings", warnings);
 }
@@ -74,7 +74,7 @@ inline Json tableCreate(gts::TableStore& tables, const Json& a)
     bool force = a.boolean("force", false);
     // 向后兼容接口，等待后续处理或删除
     bool legacy_upsert =
-        envFlagEnabled("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT");
+        ge::envFlagEnabled("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT");
     bool used_legacy_upsert = false;
     if (!t.id.empty() && tables.exists(t.id) && !force) {
         if (legacy_upsert)
@@ -504,7 +504,7 @@ inline Json tableCheckTool(gts::TableStore& tables, const Json& a)
     }
     else {
         // 向后兼容接口，等待后续处理或删除
-        if (envFlagEnabled("GRAPHMCP_TABLE_CHECK_LEGACY_HINT")) {
+        if (ge::envFlagEnabled("GRAPHMCP_TABLE_CHECK_LEGACY_HINT")) {
             ignoreHint               = false;
             used_legacy_hint_default = true;
         }

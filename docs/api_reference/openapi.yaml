@@ -333,6 +333,40 @@ paths:
       responses:
         "200":
           description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_property:
+    post:
+      operationId: graph_property
+      summary: graph_property
+      description: "Read, set, insert, or delete properties sub-data. Use --action get to read a value at a path. Use --action set to write a value at a path. Use --action insert to push into an array. Use --action delete to remove at a path. Changes go to the draft."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                action:
+                  type: string
+                  description: "action: get|set|insert|delete (default get)"
+                path:
+                  type: string
+                  description: "JSON path into properties, e.g. sequence.participants[0].label or gantt.sections[0].tasks"
+                value:
+                  type: string
+                  description: "New value (for set/insert). JSON string, number, or object string."
+                index:
+                  type: number
+                  description: "Insertion index (default: append to end)"
+              required:
+                - id
+                - action
+                - path
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
   /graph_update:
     post:
       operationId: graph_update

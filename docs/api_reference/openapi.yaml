@@ -126,6 +126,9 @@ paths:
                 version:
                   type: number
                   description: "version to open (default: latest)"
+                launch:
+                  type: boolean
+                  description: "actually launch the OS handler (default true; set false to only generate URL/file; also honored via GRAPHMCP_NO_LAUNCH=1)"
               required:
                 - id
       responses:
@@ -722,6 +725,9 @@ paths:
                 id:
                   type: string
                   description: optional table id
+                force:
+                  type: boolean
+                  description: allow create to overwrite existing table id (default false)
                 note:
                   type: string
                   description: version note
@@ -921,7 +927,7 @@ paths:
                   description: version note
                 set_cells:
                   type: string
-                  description: "JSON array of {row,column|col,value} (row 0-based)"
+                  description: "JSON array of {row,column|col_index,value} (row 0-based)"
                 add_rows:
                   type: string
                   description: JSON array of row arrays
@@ -995,6 +1001,9 @@ paths:
                 save:
                   type: boolean
                   description: save table to store (default true)
+                preview_rows:
+                  type: number
+                  description: max rows in csv_preview (default 20)
               required:
                 - graph_id
       responses:
@@ -1102,6 +1111,9 @@ paths:
                 save:
                   type: boolean
                   description: save report as a new table
+                ignore_hint_row:
+                  type: boolean
+                  description: skip first row when target.hasHintRow (default true if target has hint row)
                 name:
                   type: string
                   description: report table name

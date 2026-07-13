@@ -72,6 +72,8 @@
 | `with-excalidraw` | 打开 `.excalidraw` | |
 | `with-svg` | 打开 `.svg` | |
 
+设置 `GRAPHMCP_NO_LAUNCH=1` 时只生成目标 URL/文件，不实际拉起外部程序（单元测试与无头 CI 使用）。
+
 ### `import` — 编辑回导
 
 | 用法 | 说明 | 常用选项 |
@@ -172,7 +174,7 @@
 | `graph_create` | 解析 → 校验 → 布局 → 存储 | `content` |
 | `graph_convert` | 格式直转（不存储） | `content`, `to` |
 | `graph_export` | 导出已存储图 | `id`, `to` |
-| `graph_open` | 外部编辑器打开 | `id` |
+| `graph_open` | 外部编辑器打开（`launch=false` 仅生成目标） | `id` |
 | `graph_import` | 编辑回导 | `id` |
 | `graph_validate` | 结构校验 | `id` 或 `content` |
 | `graph_list` | 列出所有图 | （无） |
@@ -235,6 +237,13 @@
 | `table_check` | 枚举校验 → 违规清单表 | `id` |
 
 CLI：`graphmcp table create|import|export|list|show|update|delete|history|rollback|from-graph|from-table|align|check`
+
+关键语义约束：
+
+- `table_create` 默认**不覆盖**已存在 id（同 id 需 `force=true`）；`table_import` 保留 upsert。
+- `table_update.set_cells` 统一为 `{row,column,value}` 或 `{row,col_index,value}`，不再使用双义 `col`。
+- `table_from_graph` 返回 `csv_preview` 默认仅前 20 行，可用 `preview_rows` 调整；全量请用 `table_export`。
+- `table_check` 支持 `ignore_hint_row`；当 `table.hasHintRow=true` 时默认会忽略首行说明。
 
 ---
 

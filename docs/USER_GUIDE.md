@@ -586,6 +586,13 @@ graphmcp table from-table --file examples/example_input/skill_relations.csv
 
 人侧若需 Excel：用 Excel「数据 → 自文本/CSV」打开导出的 CSV 即可；本项目不以 `.xlsx` 为权威格式。
 
+通用表命令补充约定：
+
+- `table create`：若指定 `--id` 且已存在，默认拒绝；需 `--force` 才允许覆盖（建议常用 `table import` 做更新导入）。
+- `table update`：`set_cells`（MCP）支持 `column`（列名）或 `col_index`（0-based 列下标）。
+- `table from-graph`：`csv_preview` 默认返回前 20 行；完整内容用 `table export`。
+- `table check`：当表来自 `--with-hint-row` 的 skeleton，建议启用 `--ignore-hint-row`（MCP: `ignore_hint_row=true`）。
+
 ### XML
 
 ```xml

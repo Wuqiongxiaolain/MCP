@@ -71,6 +71,13 @@ graphmcp 是一个 **C++17 单可执行文件**，零第三方依赖。核心设
 注意：`graph_rollback` 走 `Store::rollback`——把旧快照**再 save 成新版本**（版本号递增），与 `graph_checkout`（只改 `HEAD`）不同，见 §十。
 
 通用表存储在 `graph-store/tables/`（`index.json` + `<tableId>/latest.json` + `versions/`），与图目录并列；CSV 为交换格式，**不是**边表转图的 `parseCSV` 路径。图↔表桥接为**有损投影**（见工具 `mode` / 列映射说明）。
+
+实现约束（避免误用）：
+
+- `table_create` 不覆盖已存在 id（除非显式 `force=true`）；`table_import` 用于 upsert。
+- `table_update.set_cells` 仅接受 `column` 或 `col_index`，不再复用双义字段。
+- `table_from_graph` 仅返回截断 preview；全量表导出统一通过 `table_export`。
+- skeleton 生成的说明首行通过 `hasHintRow` 标记，`table_check` 可按 `ignore_hint_row` 跳过该行。
 ---
 
 ## 三、存储层（数据库）设计

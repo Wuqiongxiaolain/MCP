@@ -1273,6 +1273,32 @@ inline std::string toMermaid(const Graph& g)
         return os.str();
     }
     // flowchart / architecture / orgchart / whiteboard 统一导出为 flowchart TD
+    // 输出颜色 classDef 和 style 指令（保留模型中存储的颜色信息）
+    {
+        std::map<std::string, int> colorClass; // "fill:stroke" → classIdx
+        int classIdx = 0;
+        for (auto& n : g.nodes) {
+            if (n.fillColor.empty() && n.strokeColor.empty()) continue;
+            std::string key = n.fillColor + ":" + n.strokeColor;
+            if (!colorClass.count(key)) {
+                colorClass[key] = ++classIdx;
+                os << "classDef c" << classIdx << " ";
+                if (!n.fillColor.empty())
+                    os << "fill:" << n.fillColor;
+                if (!n.strokeColor.empty()) {
+                    if (!n.fillColor.empty()) os << ",";
+                    os << "stroke:" << n.strokeColor;
+                }
+                os << "\n";
+            }
+        }
+        for (auto& n : g.nodes) {
+            if (n.fillColor.empty() && n.strokeColor.empty()) continue;
+            std::string key = n.fillColor + ":" + n.strokeColor;
+            os << "class " << sanitizeMermaidId(n.id)
+               << " c" << colorClass[key] << "\n";
+        }
+    }
     os << "flowchart TD\n";
     std::map<std::string, std::vector<const Node*>> byGroup;
     for (auto& n : g.nodes) {
@@ -1324,6 +1350,7 @@ inline std::string toMermaid(const Graph& g)
         for (auto* n : kv.second)
             emitNode(n, 4);
     }
+    int ei = 0;
     for (auto& e : g.edges) {
         os << "    " << sanitizeMermaidId(e.from);
         if (e.style == "dashed")
@@ -1339,6 +1366,14 @@ inline std::string toMermaid(const Graph& g)
         if (!e.label.empty())
             os << "|" << e.label << "|";
         os << " " << sanitizeMermaidId(e.to) << "\n";
+        ++ei;
+    }
+    // 输出边的颜色（Mermaid linkStyle 按 0 起编号）
+    ei = 0;
+    for (auto& e : g.edges) {
+        if (!e.strokeColor.empty())
+            os << "linkStyle " << ei << " stroke:" << e.strokeColor << "\n";
+        ++ei;
     }
     return os.str();
 }
@@ -1348,7 +1383,12 @@ inline std::string toMermaid(const Graph& g)
 // drawioStyle: 将统一 shape 映射为 draw.io 样式字符串
 inline std::string drawioStyle(const Node& n)
 {
-    std::string base = "whiteSpace=wrap;html=1;";
+    std::string extra;
+    if (!n.fillColor.empty())
+        extra += "fillColor=" + n.fillColor + ";";
+    if (!n.strokeColor.empty())
+        extra += "strokeColor=" + n.strokeColor + ";";
+    std::string base = "whiteSpace=wrap;html=1;" + extra;
     if (n.shape == "diamond")
         return "rhombus;" + base;
     if (n.shape == "ellipse" || n.shape == "circle")
@@ -1425,6 +1465,8 @@ inline std::string toDrawio(Graph g)
             style += "endArrow=none;";
         if (e.arrow == "both")
             style += "startArrow=classic;";
+        if (!e.strokeColor.empty())
+            style += "strokeColor=" + e.strokeColor + ";";
         os << "        <mxCell id=\"edge" << ++ei << "\" value=\""
            << xmlEscape(e.label) << "\" style=\"" << style
            << "\" edge=\"1\" parent=\"1\" source=\"" << xmlEscape(e.from)
@@ -1530,6 +1572,10 @@ inline std::string toExcalidraw(Graph g)
             if (n.shape == "diamond")
                 ty = "diamond";
             Json el = excalidrawBase(n.id, ty, n.x, n.y, n.w, n.h, ++seed);
+            if (!n.fillColor.empty())
+                el.set("backgroundColor", n.fillColor);
+            if (!n.strokeColor.empty())
+                el.set("strokeColor", n.strokeColor);
             if (n.shape == "group") {
                 el.set("backgroundColor", "transparent");
                 el.set("strokeStyle", "dashed");
@@ -1597,6 +1643,8 @@ inline std::string toExcalidraw(Graph g)
             el.set("endArrowhead", e.arrow == "none" ? Json() : Json("arrow"));
             if (e.style == "dashed")
                 el.set("strokeStyle", "dashed");
+            if (!e.strokeColor.empty())
+                el.set("strokeColor", e.strokeColor);
             els.push(el);
         }
     }
@@ -1669,7 +1717,9 @@ inline std::string toSVG(Graph g)
         clip(ax, ay, a->w, a->h, bx, by, x1, y1);
         clip(bx, by, b->w, b->h, ax, ay, x2, y2);
         os << "  <line x1=\"" << x1 << "\" y1=\"" << y1 << "\" x2=\"" << x2
-           << "\" y2=\"" << y2 << "\" stroke=\"#333\" stroke-width=\""
+           << "\" y2=\"" << y2 << "\" stroke=\""
+           << (e.strokeColor.empty() ? "#333" : e.strokeColor)
+           << "\" stroke-width=\""
            << (e.style == "thick" ? 3 : 1.5) << "\"";
         if (e.style == "dashed")
             os << " stroke-dasharray=\"6,4\"";
@@ -1686,12 +1736,14 @@ inline std::string toSVG(Graph g)
     }
     // 再绘制节点
     for (auto& n : g.nodes) {
-        std::string fill   = n.shape == "group" ? "none" : "#eef4ff";
-        std::string stroke = "#4a72b8";
+        auto fc = [&](const char* def) { return n.fillColor.empty() ?
+                                               def : n.fillColor; };
+        auto sc = [&](const char* def) { return n.strokeColor.empty() ?
+                                               def : n.strokeColor; };
         if (n.shape == "group") {
             os << "  <rect x=\"" << n.x << "\" y=\"" << n.y << "\" width=\""
-               << n.w << "\" height=\"" << n.h
-               << "\" fill=\"none\" stroke=\"#999\" "
+               << n.w << "\" height=\"" << n.h << "\" fill=\"none\" stroke=\""
+               << sc("#999") << "\" "
                   "stroke-dasharray=\"5,4\" rx=\"6\"/>\n";
             os << "  <text class=\"lbl\" x=\"" << n.x + 8 << "\" y=\""
                << n.y + 18 << "\" fill=\"#777\">" << xmlEscape(n.label)
@@ -1702,18 +1754,20 @@ inline std::string toSVG(Graph g)
         if (n.shape == "diamond") {
             os << "  <polygon points=\"" << cx << "," << n.y << " " << n.x + n.w
                << "," << cy << " " << cx << "," << n.y + n.h << " " << n.x
-               << "," << cy << "\" fill=\"#fff7e0\" stroke=\"#c9a227\"/>\n";
+               << "," << cy << "\" fill=\"" << fc("#fff7e0")
+               << "\" stroke=\"" << sc("#c9a227") << "\"/>\n";
         }
         else if (n.shape == "ellipse" || n.shape == "circle" ||
                  n.shape == "round" || n.shape == "stadium") {
             os << "  <ellipse cx=\"" << cx << "\" cy=\"" << cy << "\" rx=\""
                << n.w / 2 << "\" ry=\"" << n.h / 2
-               << "\" fill=\"#e8f7ec\" stroke=\"#3d9155\"/>\n";
+               << "\" fill=\"" << fc("#e8f7ec")
+               << "\" stroke=\"" << sc("#3d9155") << "\"/>\n";
         }
         else {
             os << "  <rect x=\"" << n.x << "\" y=\"" << n.y << "\" width=\""
-               << n.w << "\" height=\"" << n.h << "\" rx=\"4\" fill=\"" << fill
-               << "\" stroke=\"" << stroke << "\"/>\n";
+               << n.w << "\" height=\"" << n.h << "\" rx=\"4\" fill=\""
+               << fc("#eef4ff") << "\" stroke=\"" << sc("#4a72b8") << "\"/>\n";
         }
         if (n.attrs.empty()) {
             os << "  <text class=\"lbl\" x=\"" << cx << "\" y=\"" << cy + 5
@@ -1726,7 +1780,7 @@ inline std::string toSVG(Graph g)
                << xmlEscape(n.label) << "</text>\n";
             os << "  <line x1=\"" << n.x << "\" y1=\"" << n.y + 28 << "\" x2=\""
                << n.x + n.w << "\" y2=\"" << n.y + 28 << "\" stroke=\""
-               << stroke << "\"/>\n";
+               << sc("#4a72b8") << "\"/>\n";
             double ty = n.y + 46;
             for (auto& a : n.attrs) {
                 os << "  <text class=\"lbl\" x=\"" << n.x + 10 << "\" y=\""

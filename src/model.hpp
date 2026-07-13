@@ -27,8 +27,10 @@ struct Node
     std::string shape;  // 节点形状：rect | round | diamond | ellipse | circle |
                         // stadium | group
     std::string              parent;  // 层级关系：父节点 id（空字符串表示根层）
-    std::string              style;   // 自由样式提示（颜色等）
-    std::vector<std::string> attrs;   // ER 属性列表：形如 "type name"
+    std::string              style;       // 自由样式提示（颜色等）
+    std::string              fillColor;   // 填充色 (如 "#eef4ff"；空串用默认)
+    std::string              strokeColor; // 描边色 (如 "#4a72b8"；空串用默认)
+    std::vector<std::string> attrs;       // ER 属性列表：形如 "type name"
     double                   x = 0, y = 0, w = 0, h = 0;
 };
 
@@ -38,8 +40,9 @@ struct Edge
     std::string id;
     std::string from, to;
     std::string label;
-    std::string style;  // 线型：solid | dashed | thick
-    std::string arrow;  // 箭头：arrow | none | both
+    std::string style;       // 线型：solid | dashed | thick
+    std::string arrow;       // 箭头：arrow | none | both
+    std::string strokeColor; // 描边色 (如 "#333"；空串使用默认)
 };
 
 // Graph: 统一图模型容器（命名上 g 常用于 Graph 实例）
@@ -129,6 +132,10 @@ struct Graph
                 jn.set("parent", n.parent);
             if (!n.style.empty())
                 jn.set("style", n.style);
+            if (!n.fillColor.empty())
+                jn.set("fillColor", n.fillColor);
+            if (!n.strokeColor.empty())
+                jn.set("strokeColor", n.strokeColor);
             if (!n.attrs.empty()) {
                 Json ja = Json::arr();
                 for (auto& a : n.attrs)
@@ -152,6 +159,8 @@ struct Graph
                 je.set("label", e.label);
             je.set("style", e.style);
             je.set("arrow", e.arrow);
+            if (!e.strokeColor.empty())
+                je.set("strokeColor", e.strokeColor);
             es.push(je);
         }
         j.set("edges", es);
@@ -188,7 +197,9 @@ struct Graph
                     n.label  = jn.str("label");
                     n.shape  = jn.str("shape", "rect");
                     n.parent = jn.str("parent");
-                    n.style  = jn.str("style");
+                    n.style       = jn.str("style");
+                    n.fillColor   = jn.str("fillColor");
+                    n.strokeColor = jn.str("strokeColor");
                     if (const Json* ja = jn.find("attrs")) {
                         if (ja->isArr())
                             for (auto& a : *ja->a)
@@ -210,8 +221,9 @@ struct Graph
                     e.from  = je.str("from");
                     e.to    = je.str("to");
                     e.label = je.str("label");
-                    e.style = je.str("style", "solid");
-                    e.arrow = je.str("arrow", "arrow");
+                    e.style       = je.str("style", "solid");
+                    e.arrow       = je.str("arrow", "arrow");
+                    e.strokeColor = je.str("strokeColor");
                     g.edges.push_back(e);
                 }
         }

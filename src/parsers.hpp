@@ -139,14 +139,86 @@ inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines,
 {
     Graph g;
     g.type = "flowchart";
-    std::vector<std::string> groupStack;  // subgraph 嵌套栈
+    std::vector<std::string>                         groupStack;
+    std::map<std::string, std::pair<std::string, std::string>> classDefs;
+    auto parseStyleColors = [](const std::string& s) ->
+        std::pair<std::string, std::string> {
+        std::string fill, stroke;
+        auto extract = [&](const std::string& key) -> std::string {
+            size_t p = s.find(key + ":");
+            if (p == std::string::npos) return "";
+            p += key.size() + 1;
+            size_t e = s.find_first_of(",; \t\r\n", p);
+            if (e == std::string::npos) return s.substr(p);
+            return s.substr(p, e - p);
+        };
+        fill   = extract("fill");
+        stroke = extract("stroke");
+        if (stroke.empty()) stroke = extract("color");
+        return {fill, stroke};
+    };
     for (size_t li = first; li < lines.size(); li++) {
         std::string line = trim(lines[li]);
         if (line.empty() || startsWith(line, "%%"))
             continue;
-        if (startsWith(line, "classDef") || startsWith(line, "class ") ||
-            startsWith(line, "style ") || startsWith(line, "linkStyle"))
+        if (startsWith(line, "linkStyle"))
             continue;
+        // classDef 定义：存储 className → 颜色对，后续 class 引用时应用
+        if (startsWith(line, "classDef ")) {
+            std::string rest = trim(line.substr(9));
+            size_t      sp   = rest.find(' ');
+            if (sp != std::string::npos) {
+                std::string name  = trim(rest.substr(0, sp));
+                std::string style = rest.substr(sp + 1);
+                classDefs[name]  = parseStyleColors(style);
+            }
+            continue;
+        }
+        // class 引用：将 classDef 的颜色应用到匹配节点
+        if (startsWith(line, "class ")) {
+            std::string rest = trim(line.substr(6));
+            size_t      sp   = rest.find_last_of(' ');
+            if (sp != std::string::npos) {
+                std::string className = trim(rest.substr(sp + 1));
+                auto it = classDefs.find(className);
+                if (it != classDefs.end()) {
+                    std::string ids = trim(rest.substr(0, sp));
+                    // 空格/逗号分割的节点列表
+                    size_t pos = 0;
+                    while (pos < ids.size()) {
+                        while (pos < ids.size() && (ids[pos] == ' ' || ids[pos] == ','))
+                            pos++;
+                        size_t end = pos;
+                        while (end < ids.size() && ids[end] != ' ' && ids[end] != ',')
+                            end++;
+                        if (end > pos) {
+                            std::string nid = ids.substr(pos, end - pos);
+                            Node& n = g.ensureNode(nid);
+                            if (!it->second.first.empty())
+                                n.fillColor = it->second.first;
+                            if (!it->second.second.empty())
+                                n.strokeColor = it->second.second;
+                        }
+                        pos = end;
+                    }
+                }
+            }
+            continue;
+        }
+        // style 指令：直接对指定节点设置颜色
+        if (startsWith(line, "style ")) {
+            std::string rest = trim(line.substr(6));
+            size_t      sp   = rest.find(' ');
+            if (sp != std::string::npos) {
+                std::string nid   = trim(rest.substr(0, sp));
+                std::string style = rest.substr(sp + 1);
+                auto colors = parseStyleColors(style);
+                Node& n = g.ensureNode(nid);
+                if (!colors.first.empty())  n.fillColor   = colors.first;
+                if (!colors.second.empty()) n.strokeColor = colors.second;
+            }
+            continue;
+        }
         if (startsWith(line, "subgraph")) {
             std::string rest = trim(line.substr(8));
             std::string gid = rest, glabel = rest;
@@ -744,6 +816,17 @@ inline Graph parseDrawio(const std::string& text)
         g.name = diagram->attrs.at("name");
     g.type = "flowchart";
 
+    // 从 draw.io 样式字符串中提取指定 key 的值 (如 fillColor=#xxx)
+    auto extractStyleVal = [](const std::string& style,
+                              const std::string& key) -> std::string {
+        size_t p = style.find(key + "=");
+        if (p == std::string::npos) return "";
+        p += key.size() + 1;
+        size_t e = style.find(';', p);
+        return style.substr(p, e == std::string::npos ?
+                             std::string::npos : e - p);
+    };
+
     struct Cell
     {
         std::string id, value, style, parent;
@@ -885,6 +968,8 @@ inline Graph parseDrawio(const std::string& text)
         n.h     = cell.h;
         if (!attrs.empty())
             n.attrs = attrs;
+        n.fillColor   = extractStyleVal(cell.style, "fillColor");
+        n.strokeColor = extractStyleVal(cell.style, "strokeColor");
         if (!cell.parent.empty() && cell.parent != "1" && cell.parent != "0")
             n.parent = cell.parent;
     }
@@ -916,6 +1001,9 @@ inline Graph parseDrawio(const std::string& text)
             arrow = "both";
 
         g.addEdge(cell.source, cell.target, label, edgeStyle, arrow);
+        if (!g.edges.empty())
+            g.edges.back().strokeColor =
+                extractStyleVal(cell.style, "strokeColor");
     }
 
     return g;

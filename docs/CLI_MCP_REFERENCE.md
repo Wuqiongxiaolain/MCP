@@ -151,6 +151,12 @@
 |------|------|----------|
 | `graphmcp serve` | JSON-RPC 2.0 over stdio | `GRAPHMCP_LOG=info\|debug`（日志仅 stderr） |
 
+### `dump-tools` — 导出工具契约
+
+| 命令 | 说明 |
+|------|------|
+| `graphmcp dump-tools [--format openapi\|json] [-o path]` | 从运行中的 `toolList()` 导出 OpenAPI YAML（默认）或原始 JSON；`make docs-api` 写入 `docs/api_reference/openapi.yaml` |
+
 客户端配置见仓库根目录 `mcp-config.example.json`。
 
 ---

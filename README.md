@@ -26,6 +26,7 @@
 |------|------|
 | [用户手册](docs/USER_GUIDE.md) | 场景化教程与完整命令说明 |
 | [CLI & MCP 指令参考](docs/CLI_MCP_REFERENCE.md) | 命令族与 25 个 MCP 工具速查表 |
+| [OpenAPI 契约](docs/api_reference/openapi.yaml) | 由 `make docs-api` 从 `toolList()` 生成，可供 Swagger 打开 |
 | [项目思维导图](docs/MINDMAP.md) | 能力与 DevOps 全景（Mermaid / 大纲） |
 
 示例输入见 [`examples/example_input/`](examples/example_input/)，导出基准见 [`examples/README.md`](examples/README.md)。MCP 配置模板：[`mcp-config.example.json`](mcp-config.example.json)。
@@ -41,6 +42,9 @@ mingw32-make all
 
 # Linux / CI
 make all && make test
+
+# 从 toolList() 生成 OpenAPI（改 MCP schema 后执行并提交）
+make docs-api
 ```
 
 无第三方依赖：JSON / XML / Base64 均为内置实现。

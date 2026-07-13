@@ -6,6 +6,7 @@
 #include "../src/table_bridge.hpp"
 #include "../src/table_model.hpp"
 #include "../src/table_storage.hpp"
+#include "../src/table_xml.hpp"
 #include <cstdlib>
 #include <exception>
 #include <iostream>
@@ -1772,6 +1773,118 @@ static void testTableMcpTools()
     ge::removeDirectory("test-table-mcp-tmp");
 }
 
+static void testTableXml()
+{
+    // 模式 A：显式列 + 命名子元素
+    gt::Table t = gtx::fromXml(
+        "<table id=\"t1\" name=\"demo\" hasHintRow=\"false\">"
+        "<columns><col>编号</col><col>名称</col><col>层级</col></columns>"
+        "<rows>"
+        "<row><编号>1</编号><名称>爬虫</名称><层级>小怪</层级></row>"
+        "<row><名称>游荡者</名称><编号>2</编号></row>"
+        "</rows></table>");
+    CHECK(t.id == "t1");
+    CHECK(t.name == "demo");
+    CHECK(!t.hasHintRow);
+    CHECK(t.columns.size() == 3);
+    CHECK(t.rows.size() == 2);
+    CHECK(t.cell(0, 0) == "1");
+    CHECK(t.cell(0, 1) == "爬虫");
+    CHECK(t.cell(1, 0) == "2");
+    CHECK(t.cell(1, 2) == "");  // 缺列补空
+
+    // 一层嵌套 → 父.子；属性被同名子元素覆盖
+    gt::Table nest = gtx::fromXml(
+        "<table><columns><col>id</col><col>动画.生成</col><col>名</col>"
+        "</columns>"
+        "<row 名=\"attr\" id=\"a\"><名>elem</名>"
+        "<动画><生成>x</生成></动画></row></table>");
+    CHECK(nest.cell(0, 0) == "a");
+    CHECK(nest.cell(0, 1) == "x");
+    CHECK(nest.cell(0, 2) == "elem");
+
+    // XML ↔ JSON ↔ XML 往返
+    Json     j  = nest.toJson();
+    gt::Table j2 = gt::Table::fromJson(j);
+    CHECK(j2.cell(0, 1) == "x");
+    std::string xml2 = gtx::toXml(j2);
+    gt::Table   back = gtx::fromXml(xml2);
+    CHECK(back.columns.size() == nest.columns.size());
+    CHECK(back.cell(0, 0) == "a");
+    CHECK(back.cell(0, 1) == "x");
+    CHECK(back.cell(0, 2) == "elem");
+
+    // 更深嵌套应报错
+    bool threw = false;
+    try {
+        gtx::fromXml(
+            "<table><row><a><b><c>z</c></b></a></row></table>");
+    }
+    catch (const gt::TableError&) {
+        threw = true;
+    }
+    CHECK(threw);
+
+    // 与 enemy_sample.csv 内容对齐
+    std::string enemy_csv = readExampleInput("enemy_sample.csv");
+    std::string enemy_xml = readExampleInput("enemy_sample.xml");
+    CHECK(!enemy_csv.empty());
+    CHECK(!enemy_xml.empty());
+    if (!enemy_csv.empty() && !enemy_xml.empty()) {
+        gt::Table fromCsv = gt::Table::fromCsv(enemy_csv);
+        gt::Table fromXml = gtx::fromXml(enemy_xml);
+        CHECK(fromCsv.columns.size() == fromXml.columns.size());
+        CHECK(fromCsv.rows.size() == fromXml.rows.size());
+        for (size_t c = 0; c < fromCsv.columns.size(); c++)
+            CHECK(fromCsv.columns[c] == fromXml.columns[c]);
+        for (size_t r = 0; r < fromCsv.rows.size(); r++)
+            for (size_t c = 0; c < fromCsv.columns.size(); c++)
+                CHECK(fromCsv.cell(r, c) == fromXml.cell(r, c));
+    }
+
+    // parseTableContent + MCP format=xml
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_STORE", "test-table-xml-mcp-tmp");
+#else
+    setenv("GRAPHMCP_STORE", "test-table-xml-mcp-tmp", 1);
+#endif
+    ge::removeDirectory("test-table-xml-mcp-tmp");
+    {
+        gs::Store       store("test-table-xml-mcp-tmp");
+        mcp::ToolRunner runner(store);
+        std::string     err;
+        Json            imp = Json::obj();
+        imp.set("format", "xml");
+        imp.set("content",
+                "<table name=\"x\"><columns><col>a</col></columns>"
+                "<row><a>1</a></row></table>");
+        Json ir = runner.call("table_import", imp);
+        CHECK(!ir.boolean("isError", false));
+        Json ib =
+            Json::parse(ir.find("content")->a->at(0).str("text"), &err);
+        std::string tid = ib.str("id");
+        CHECK(!tid.empty());
+
+        Json ex = Json::obj();
+        ex.set("id", tid);
+        ex.set("to", "xml");
+        Json er = runner.call("table_export", ex);
+        CHECK(!er.boolean("isError", false));
+        std::string xml_out = er.find("content")->a->at(0).str("text");
+        CHECK(xml_out.find("<table") != std::string::npos);
+        CHECK(xml_out.find("<a>") != std::string::npos);
+
+        ex.set("to", "model");
+        Json em = runner.call("table_export", ex);
+        CHECK(!em.boolean("isError", false));
+        Json model =
+            Json::parse(em.find("content")->a->at(0).str("text"), &err);
+        CHECK(err.empty());
+        CHECK(model.find("columns") != nullptr);
+    }
+    ge::removeDirectory("test-table-xml-mcp-tmp");
+}
+
 int runAll()
 {
     // 防止 graph_open / export 等路径意外拉起浏览器或外部编辑器
@@ -1804,6 +1917,7 @@ int runAll()
     testTableStoreAndBridge();
     testTableFixtures();
     testTableMcpTools();
+    testTableXml();
     testMcpExtended();
     testMcpToolsRemaining();
     testMcpErrors();

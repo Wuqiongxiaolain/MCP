@@ -588,10 +588,10 @@ graphmcp table from-table --file examples/example_input/skill_relations.csv
 
 通用表命令补充约定：
 
-- `table create`：若指定 `--id` 且已存在，默认拒绝；需 `--force` 才允许覆盖（建议常用 `table import` 做更新导入）。
-- `table update`：`set_cells`（MCP）支持 `column`（列名）或 `col_index`（0-based 列下标）。
-- `table from-graph`：`csv_preview` 默认返回前 20 行；完整内容用 `table export`。
-- `table check`：当表来自 `--with-hint-row` 的 skeleton，建议启用 `--ignore-hint-row`（MCP: `ignore_hint_row=true`）。
+- `table create`：若指定 `--id` 且已存在，默认拒绝；需 `--force` 才允许覆盖（建议常用 `table import` 做更新导入）。临时兼容：`GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT=1`。
+- `table update`：`set_cells`（MCP）支持 `column` 或 `col_index`；弃用别名 `col` 仍可用并返回 `compat_warnings`。
+- `table from-graph`：`csv_preview` 默认前 20 行；截断时含 `hint`，完整内容用 `table export`。
+- `table check`：有 hint 行时默认跳过首行；`GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1` 可使缺省不跳过。也可显式 `--ignore-hint-row` / `ignore_hint_row`。
 
 ### XML
 

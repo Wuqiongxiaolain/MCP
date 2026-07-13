@@ -240,10 +240,10 @@ CLI：`graphmcp table create|import|export|list|show|update|delete|history|rollb
 
 关键语义约束：
 
-- `table_create` 默认**不覆盖**已存在 id（同 id 需 `force=true`）；`table_import` 保留 upsert。
-- `table_update.set_cells` 统一为 `{row,column,value}` 或 `{row,col_index,value}`，不再使用双义 `col`。
-- `table_from_graph` 返回 `csv_preview` 默认仅前 20 行，可用 `preview_rows` 调整；全量请用 `table_export`。
-- `table_check` 支持 `ignore_hint_row`；当 `table.hasHintRow=true` 时默认会忽略首行说明。
+- `table_create` 默认**不覆盖**已存在 id（同 id 需 `force=true`）；`table_import` 保留 upsert。环境变量 `GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT=1` 可临时恢复旧 upsert（响应含 `compat_warnings`）。
+- `table_update.set_cells` 使用 `{row,column,value}` 或 `{row,col_index,value}`；旧字段 `col` 仍接受但已弃用。
+- `table_from_graph` 返回 `csv_preview` 默认仅前 20 行（截断时带 `truncated`/`hint`）；全量请用 `table_export`。
+- `table_check` 支持 `ignore_hint_row`；当 `table.hasHintRow=true` 时默认忽略首行说明。`GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1` 可将缺省改为不跳过 hint 行。
 
 ---
 

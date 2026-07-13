@@ -958,17 +958,22 @@ inline Graph parseMermaidSequence(const std::vector<std::string>& lines,
         // Arrow: ->>, -->>, ->, -->, -x, --x, -), --)
         std::string arrowPattern;
         size_t arrowPos = std::string::npos;
+        // 完整箭头列表：按长度降序排列避免短前缀误匹配长箭头
         for (auto& pat : {">>", "->", "-x", "-)"}) {
-            size_t p = line.find(std::string("-") + pat);
+            // 先尝试双横线版本
+            std::string dbl = std::string("--") + pat;
+            size_t p = line.find(dbl);
             if (p != std::string::npos) {
                 arrowPos = p;
-                // 确定完整箭头
-                if (p > 0 && line[p-1] == '-') {
-                    arrowPattern = std::string("--") + pat;
-                    arrowPos = p - 1;
-                } else {
-                    arrowPattern = std::string("-") + pat;
-                }
+                arrowPattern = dbl;
+                break;
+            }
+            // 再尝试单横线版本
+            std::string sgl = std::string("-") + pat;
+            p = line.find(sgl);
+            if (p != std::string::npos) {
+                arrowPos = p;
+                arrowPattern = sgl;
                 break;
             }
         }
@@ -1009,6 +1014,8 @@ inline Graph parseMermaidSequence(const std::vector<std::string>& lines,
             msg.set("label", msgLabel);
             msg.set("type", isAsync ? "async" : (isReturn ? "return" : "sync"));
             msg.set("seqNum", (double)seqNum);
+            msg.set("headEnd", headEnd);
+            msg.set("isReturn", isReturn);
 
             if (fragStack.empty()) {
                 msgs.push(msg);
@@ -2182,6 +2189,7 @@ inline Graph parseMermaidArchitecture(const std::vector<std::string>& lines,
                     if (!srcPort.empty()) ae.set("fromPort", srcPort);
                     if (!dstPort.empty()) ae.set("toPort", dstPort);
                     ae.set("directed", directed || bidi);
+                    if (bidi) ae.set("bidi", true);
                     aEdges.push(ae);
 
                     // 同步到 edges
@@ -3024,7 +3032,7 @@ inline std::string detectFormat(const std::string& text)
             startsWith(sl, "mindmap") || startsWith(sl, "erdiagram") ||
             startsWith(sl, "sequencediagram") || startsWith(sl, "classdiagram") ||
             startsWith(sl, "statediagram") || startsWith(sl, "gantt") ||
-            startsWith(sl, "pie ") || startsWith(sl, "pie\n") ||
+            sl == "pie" || startsWith(sl, "pie ") ||
             startsWith(sl, "gitgraph") || startsWith(sl, "journey") ||
             startsWith(sl, "timeline") || startsWith(sl, "kanban") ||
             startsWith(sl, "quadrantchart") || startsWith(sl, "xychart-beta") ||

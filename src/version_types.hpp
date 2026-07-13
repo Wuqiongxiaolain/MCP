@@ -174,7 +174,8 @@ struct Operation
             j.set("snapshot", snapshot);
         if (!path.empty())
             j.set("path", path);
-        if (value.isObj() || value.isArr() || value.isStr() || value.isNum())
+        if (value.isObj() || value.isArr() || value.isStr() ||
+            value.isNum() || value.isBool() || value.isNull())
             j.set("value", value);
         j.set("timestamp", timestamp);
         return j;

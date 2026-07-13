@@ -596,12 +596,16 @@ class Json {
 
 // parseJsonPath: 将路径字符串拆分为段
 // 对象 key 保留原名，数组索引保留数字字符串（如 "0"）
+// 支持 \. 转义字面点号，\\ 转义反斜杠
 inline std::vector<std::string> parseJsonPath(const std::string& path)
 {
     std::vector<std::string> segs;
     std::string cur;
+    bool escape = false;
     for (size_t i = 0; i < path.size(); i++) {
         char c = path[i];
+        if (escape) { cur += c; escape = false; continue; }
+        if (c == '\\') { escape = true; continue; }
         if (c == '.') {
             if (!cur.empty()) { segs.push_back(cur); cur.clear(); }
         } else if (c == '[') {
@@ -663,11 +667,12 @@ inline Json* resolve(Json& root, const std::string& path)
     return cur;
 }
 
-// pathSet: 在指定路径设置值；中间对象自动创建，数组索引必须有效
-inline Json& pathSet(Json& root, const std::string& path, Json value)
+// pathSet: 在指定路径设置值；中间对象自动创建，返回是否成功
+// 数组索引必须有效（存在或等于 size），否则返回 false
+inline bool pathSet(Json& root, const std::string& path, Json value)
 {
     auto segs = parseJsonPath(path);
-    if (segs.empty()) { root = std::move(value); return root; }
+    if (segs.empty()) { root = std::move(value); return true; }
     Json* cur = &root;
     for (size_t si = 0; si < segs.size() - 1; si++) {
         auto& seg = segs[si];
@@ -675,10 +680,9 @@ inline Json& pathSet(Json& root, const std::string& path, Json value)
         if (isIndex) {
             if (!cur->isArr()) { *cur = Json::arr(); }
             int idx = std::stoi(seg);
-            if (idx >= 0 && cur->a && (size_t)idx < cur->a->size())
-                cur = &(*cur->a)[(size_t)idx];
-            else
-                return root; // 索引无效
+            if (idx < 0 || !cur->a || (size_t)idx >= cur->a->size())
+                return false;
+            cur = &(*cur->a)[(size_t)idx];
         } else {
             Json* next = cur->find(seg);
             if (!next) { cur->set(seg, Json::obj()); next = cur->find(seg); }
@@ -690,12 +694,15 @@ inline Json& pathSet(Json& root, const std::string& path, Json value)
     bool isIdx = !last.empty() && last.find_first_not_of("0123456789") == std::string::npos;
     if (isIdx && cur->isArr()) {
         int idx = std::stoi(last);
-        if (idx >= 0 && (size_t)idx < cur->a->size())
-            (*cur->a)[(size_t)idx] = std::move(value);
+        if (idx < 0 || !cur->a || (size_t)idx >= cur->a->size())
+            return false;
+        (*cur->a)[(size_t)idx] = std::move(value);
+        return true;
     } else if (cur->isObj()) {
         cur->set(last, std::move(value));
+        return true;
     }
-    return root;
+    return false;
 }
 
 // pathInsert: 向路径指向的数组追加（或指定索引处插入）值

@@ -311,7 +311,7 @@ paths:
     post:
       operationId: graph_show
       summary: graph_show
-      description: "Show graph summary, node details, or edge details. Without node/edge params, returns the full structure (nodes + edges list)."
+      description: "Show graph summary, node details, or edge details. Without node/edge params, returns the full structure (nodes + edges list). Use --path to show only a properties subtree."
       requestBody:
         required: true
         content:
@@ -328,6 +328,9 @@ paths:
                 edge:
                   type: string
                   description: show details for a specific edge id
+                path:
+                  type: string
+                  description: "JSON path into properties to show only a subtree, e.g. sequence.participants"
               required:
                 - id
       responses:

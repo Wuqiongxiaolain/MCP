@@ -69,7 +69,7 @@ inline Json toolDef(const std::string& name,
     return t;
 }
 
-// toolList: 返回服务暴露的全部工具清单（24 个工具）
+// toolList: 返回服务暴露的全部工具清单（26 个工具）
 inline Json toolList()
 {
     Json tools = Json::arr();
@@ -287,12 +287,17 @@ inline Json toolList()
         p.set("id", prop("string", "graph id"));
         p.set("node", prop("string", "show details for a specific node id"));
         p.set("edge", prop("string", "show details for a specific edge id"));
+        p.set("path",
+              prop("string",
+                   "JSON path into properties to show only a subtree, "
+                   "e.g. sequence.participants"));
         Json req = Json::arr();
         req.push(Json("id"));
         tools.push(toolDef("graph_show",
                            "Show graph summary, node details, or edge details. "
                            "Without node/edge params, returns the full "
-                           "structure (nodes + edges list).",
+                           "structure (nodes + edges list). "
+                           "Use --path to show only a properties subtree.",
                            p, req));
     }
 
@@ -1457,6 +1462,18 @@ class ToolRunner {
             return textContent(out.dump(2));
         }
 
+        // --path：显示 properties 子树
+        if (!a.str("path").empty()) {
+            const Json* sub = gj::resolve(g.properties, a.str("path"));
+            if (!sub)
+                return textContent(
+                    "path not found in properties: " + a.str("path"), true);
+            Json out = Json::obj();
+            out.set("path", a.str("path"));
+            out.set("value", *sub);
+            return textContent(out.dump(2));
+        }
+
         // 全图摘要
         auto st  = vm_.status(id);
         Json out = Json::obj();
@@ -1545,7 +1562,10 @@ class ToolRunner {
             const Json* old = gj::resolve(g.properties, path);
             std::string oldStr = old ? (old->isStr() ? old->s : old->dump()) : "";
 
-            gj::pathSet(g.properties, path, val);
+            if (!gj::pathSet(g.properties, path, val))
+                return textContent(
+                    "set failed: invalid path or index out of bounds: " + path,
+                    true);
 
             // 记录 operation
             gv::Operation op;

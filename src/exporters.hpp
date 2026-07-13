@@ -1311,10 +1311,15 @@ inline std::string toMermaid(const Graph& g)
             auto emitMsg = [&](const Json& m, int indent) {
                 std::string prefix(indent * 4, ' ');
                 std::string mType = m.str("type");
-                std::string arrow;
-                if (mType == "async") arrow = "-->>";
-                else if (mType == "return") arrow = "-->>";
-                else arrow = "->>";
+                std::string headEnd = m.str("headEnd");
+                // 构建箭头：dash(es) + head symbol
+                bool isReturn = (mType == "return");
+                std::string dash = isReturn ? "--" : "-";
+                std::string head;
+                if (headEnd == "cross") head = "x";
+                else if (headEnd == "open") head = ")";
+                else head = ">>";  // arrow (default)
+                std::string arrow = dash + head;
                 os << prefix << m.str("from") << arrow
                    << m.str("to");
                 if (!m.str("label").empty())
@@ -1322,20 +1327,29 @@ inline std::string toMermaid(const Graph& g)
                 os << "\n";
             };
             // 输出顶层消息和片段
-            auto emitFrag = [&](const Json& frag, int depth) -> void {
-                std::string prefix(depth * 4, ' ');
-                if (frag.isObj()) {
-                    os << prefix << frag.str("type");
-                    if (!frag.str("label").empty())
-                        os << " " << frag.str("label");
+            // 递归处理消息和嵌套 fragment
+            std::function<void(const Json&, int)> emitItem;
+            emitItem = [&](const Json& item, int depth) {
+                // 判断是嵌套 fragment（有 type + messages）还是消息（有 from/to）
+                if (item.isObj() && item.find("messages")) {
+                    // 嵌套 fragment
+                    std::string prefix(depth * 4, ' ');
+                    os << prefix << item.str("type");
+                    if (!item.str("label").empty())
+                        os << " " << item.str("label");
                     os << "\n";
-                    if (const Json* inner = frag.find("messages")) {
+                    if (const Json* inner = item.find("messages")) {
                         if (inner->isArr())
                             for (auto& m : *inner->a)
-                                emitMsg(m, depth + 1);
+                                emitItem(m, depth + 1);
                     }
                     os << prefix << "end\n";
+                } else {
+                    emitMsg(item, depth);
                 }
+            };
+            auto emitFrag = [&](const Json& frag, int depth) {
+                emitItem(frag, depth);
             };
             // 先输出顶层消息，遇到 fragment 就嵌套
             const Json* frags = seq->find("fragments");
@@ -1465,7 +1479,9 @@ inline std::string toMermaid(const Graph& g)
             if (const Json* aEdges = arch->find("edges")) {
                 if (aEdges->isArr())
                     for (auto& ae : *aEdges->a) {
-                        std::string arrow = ae.boolean("directed", false)
+                        bool bidi = ae.boolean("bidi", false);
+                        std::string arrow = bidi ? "<-->"
+                                            : ae.boolean("directed", false)
                                             ? "-->" : "--";
                         os << "    " << ae.str("from");
                         if (!ae.str("fromPort").empty())
@@ -1602,9 +1618,13 @@ inline std::string toMermaid(const Graph& g)
                                 for (auto& evt : *events->a) {
                                     os << "        " << evt.str("period") << " :";
                                     if (const Json* elist = evt.find("events")) {
-                                        if (elist->isArr())
-                                            for (auto& e : *elist->a)
-                                                os << " " << e.s << " :";
+                                        if (elist->isArr() && elist->a->size() > 0) {
+                                            for (size_t ei = 0; ei < elist->a->size(); ei++) {
+                                                os << " " << (*elist->a)[ei].s;
+                                                if (ei + 1 < elist->a->size())
+                                                    os << " :";
+                                            }
+                                        }
                                     }
                                     os << "\n";
                                 }

@@ -1409,6 +1409,122 @@ static void testMermaidDeepParsing()
     }
 }
 
+// 测试深度解析的结构化内容正确性
+static void testMermaidStructureValidation()
+{
+    // sequenceDiagram: 验证 participants 和 messages
+    {
+        Graph g = gp::parseMermaid(
+            "sequenceDiagram\n"
+            "    participant Alice\n"
+            "    actor Bob\n"
+            "    Alice->>Bob: Hello\n"
+            "    Bob-->>Alice: Hi\n");
+        CHECK(g.type == "sequenceDiagram");
+        CHECK(g.rawMermaid.empty());
+        const Json* seq = g.properties.find("sequence");
+        CHECK(seq != nullptr);
+        const Json* parts = seq->find("participants");
+        CHECK(parts != nullptr && parts->isArr() && parts->a->size() == 2);
+        const Json* msgs = seq->find("messages");
+        CHECK(msgs != nullptr && msgs->isArr() && msgs->a->size() == 2);
+        CHECK((*msgs->a)[0].str("headEnd") == "arrow");
+        CHECK((*msgs->a)[1].str("type") == "async");
+    }
+
+    // pie: 验证 entries
+    {
+        Graph g = gp::parseMermaid(
+            "pie title Test\n"
+            "\"A\" : 10\n"
+            "\"B\" : 20\n");
+        CHECK(g.type == "pie");
+        const Json* pie = g.properties.find("pie");
+        CHECK(pie != nullptr);
+        CHECK(pie->str("title") == "Test");
+        const Json* entries = pie->find("entries");
+        CHECK(entries != nullptr && entries->isArr() && entries->a->size() == 2);
+        CHECK((*entries->a)[0].str("label") == "A");
+        CHECK((*entries->a)[0].num("value", -1) == 10);
+    }
+
+    // gantt: 验证 sections 和 tasks
+    {
+        Graph g = gp::parseMermaid(
+            "gantt\n"
+            "    dateFormat YYYY-MM-DD\n"
+            "    title Plan\n"
+            "    section Design\n"
+            "    Task A : done, t1, 2024-01-01, 5d\n");
+        CHECK(g.type == "gantt");
+        const Json* gantt = g.properties.find("gantt");
+        CHECK(gantt != nullptr);
+        const Json* secs = gantt->find("sections");
+        CHECK(secs != nullptr && secs->isArr() && secs->a->size() == 1);
+        const Json* tasks = (*secs->a)[0].find("tasks");
+        CHECK(tasks != nullptr && tasks->isArr() && tasks->a->size() == 1);
+        CHECK((*tasks->a)[0].str("status") == "done");
+    }
+
+    // requirementDiagram: 验证双写
+    {
+        Graph g = gp::parseMermaid(
+            "requirementDiagram\n"
+            "    requirement req1 {\n"
+            "        id: REQ-1\n"
+            "        text: Login\n"
+            "    }\n"
+            "    element e1 {\n"
+            "        type: software\n"
+            "    }\n"
+            "    req1 - satisfies -> e1\n");
+        CHECK(g.type == "requirementDiagram");
+        CHECK(g.nodes.size() >= 2);  // 双写：nodes 也有数据
+        CHECK(g.edges.size() >= 1);
+        const Json* rd = g.properties.find("requirementDiagram");
+        CHECK(rd != nullptr);
+        const Json* els = rd->find("elements");
+        CHECK(els != nullptr && els->isArr() && els->a->size() == 2);
+        const Json* rels = rd->find("relations");
+        CHECK(rels != nullptr && rels->isArr() && rels->a->size() == 1);
+        CHECK((*rels->a)[0].str("type") == "satisfies");
+    }
+
+    // sankey-beta: 验证 flows
+    {
+        Graph g = gp::parseMermaid(
+            "sankey-beta\n"
+            "A,B,100\n"
+            "B,C,50\n");
+        CHECK(g.type == "sankey");
+        const Json* sk = g.properties.find("sankey");
+        CHECK(sk != nullptr);
+        const Json* flows = sk->find("flows");
+        CHECK(flows != nullptr && flows->isArr() && flows->a->size() == 2);
+        CHECK((*flows->a)[0].num("value", -1) == 100);
+        CHECK(g.edges.size() == 2);  // 双写
+    }
+
+    // pathSet 错误报告
+    {
+        Graph g;
+        g.type = "pie";
+        g.properties.set("pie", Json::obj());
+        g.properties["pie"].set("entries", Json::arr());
+        // 在无效索引上 set 应返回 false
+        bool ok = gj::pathSet(g.properties, "pie.entries[99].label", Json("X"));
+        CHECK(!ok);  // 索引 99 不存在
+    }
+
+    // parseJsonPath 转义
+    {
+        auto segs = gj::parseJsonPath("foo\\.bar.baz");
+        CHECK(segs.size() == 2);
+        CHECK(segs[0] == "foo.bar");  // 转义的点
+        CHECK(segs[1] == "baz");
+    }
+}
+
 // 测试 classDiagram 深度解析
 static void testMermaidClass()
 {
@@ -1579,6 +1695,7 @@ int runAll()
     testDrawioRoundTrip();
     testMcpGraphImport();
     testMermaidDeepParsing();
+    testMermaidStructureValidation();
     testMermaidClass();
     testMermaidState();
     std::cout << "tests: " << g_passed << " passed, " << g_failed

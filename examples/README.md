@@ -33,14 +33,17 @@
 
 示例：`example_input/flowchart.mmd` → `example_output/flowchart.mmd_out/`
 
-### 通用表 CSV → table 产物
+### 通用表 CSV / 表 XML → table 产物
 
-`enemy_sample.csv`、`skill_relations.csv` 是一等公民 **Table**，不是盲目 `convert to-*` 的图源。
+`enemy_sample.csv`、`enemy_sample.xml`、`skill_relations.csv` 是一等公民 **Table**，不是盲目 `convert to-*` 的图源。
+
+表交换格式（与表 XML 互通）：`csv` / `model`（JSON）/ `xml`。宽表另可导出 `check_report.csv`。
 
 | 输入 | 输出目录 | 产物 |
 |------|----------|------|
-| `enemy_sample.csv` | `example_output/enemy_sample.csv_out/` | `*.csv`、`*.model.json`、`*.check_report.csv`（无边/层级投影列，**不做**图导出） |
-| `skill_relations.csv` | `example_output/skill_relations.csv_out/` | 表：`*.csv`、`*.model.json`；图：`*.mmd` / `*.drawio` / `*.excalidraw` / `*.svg` / `*.url.txt`；`*.png` / `*.pdf` 尽力生成（缺省见下） |
+| `enemy_sample.csv` | `example_output/enemy_sample.csv_out/` | `*.csv`、`*.model.json`、`*.xml`、`*.check_report.csv`（无边/层级投影列，**不做**图导出） |
+| `enemy_sample.xml` | `example_output/enemy_sample.xml_out/` | 同上（`format=xml` 导入后导出，验证与 CSV 路径互通） |
+| `skill_relations.csv` | `example_output/skill_relations.csv_out/` | 表：`*.csv`、`*.model.json`、`*.xml`；图：`*.mmd` / `*.drawio` / `*.excalidraw` / `*.svg` / `*.url.txt`；`*.png` / `*.pdf` 尽力生成（缺省见下） |
 
 复现导出：
 

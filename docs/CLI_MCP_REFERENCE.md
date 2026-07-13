@@ -161,7 +161,7 @@
 
 ---
 
-## 三、MCP 工具（25 个）
+## 三、MCP 工具（39 个）
 
 参数与 CLI 对应；通过 `tools/call` 调用。
 
@@ -215,6 +215,27 @@
 | `graph_cursor_move` | 移动游标（delta±1） | `id`, `cursor` |
 | `graph_cursor_close` | 关闭游标 | `id`, `cursor` |
 
+### 通用表（CSV）与图↔表协作
+
+> **通用表 ≠** `create from-csv`（后者仍是边表/层级表 → Graph）。通用表是并列一等对象，权威交换格式为 CSV；仓库内为 JSON。不实现 Excel 全量读写。
+
+| 工具名 | 功能 | 必填参数 |
+|--------|------|----------|
+| `table_create` | 从 CSV 创建表并入库 | `content` |
+| `table_import` | 导入 CSV（可指定 id） | `content` |
+| `table_export` | 导出 csv / model | `id` |
+| `table_list` | 列出表 | （无） |
+| `table_show` | 查看表 | `id` |
+| `table_update` | 批量补丁并返回变更摘要 | `id` |
+| `table_delete` | 删除表 | `id`, `force` |
+| `table_history` / `table_rollback` / `table_diff` | 版本与差异 | 见 schema |
+| `table_from_graph` | 图→表有损投影（skeleton/edgelist/…） | `graph_id` |
+| `graph_from_table` | 表→图（边/层级列或映射列） | `table_id` 或 `content` |
+| `table_align` | 按主键跨表补行 | `primary_id`, `target_id`, keys |
+| `table_check` | 枚举校验 → 违规清单表 | `id` |
+
+CLI：`graphmcp table create|import|export|list|show|update|delete|history|rollback|from-graph|from-table|align|check`
+
 ---
 
 ## 四、最小示例
@@ -226,5 +247,7 @@
 | 导出 | `graphmcp export to-svg --id <graph-id> -o output.svg` |
 | 转链接 | `graphmcp convert to-url --file examples/example_input/flowchart.mmd` |
 | 改图并提交 | `graph update …` → `version stage` → `version commit -m "…"` |
+| 建通用表 | `graphmcp table create --file examples/example_input/enemy_sample.csv --name enemies` |
+| 技能表→关系图 | `graphmcp table from-table --file examples/example_input/skill_relations.csv` |
 | MCP 创建 | `tools/call` → `graph_create`，参数 `content` + `name` |
 | MCP 提交 | `tools/call` → `graph_commit`，参数 `id` + `message` |

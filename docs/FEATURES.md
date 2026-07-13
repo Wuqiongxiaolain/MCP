@@ -117,9 +117,9 @@ Excalidraw 手绘的白板——笔迹、图片、字体——原样往返，不
 
 ## 🔌 高级玩法：让 AI 直接帮你改图
 
-### 🤖 MCP 服务器，25 个工具随时待命
+### 🤖 MCP 服务器，39 个工具随时待命
 
-`graphmcp serve` 把上面所有能力原样打包成 25 个 MCP 工具，通过 stdio 直接接进 Claude Code / Claude Desktop。你不用记命令、不用切窗口——跟 AI 说一句"把这个流程图里的审批节点删了"，剩下的事它自己调工具办完。
+`graphmcp serve` 把图能力与**通用 CSV 表**协作能力打包成 39 个 MCP 工具，通过 stdio 接进 Claude Code / Claude Desktop。AI 可读思维导图/规范图，再调用 `table_*` / `table_from_graph` / `graph_from_table` 完成图←→表对接（Excel 非目标；人侧可用 Excel「自文本/CSV」导入导出）。
 
 <img src="images/mcp-handshake.svg" alt="MCP 握手与工具列表" width="100%">
 

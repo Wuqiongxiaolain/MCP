@@ -572,6 +572,20 @@ cto,CTO,ceo
 dev,Developer,cto
 ```
 
+### 通用 CSV 表（图↔表协作，非转图）
+
+业务宽表请用 `table` 命令族，不要用 `create from-csv`（后者只认边表/层级表）：
+
+```sh
+graphmcp table create --file examples/example_input/enemy_sample.csv --name enemies
+graphmcp table show <table-id>
+graphmcp table update <table-id> --add-row "5,新怪,测试,x,√,√,x,小怪"
+graphmcp table from-graph --graph-id <mindmap-id> --mode skeleton --with-hint-row
+graphmcp table from-table --file examples/example_input/skill_relations.csv
+```
+
+人侧若需 Excel：用 Excel「数据 → 自文本/CSV」打开导出的 CSV 即可；本项目不以 `.xlsx` 为权威格式。
+
 ### XML
 
 ```xml

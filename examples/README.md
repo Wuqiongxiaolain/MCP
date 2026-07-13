@@ -20,7 +20,7 @@
 - `Markdown 大纲`
 - `Excalidraw JSON（含 freedraw）`
 - `XML`
-- `CSV`
+- `CSV`（边表/层级表 → 图；另见通用表 `enemy_sample.csv` / `skill_relations.csv`）
 
 导出格式覆盖：
 

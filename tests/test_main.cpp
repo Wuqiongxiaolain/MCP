@@ -3,6 +3,9 @@
 #include "../src/mcp.hpp"
 #include "../src/parsers.hpp"
 #include "../src/storage.hpp"
+#include "../src/table_bridge.hpp"
+#include "../src/table_model.hpp"
+#include "../src/table_storage.hpp"
 #include <cstdlib>
 #include <iostream>
 
@@ -1122,7 +1125,7 @@ static void testMcpProtocol()
     Json tl =
         Json::parse(R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})", &err);
     CHECK(mcp::handleMessage(tl, store, resp));
-    CHECK(resp.find("result")->find("tools")->size() == 25);
+    CHECK(resp.find("result")->find("tools")->size() == 39);
     // tools/call graph_create
     Json call = Json::parse(
         R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
@@ -1336,6 +1339,122 @@ static void testMcpGraphImport()
     CHECK((int)j2.num("version") == 2);
 }
 
+static void testTableModel()
+{
+    gt::Table t = gt::Table::fromCsv(
+        "from,to,label\n"
+        "A,B,\"x,y\"\n"
+        "B,C,\n");
+    CHECK(t.columns.size() == 3);
+    CHECK(t.rows.size() == 2);
+    CHECK(t.cell(0, 2) == "x,y");
+    t.addColumn("weight", "1");
+    CHECK(t.columns.size() == 4);
+    CHECK(t.cell(0, 3) == "1");
+    t.setCell(1, 3, "9");
+    CHECK(t.cell(1, 3) == "9");
+    std::string csv = t.toCsv();
+    gt::Table   t2  = gt::Table::fromCsv(csv);
+    CHECK(t2.rows.size() == 2);
+    CHECK(t2.cell(0, 2) == "x,y");
+    Json j = t.toJson();
+    gt::Table t3 = gt::Table::fromJson(j);
+    CHECK(t3.columns.size() == 4);
+}
+
+static void testTableStoreAndBridge()
+{
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_STORE", "test-table-store-tmp");
+#else
+    setenv("GRAPHMCP_STORE", "test-table-store-tmp", 1);
+#endif
+    ge::removeDirectory("test-table-store-tmp");
+    gts::TableStore ts("test-table-store-tmp");
+    gt::Table       t = gt::Table::fromCsv("id,label,parent\nceo,CEO,\ncto,CTO,ceo\n");
+    t.name            = "org";
+    int v1            = ts.save(t, "init");
+    CHECK(v1 == 1);
+    gt::Table loaded;
+    CHECK(ts.load(t.id, loaded));
+    CHECK(loaded.rows.size() == 2);
+
+    Graph g = gtb::graphFromTable(loaded);
+    CHECK(g.type == "orgchart");
+    CHECK(g.nodes.size() >= 2);
+    CHECK(!g.edges.empty());
+
+    gt::Table edges = gtb::tableFromGraph(g, "edgelist", false);
+    CHECK(edges.columns.size() == 3);
+    CHECK(!edges.rows.empty());
+
+    gt::Table sk = gtb::tableFromGraph(g, "skeleton", true);
+    CHECK(!sk.columns.empty());
+
+    // align
+    gt::Table drop = gt::Table::fromCsv("enemy_id,item\n");
+    drop.id        = gm::genId("t");
+    ts.save(drop, "drop");
+    gt::Table enemies = gt::Table::fromCsv("编号,名称\n1,爬虫\n2,肿瘤\n");
+    enemies.id        = gm::genId("t");
+    ts.save(enemies, "enemies");
+    // reload drop
+    ts.load(drop.id, drop);
+    Json align = gtb::tableAlign(enemies, drop, "编号", "enemy_id");
+    CHECK((int)align.num("added_rows") == 2);
+    CHECK(drop.rows.size() == 2);
+
+    Json allowed = Json::obj();
+    Json vals    = Json::arr();
+    vals.push(Json("小怪"));
+    vals.push(Json("Boss"));
+    allowed.set("层级", vals);
+    gt::Table bad = gt::Table::fromCsv("层级\n小怪\n精英\n");
+    gt::Table rep = gtb::tableCheck(bad, allowed, nullptr);
+    CHECK(rep.rows.size() == 1);
+
+    CHECK(ts.remove(t.id));
+    ge::removeDirectory("test-table-store-tmp");
+}
+
+static void testTableMcpTools()
+{
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_STORE", "test-table-mcp-tmp");
+#else
+    setenv("GRAPHMCP_STORE", "test-table-mcp-tmp", 1);
+#endif
+    ge::removeDirectory("test-table-mcp-tmp");
+    gs::Store store("test-table-mcp-tmp");
+    mcp::ToolRunner runner(store);
+    Json            args = Json::obj();
+    args.set("content", "from,to,label\nA,B,go\n");
+    args.set("name", "edges");
+    Json res = runner.call("table_create", args);
+    CHECK(!res.boolean("isError", false));
+    std::string err;
+    Json        body = Json::parse(res.find("content")->a->at(0).str("text"), &err);
+    CHECK(err.empty());
+    std::string tid = body.str("id");
+    CHECK(!tid.empty());
+
+    Json u = Json::obj();
+    u.set("id", tid);
+    u.set("add_rows", R"([["B","C","next"]])");
+    Json ur = runner.call("table_update", u);
+    CHECK(!ur.boolean("isError", false));
+
+    Json gf = Json::obj();
+    gf.set("table_id", tid);
+    Json gr = runner.call("graph_from_table", gf);
+    CHECK(!gr.boolean("isError", false));
+    Json gb = Json::parse(gr.find("content")->a->at(0).str("text"), &err);
+    CHECK(gb.str("status") == "ok");
+    CHECK((int)gb.num("nodes") >= 2);
+
+    ge::removeDirectory("test-table-mcp-tmp");
+}
+
 int runAll()
 {
     testJson();
@@ -1357,6 +1476,9 @@ int runAll()
     testBase64();
     testStorage();
     testMcpProtocol();
+    testTableModel();
+    testTableStoreAndBridge();
+    testTableMcpTools();
     testMcpExtended();
     testMcpToolsRemaining();
     testMcpErrors();

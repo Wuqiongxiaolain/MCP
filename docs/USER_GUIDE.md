@@ -593,7 +593,37 @@ graphmcp table from-table --file examples/example_input/skill_relations.csv
 - `table from-graph`：`csv_preview` 默认前 20 行；截断时含 `hint`，完整内容用 `table export`。
 - `table check`：有 hint 行时默认跳过首行；`GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1`（或 `true`）可使缺省不跳过。也可显式 `--ignore-hint-row` / `--ignore-hint-row=false`。
 
-### XML
+### 通用表 XML（模式 A，非图 XML）
+
+业务宽表也可用表 XML 导入（根必须是 `<table>`，**不是**图描述用的 `<graph>`）：
+
+```sh
+graphmcp table create --file examples/example_input/enemy_sample.xml --format xml --name enemies
+graphmcp table export <table-id> --to xml -o enemies.xml
+```
+
+方言要点：根属性可带 `id`/`name`/`hasHintRow`；`<columns>/<col>` 定列；`<row>` 用**子元素名或属性名**作列名填值；允许一层嵌套拍扁为 `父.子`；同名时子元素覆盖属性。
+
+```xml
+<table name="enemies" hasHintRow="false">
+  <columns>
+    <col>编号</col>
+    <col>名称</col>
+    <col>层级</col>
+  </columns>
+  <rows>
+    <row>
+      <编号>1</编号>
+      <名称>爬虫</名称>
+      <层级>小怪</层级>
+    </row>
+  </rows>
+</table>
+```
+
+维护说明：表 XML 与 CSV 并行解析后进入同一 `Table`；实现上有意少改 `fromCsv`。若两侧装表行为漂移、再增第三种表格式、或需表侧脱离图解析头，应单独做 `xml_util`/`buildTable` 抽离重构（见 `APPLICATION_LOGIC.md`）。
+
+### 图 XML
 
 ```xml
 <graph type="architecture" name="系统架构">

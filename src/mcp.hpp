@@ -9,8 +9,10 @@
 #include "version_manager.hpp"
 #include <cctype>
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
 
 namespace mcp {
 
@@ -526,6 +528,295 @@ inline Json toolList()
     }
 
     return tools;
+}
+
+// ---- OpenAPI 导出（代码即文档：以 toolList 为唯一 schema 源）----
+
+// yamlNeedsQuotes: 判断标量是否需加双引号，避免 YAML 解析歧义
+inline bool yamlNeedsQuotes(const std::string& s)
+{
+    if (s.empty())
+        return true;
+    if (s == "true" || s == "false" || s == "null" || s == "True" ||
+        s == "False" || s == "Null" || s == "YES" || s == "NO")
+        return true;
+    if (s.front() == ' ' || s.back() == ' ')
+        return true;
+    if (s.front() == '-' || s.front() == '?' || s.front() == ':' ||
+        s.front() == '&' || s.front() == '*' || s.front() == '!' ||
+        s.front() == '|' || s.front() == '>' || s.front() == '%' ||
+        s.front() == '@' || s.front() == '`')
+        return true;
+    unsigned char first = (unsigned char)s[0];
+    if (std::isdigit(first) || first == '+' || first == '.')
+        return true;
+    for (unsigned char c : s) {
+        if (c == ':' || c == '#' || c == '"' || c == '\'' || c == '\\' ||
+            c == '\n' || c == '\r' || c == '\t' || c == '{' || c == '}' ||
+            c == '[' || c == ']' || c == ',' || c == '&' || c == '*')
+            return true;
+    }
+    return false;
+}
+
+// yamlQuote: 将字符串序列化为 YAML 双引号标量
+inline std::string yamlQuote(const std::string& s)
+{
+    std::string out = "\"";
+    for (unsigned char c : s) {
+        switch (c) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if (c < 0x20) {
+                    char buf[8];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", (unsigned)c);
+                    out += buf;
+                }
+                else {
+                    out += (char)c;
+                }
+        }
+    }
+    out += "\"";
+    return out;
+}
+
+// yamlScalar: 按需引号输出 YAML 标量
+inline std::string yamlScalar(const std::string& s)
+{
+    return yamlNeedsQuotes(s) ? yamlQuote(s) : s;
+}
+
+// indentSpaces: 生成 YAML 缩进空白
+inline std::string indentSpaces(int n)
+{
+    return std::string((size_t)n, ' ');
+}
+
+// jsonToYaml: 将 Json 树序列化为 YAML 文本（保持键序）
+// 参数 j: 待序列化值；out: 输出流；indent: 当前缩进空格数；inline_hint: 是否紧跟在 key: 后
+inline void jsonToYaml(const Json& j, std::ostringstream& out, int indent,
+                       bool after_key)
+{
+    if (j.isNull()) {
+        if (!after_key)
+            out << indentSpaces(indent);
+        out << "null";
+        return;
+    }
+    if (j.isBool()) {
+        if (!after_key)
+            out << indentSpaces(indent);
+        out << (j.b ? "true" : "false");
+        return;
+    }
+    if (j.isNum()) {
+        if (!after_key)
+            out << indentSpaces(indent);
+        double n = j.n;
+        if (n == (double)(long long)n)
+            out << (long long)n;
+        else
+            out << n;
+        return;
+    }
+    if (j.isStr()) {
+        if (!after_key)
+            out << indentSpaces(indent);
+        out << yamlScalar(j.s);
+        return;
+    }
+    if (j.isArr()) {
+        if (!j.a || j.a->empty()) {
+            if (!after_key)
+                out << indentSpaces(indent);
+            out << "[]";
+            return;
+        }
+        if (after_key)
+            out << "\n";
+        for (size_t i = 0; i < j.a->size(); ++i) {
+            out << indentSpaces(indent) << "-";
+            const Json& item = (*j.a)[i];
+            if (item.isObj() && item.o && !item.o->empty()) {
+                // 对象数组：首字段与 "- " 同行，其余字段缩进对齐
+                const auto& first = (*item.o)[0];
+                out << " " << yamlScalar(first.first) << ":";
+                if (first.second.isObj() || first.second.isArr()) {
+                    if ((first.second.isObj() &&
+                         (!first.second.o || first.second.o->empty())) ||
+                        (first.second.isArr() &&
+                         (!first.second.a || first.second.a->empty()))) {
+                        out << " ";
+                        jsonToYaml(first.second, out, 0, true);
+                    }
+                    else {
+                        jsonToYaml(first.second, out, indent + 2, true);
+                    }
+                }
+                else {
+                    out << " ";
+                    jsonToYaml(first.second, out, 0, true);
+                }
+                for (size_t k = 1; k < item.o->size(); ++k) {
+                    out << "\n";
+                    const auto& kv = (*item.o)[k];
+                    out << indentSpaces(indent + 2) << yamlScalar(kv.first)
+                        << ":";
+                    if (kv.second.isObj() || kv.second.isArr()) {
+                        if ((kv.second.isObj() &&
+                             (!kv.second.o || kv.second.o->empty())) ||
+                            (kv.second.isArr() &&
+                             (!kv.second.a || kv.second.a->empty()))) {
+                            out << " ";
+                            jsonToYaml(kv.second, out, 0, true);
+                        }
+                        else {
+                            jsonToYaml(kv.second, out, indent + 4, true);
+                        }
+                    }
+                    else {
+                        out << " ";
+                        jsonToYaml(kv.second, out, 0, true);
+                    }
+                }
+            }
+            else if (item.isObj() || item.isArr()) {
+                if ((item.isObj() && item.o && !item.o->empty()) ||
+                    (item.isArr() && item.a && !item.a->empty())) {
+                    out << "\n";
+                    jsonToYaml(item, out, indent + 2, false);
+                }
+                else {
+                    out << " ";
+                    jsonToYaml(item, out, indent + 2, true);
+                }
+            }
+            else {
+                out << " ";
+                jsonToYaml(item, out, 0, true);
+            }
+            if (i + 1 < j.a->size())
+                out << "\n";
+        }
+        return;
+    }
+    if (j.isObj()) {
+        if (!j.o || j.o->empty()) {
+            if (!after_key)
+                out << indentSpaces(indent);
+            out << "{}";
+            return;
+        }
+        if (after_key)
+            out << "\n";
+        for (size_t i = 0; i < j.o->size(); ++i) {
+            const auto& kv = (*j.o)[i];
+            out << indentSpaces(indent) << yamlScalar(kv.first) << ":";
+            const Json& v = kv.second;
+            if (v.isObj() || v.isArr()) {
+                if ((v.isObj() && (!v.o || v.o->empty())) ||
+                    (v.isArr() && (!v.a || v.a->empty()))) {
+                    out << " ";
+                    jsonToYaml(v, out, 0, true);
+                }
+                else {
+                    jsonToYaml(v, out, indent + 2, true);
+                }
+            }
+            else {
+                out << " ";
+                jsonToYaml(v, out, 0, true);
+            }
+            if (i + 1 < j.o->size())
+                out << "\n";
+        }
+        return;
+    }
+}
+
+// toolsToOpenApi: 将 toolList() 映射为 OpenAPI 3.0 文档对象
+// 约定：每个 MCP 工具 → POST /{name}，requestBody = inputSchema
+inline Json toolsToOpenApi()
+{
+    Json root = Json::obj();
+    root.set("openapi", "3.0.3");
+
+    Json info = Json::obj();
+    info.set("title", "graphmcp MCP API");
+    info.set("version", serverVersion());
+    info.set("description",
+             "graphmcp MCP tools/call 契约（非 HTTP REST）。"
+             "实际传输：JSON-RPC 2.0 over stdio（graphmcp serve）。"
+             "本文档由 graphmcp dump-tools 从 toolList() 自动生成。");
+    root.set("info", info);
+
+    Json servers = Json::arr();
+    Json server  = Json::obj();
+    server.set("url", "mcp://graphmcp");
+    server.set("description", "本地 MCP 进程（示意，非真实 HTTP）");
+    servers.push(server);
+    root.set("servers", servers);
+
+    Json paths = Json::obj();
+    Json tools = toolList();
+    for (size_t i = 0; i < tools.size(); ++i) {
+        const Json& tool = tools[i];
+        std::string name = tool.str("name");
+        if (name.empty())
+            continue;
+        std::string desc = tool.str("description");
+
+        Json resp200 = Json::obj();
+        resp200.set("description",
+                    "MCP tools/call 成功返回（content 文本或结构化结果）");
+
+        Json responses = Json::obj();
+        responses.set("200", resp200);
+
+        Json media = Json::obj();
+        const Json* schema = tool.find("inputSchema");
+        if (schema)
+            media.set("schema", *schema);
+        else {
+            Json empty = Json::obj();
+            empty.set("type", "object");
+            media.set("schema", empty);
+        }
+
+        Json content = Json::obj();
+        content.set("application/json", media);
+
+        Json body = Json::obj();
+        body.set("required", true);
+        body.set("content", content);
+
+        Json post = Json::obj();
+        post.set("operationId", name);
+        post.set("summary", name);
+        post.set("description", desc);
+        post.set("requestBody", body);
+        post.set("responses", responses);
+
+        Json path_item = Json::obj();
+        path_item.set("post", post);
+        paths.set("/" + name, path_item);
+    }
+    root.set("paths", paths);
+    return root;
+}
+
+// dumpOpenApiYaml: 将 OpenAPI 文档序列化为 YAML 文本
+inline std::string dumpOpenApiYaml()
+{
+    std::ostringstream out;
+    jsonToYaml(toolsToOpenApi(), out, 0, false);
+    out << "\n";
+    return out.str();
 }
 
 // ---- 工具执行辅助 ----

@@ -296,6 +296,37 @@ inline Json toolList()
                            p, req));
     }
 
+    // ── 11b. graph_property 🆕 ────────────────────────────────
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "graph id"));
+        p.set("action",
+              prop("string", "action: get|set|insert|delete (default get)"));
+        p.set("path",
+              prop("string",
+                   "JSON path into properties, e.g. "
+                   "sequence.participants[0].label "
+                   "or gantt.sections[0].tasks"));
+        p.set("value",
+              prop("string",
+                   "New value (for set/insert). "
+                   "JSON string, number, or object string."));
+        p.set("index",
+              prop("number", "Insertion index (default: append to end)"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("action"));
+        req.push(Json("path"));
+        tools.push(toolDef("graph_property",
+                           "Read, set, insert, or delete properties sub-data. "
+                           "Use --action get to read a value at a path. "
+                           "Use --action set to write a value at a path. "
+                           "Use --action insert to push into an array. "
+                           "Use --action delete to remove at a path. "
+                           "Changes go to the draft.",
+                           p, req));
+    }
+
     // ── 12. graph_update 🆕 ──────────────────────────────────
     {
         Json p = Json::obj();
@@ -954,6 +985,8 @@ class ToolRunner {
                 return deleteGraph(args);
             if (name == "graph_show")
                 return show(args);
+            if (name == "graph_property")
+                return property(args);
             if (name == "graph_update")
                 return update(args);
             if (name == "graph_insert")
@@ -1461,6 +1494,135 @@ class ToolRunner {
     }
 
     // update: Cursor 更新操作
+    // property: graph_property 工具实现（get/set/insert/delete）
+    Json property(const Json& a)
+    {
+        std::string id = a.str("id");
+        Graph       g  = vm_.materializeDraft(id);
+        if (g.id.empty()) {
+            std::string err;
+            if (!store_.load(id, g, 0, &err))
+                return textContent(err, true);
+        }
+
+        std::string action = a.str("action", "get");
+        std::string path   = a.str("path");
+        if (path.empty())
+            return textContent("'path' parameter is required", true);
+
+        gv::Draft draft = vm_.loadDraft(id);
+        Json      out   = Json::obj();
+
+        if (action == "get") {
+            const Json* val = gj::resolve(g.properties, path);
+            if (!val)
+                return textContent("path not found: " + path, true);
+            out.set("path", path);
+            if (val->isStr()) { out.set("value", val->s); out.set("type", "string"); }
+            else if (val->isNum()) { out.set("value", val->n); out.set("type", "number"); }
+            else if (val->isBool()) { out.set("value", val->b); out.set("type", "bool"); }
+            else if (val->isArr()) { out.set("value", val->dump(2)); out.set("type", "array"); }
+            else if (val->isObj()) { out.set("value", val->dump(2)); out.set("type", "object"); }
+            else out.set("type", "null");
+            return textContent(out.dump(2));
+        }
+
+        if (action == "set") {
+            std::string valStr = a.str("value");
+            if (valStr.empty())
+                return textContent("'value' parameter required for set action", true);
+
+            // 尝试解析为 JSON，失败则当作纯字符串
+            Json val;
+            std::string parseErr;
+            val = Json::parse(valStr, &parseErr);
+            if (!parseErr.empty() || val.isNull()) {
+                // 解析失败，当作字符串值
+                val = Json(valStr);
+            }
+
+            // 读取旧值
+            const Json* old = gj::resolve(g.properties, path);
+            std::string oldStr = old ? (old->isStr() ? old->s : old->dump()) : "";
+
+            gj::pathSet(g.properties, path, val);
+
+            // 记录 operation
+            gv::Operation op;
+            op.type       = gv::OpType::PROPERTY_SET;
+            op.targetType = "graph";
+            op.targetId   = id;
+            op.path       = path;
+            op.value      = val;
+            draft.operations.push_back(op);
+
+            out.set("status", "updated");
+            out.set("path", path);
+            out.set("oldValue", oldStr);
+            out.set("draftOperations", (double)draft.operations.size());
+            vm_.saveDraft(id, draft);
+            return textContent(out.dump(2));
+        }
+
+        if (action == "insert") {
+            std::string valStr = a.str("value");
+            if (valStr.empty())
+                return textContent("'value' parameter required for insert action", true);
+
+            Json val;
+            std::string parseErr;
+            val = Json::parse(valStr, &parseErr);
+            if (!parseErr.empty() || val.isNull())
+                val = Json(valStr);
+
+            int index = (int)a.num("index", -1);
+            bool ok = gj::pathInsert(g.properties, path, val, index);
+
+            if (!ok)
+                return textContent("insert failed at path: " + path, true);
+
+            gv::Operation op;
+            op.type       = gv::OpType::PROPERTY_INSERT;
+            op.targetType = "graph";
+            op.targetId   = id;
+            op.path       = path;
+            op.value      = val;
+            draft.operations.push_back(op);
+
+            out.set("status", "inserted");
+            out.set("path", path);
+            out.set("draftOperations", (double)draft.operations.size());
+            vm_.saveDraft(id, draft);
+            return textContent(out.dump(2));
+        }
+
+        if (action == "delete") {
+            const Json* old = gj::resolve(g.properties, path);
+            if (!old)
+                return textContent("path not found: " + path, true);
+
+            bool ok = gj::pathDelete(g.properties, path);
+            if (!ok)
+                return textContent("delete failed at path: " + path, true);
+
+            gv::Operation op;
+            op.type       = gv::OpType::PROPERTY_DELETE;
+            op.targetType = "graph";
+            op.targetId   = id;
+            op.path       = path;
+            op.value      = *old; // 保存旧值便于 revert
+            draft.operations.push_back(op);
+
+            out.set("status", "deleted");
+            out.set("path", path);
+            out.set("draftOperations", (double)draft.operations.size());
+            vm_.saveDraft(id, draft);
+            return textContent(out.dump(2));
+        }
+
+        return textContent("unknown action: " + action + ". Use get|set|insert|delete.", true);
+    }
+
     Json update(const Json& a)
     {
         std::string id = a.str("id");

@@ -73,6 +73,40 @@ class Json {
                 return &kv.second;
         return nullptr;
     }
+    // mutable find: 允许路径遍历时修改找到的值
+    Json* find(const std::string& k)
+    {
+        if (t != OBJ || !o)
+            return nullptr;
+        for (auto& kv : *o)
+            if (kv.first == k)
+                return &kv.second;
+        return nullptr;
+    }
+    // remove: 删除对象中指定 key，返回是否成功
+    bool remove(const std::string& k)
+    {
+        if (t != OBJ || !o) return false;
+        for (auto it = o->begin(); it != o->end(); ++it)
+            if (it->first == k) { o->erase(it); return true; }
+        return false;
+    }
+    // remove: 删除数组中指定索引元素，返回是否成功
+    bool remove(size_t idx)
+    {
+        if (t != ARR || !a || idx >= a->size()) return false;
+        a->erase(a->begin() + (ptrdiff_t)idx);
+        return true;
+    }
+    // insert: 在数组指定位置插入元素；若索引超出则追加
+    void insert(size_t idx, Json v)
+    {
+        if (t != ARR) { t = ARR; a = std::make_shared<JArray>(); }
+        if (idx >= a->size())
+            a->push_back(std::move(v));
+        else
+            a->insert(a->begin() + (ptrdiff_t)idx, std::move(v));
+    }
     // set: 设置对象字段；若 key 已存在则覆盖，保证调用简单直观
     Json& set(const std::string& k, Json v)
     {
@@ -555,5 +589,158 @@ class Json {
         return out;
     }
 };
+
+// ---- JSON Path 工具函数 ----
+// 提供类似 JavaScript 的点+括号路径访问：
+//   "sequence.participants[0].label" → ["sequence","participants","0","label"]
+
+// parseJsonPath: 将路径字符串拆分为段
+// 对象 key 保留原名，数组索引保留数字字符串（如 "0"）
+inline std::vector<std::string> parseJsonPath(const std::string& path)
+{
+    std::vector<std::string> segs;
+    std::string cur;
+    for (size_t i = 0; i < path.size(); i++) {
+        char c = path[i];
+        if (c == '.') {
+            if (!cur.empty()) { segs.push_back(cur); cur.clear(); }
+        } else if (c == '[') {
+            if (!cur.empty()) { segs.push_back(cur); cur.clear(); }
+        } else if (c == ']') {
+            if (!cur.empty()) { segs.push_back(cur); cur.clear(); }
+        } else {
+            cur += c;
+        }
+    }
+    if (!cur.empty()) segs.push_back(cur);
+    return segs;
+}
+
+// resolve: 路径定位（只读），返回 nullptr 表示路径不存在
+inline const Json* resolve(const Json& root, const std::string& path)
+{
+    auto segs = parseJsonPath(path);
+    const Json* cur = &root;
+    for (auto& seg : segs) {
+        if (!cur) return nullptr;
+        // 尝试解析为数组索引
+        bool isIndex = !seg.empty() && seg.find_first_not_of("0123456789") == std::string::npos;
+        if (isIndex && cur->isArr() && cur->a) {
+            int idx = std::stoi(seg);
+            if (idx < 0 || (size_t)idx >= cur->a->size()) return nullptr;
+            cur = &(*cur->a)[(size_t)idx];
+        } else if (cur->isObj() && cur->o) {
+            cur = cur->find(seg);
+        } else {
+            return nullptr;
+        }
+    }
+    return cur;
+}
+
+// resolve: 路径定位（可写），返回 nullptr 表示路径不存在
+inline Json* resolve(Json& root, const std::string& path)
+{
+    auto segs = parseJsonPath(path);
+    Json* cur = &root;
+    for (size_t si = 0; si < segs.size(); si++) {
+        auto& seg = segs[si];
+        if (!cur) return nullptr;
+        bool isIndex = !seg.empty() && seg.find_first_not_of("0123456789") == std::string::npos;
+        if (isIndex) {
+            if (!cur->isArr()) return nullptr;
+            if (!cur->a) return nullptr;
+            int idx = std::stoi(seg);
+            if (idx < 0 || (size_t)idx >= cur->a->size()) return nullptr;
+            cur = &(*cur->a)[(size_t)idx];
+        } else {
+            if (!cur->isObj()) return nullptr;
+            if (!cur->o) return nullptr;
+            cur = cur->find(seg);
+            if (!cur) return nullptr;
+        }
+    }
+    return cur;
+}
+
+// pathSet: 在指定路径设置值；中间对象自动创建，数组索引必须有效
+inline Json& pathSet(Json& root, const std::string& path, Json value)
+{
+    auto segs = parseJsonPath(path);
+    if (segs.empty()) { root = std::move(value); return root; }
+    Json* cur = &root;
+    for (size_t si = 0; si < segs.size() - 1; si++) {
+        auto& seg = segs[si];
+        bool isIndex = !seg.empty() && seg.find_first_not_of("0123456789") == std::string::npos;
+        if (isIndex) {
+            if (!cur->isArr()) { *cur = Json::arr(); }
+            int idx = std::stoi(seg);
+            if (idx >= 0 && cur->a && (size_t)idx < cur->a->size())
+                cur = &(*cur->a)[(size_t)idx];
+            else
+                return root; // 索引无效
+        } else {
+            Json* next = cur->find(seg);
+            if (!next) { cur->set(seg, Json::obj()); next = cur->find(seg); }
+            cur = next;
+        }
+    }
+    // 最后一层：设置值
+    auto& last = segs.back();
+    bool isIdx = !last.empty() && last.find_first_not_of("0123456789") == std::string::npos;
+    if (isIdx && cur->isArr()) {
+        int idx = std::stoi(last);
+        if (idx >= 0 && (size_t)idx < cur->a->size())
+            (*cur->a)[(size_t)idx] = std::move(value);
+    } else if (cur->isObj()) {
+        cur->set(last, std::move(value));
+    }
+    return root;
+}
+
+// pathInsert: 向路径指向的数组追加（或指定索引处插入）值
+inline bool pathInsert(Json& root, const std::string& path, Json value, int index = -1)
+{
+    Json* arr = resolve(root, path);
+    if (!arr) return false;
+    if (!arr->isArr()) { *arr = Json::arr(); }
+    if (index < 0 || (size_t)index >= arr->a->size())
+        arr->push(std::move(value));
+    else
+        arr->insert((size_t)index, std::move(value));
+    return true;
+}
+
+// pathDelete: 删除路径指向的元素（数组索引或对象 key）
+inline bool pathDelete(Json& root, const std::string& path)
+{
+    auto segs = parseJsonPath(path);
+    if (segs.empty()) return false;
+
+    // 定位父节点和最后一个段
+    Json* parent = &root;
+    for (size_t si = 0; si < segs.size() - 1; si++) {
+        auto& seg = segs[si];
+        bool isIndex = !seg.empty() && seg.find_first_not_of("0123456789") == std::string::npos;
+        if (isIndex && parent->isArr() && parent->a) {
+            int idx = std::stoi(seg);
+            if (idx < 0 || (size_t)idx >= parent->a->size()) return false;
+            parent = &(*parent->a)[(size_t)idx];
+        } else if (parent->isObj()) {
+            parent = parent->find(seg);
+            if (!parent) return false;
+        } else return false;
+    }
+
+    auto& last = segs.back();
+    bool isIdx = !last.empty() && last.find_first_not_of("0123456789") == std::string::npos;
+    if (isIdx && parent->isArr()) {
+        int idx = std::stoi(last);
+        return parent->remove((size_t)idx);
+    } else if (parent->isObj()) {
+        return parent->remove(last);
+    }
+    return false;
+}
 
 }  // namespace gj

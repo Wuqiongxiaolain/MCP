@@ -29,7 +29,11 @@ inline std::vector<Issue> validate(const Graph& g)
     if (!g.rawMermaid.empty())
         return issues;
 
-    if (g.nodes.empty() && g.elements.empty())
+    // properties 类型：有类型特定的结构化数据，不要求必须有 nodes
+    bool hasProperties = g.properties.isObj() && g.properties.o &&
+                         !g.properties.o->empty();
+
+    if (g.nodes.empty() && g.elements.empty() && !hasProperties)
         err("graph has no nodes or whiteboard elements");
 
     std::set<std::string> ids;

@@ -1229,6 +1229,524 @@ inline std::string sanitizeMermaidId(const std::string& id)
 // 关键步骤：按图类型分支（mindmap/er/flowchart）-> 输出节点 -> 输出边
 inline std::string toMermaid(const Graph& g)
 {
+    // properties 类型：从结构化数据重建 Mermaid
+    if (g.properties.isObj() && g.properties.o) {
+        // gantt 导出
+        if (const Json* gantt = g.properties.find("gantt")) {
+            std::ostringstream os;
+            os << "gantt\n";
+            std::string df = gantt->str("dateFormat");
+            if (!df.empty()) os << "    dateFormat " << df << "\n";
+            std::string t = gantt->str("title");
+            if (!t.empty()) os << "    title " << t << "\n";
+            if (const Json* secs = gantt->find("sections")) {
+                if (secs->isArr())
+                    for (auto& sec : *secs->a) {
+                        std::string sn = sec.str("name");
+                        if (!sn.empty()) os << "    section " << sn << "\n";
+                        if (const Json* tasks = sec.find("tasks")) {
+                            if (tasks->isArr())
+                                for (auto& tk : *tasks->a) {
+                                    os << "    " << tk.str("label") << " :";
+                                    std::string st = tk.str("status");
+                                    if (!st.empty()) os << " " << st << ",";
+                                    std::string tid = tk.str("id");
+                                    if (!tid.empty()) os << " " << tid << ",";
+                                    std::string start = tk.str("start");
+                                    if (!start.empty())
+                                        os << " " << start << ",";
+                                    std::string end = tk.str("end");
+                                    if (!end.empty())
+                                        os << " " << end;
+                                    std::string after = tk.str("after");
+                                    if (!after.empty())
+                                        os << " after " << after;
+                                    os << "\n";
+                                }
+                        }
+                    }
+            }
+            return os.str();
+        }
+        // pie 导出
+        if (const Json* pie = g.properties.find("pie")) {
+            std::ostringstream os;
+            os << "pie";
+            std::string title = pie->str("title");
+            if (!title.empty())
+                os << " title " << title;
+            os << "\n";
+            if (pie->boolean("showData", false))
+                os << "    showData\n";
+            if (const Json* entries = pie->find("entries")) {
+                if (entries->isArr())
+                    for (auto& e : *entries->a) {
+                        std::string lbl = e.str("label");
+                        os << "    \"" << lbl << "\" : "
+                           << e.num("value", 0) << "\n";
+                    }
+            }
+            return os.str();
+        }
+        // sequenceDiagram 导出
+        if (const Json* seq = g.properties.find("sequence")) {
+            std::ostringstream os;
+            os << "sequenceDiagram\n";
+            if (seq->boolean("autonumber", false))
+                os << "    autonumber\n";
+            // participants
+            if (const Json* parts = seq->find("participants")) {
+                if (parts->isArr())
+                    for (auto& p : *parts->a) {
+                        std::string type = p.str("type");
+                        if (type.empty()) type = "participant";
+                        os << "    " << type << " " << p.str("label");
+                        std::string pid = p.str("id");
+                        if (!pid.empty() && pid != p.str("label"))
+                            os << " as " << pid;
+                        os << "\n";
+                    }
+            }
+            // 辅助：输出消息
+            auto emitMsg = [&](const Json& m, int indent) {
+                std::string prefix(indent * 4, ' ');
+                std::string mType = m.str("type");
+                std::string arrow;
+                if (mType == "async") arrow = "-->>";
+                else if (mType == "return") arrow = "-->>";
+                else arrow = "->>";
+                os << prefix << m.str("from") << arrow
+                   << m.str("to");
+                if (!m.str("label").empty())
+                    os << ": " << m.str("label");
+                os << "\n";
+            };
+            // 输出顶层消息和片段
+            auto emitFrag = [&](const Json& frag, int depth) -> void {
+                std::string prefix(depth * 4, ' ');
+                if (frag.isObj()) {
+                    os << prefix << frag.str("type");
+                    if (!frag.str("label").empty())
+                        os << " " << frag.str("label");
+                    os << "\n";
+                    if (const Json* inner = frag.find("messages")) {
+                        if (inner->isArr())
+                            for (auto& m : *inner->a)
+                                emitMsg(m, depth + 1);
+                    }
+                    os << prefix << "end\n";
+                }
+            };
+            // 先输出顶层消息，遇到 fragment 就嵌套
+            const Json* frags = seq->find("fragments");
+            if (const Json* ms = seq->find("messages")) {
+                if (ms->isArr())
+                    for (auto& m : *ms->a)
+                        emitMsg(m, 1);
+            }
+            if (frags && frags->isArr())
+                for (auto& f : *frags->a)
+                    emitFrag(f, 1);
+            // notes
+            if (const Json* nts = seq->find("notes")) {
+                if (nts->isArr())
+                    for (auto& nt : *nts->a) {
+                        os << "    Note " << nt.str("placement") << " of ";
+                        if (const Json* tgt = nt.find("targets")) {
+                            if (tgt->isArr()) {
+                                bool firstT = true;
+                                for (auto& t : *tgt->a) {
+                                    if (!firstT) os << ",";
+                                    os << t.s;
+                                    firstT = false;
+                                }
+                            }
+                        }
+                        os << ": " << nt.str("text") << "\n";
+                    }
+            }
+            return os.str();
+        }
+        if (const Json* rd = g.properties.find("requirementDiagram")) {
+            // requirementDiagram 导出
+            std::ostringstream os;
+            os << "requirementDiagram\n";
+            if (const Json* els = rd->find("elements")) {
+                if (els->isArr())
+                    for (auto& el : *els->a) {
+                        std::string type = el.str("type");
+                        std::string id   = el.str("id");
+                        if (type.empty()) type = "requirement";
+                        os << "    " << type << " " << id << " {\n";
+                        // 输出 el 的所有自定义属性（除了 id 和 type）
+                        if (el.isObj() && el.o)
+                            for (auto& kv : *el.o) {
+                                if (kv.first == "id" || kv.first == "type")
+                                    continue;
+                                if (kv.second.isStr())
+                                    os << "        " << kv.first << ": \""
+                                       << kv.second.s << "\"\n";
+                                else
+                                    os << "        " << kv.first << ": "
+                                       << kv.second.dump() << "\n";
+                            }
+                        os << "    }\n";
+                    }
+            }
+            if (const Json* rels = rd->find("relations")) {
+                if (rels->isArr())
+                    for (auto& rel : *rels->a) {
+                        os << "    " << rel.str("from") << " - "
+                           << rel.str("type") << " -> "
+                           << rel.str("to") << "\n";
+                    }
+            }
+            return os.str();
+        }
+        // sankey-beta 导出
+        if (const Json* sk = g.properties.find("sankey")) {
+            std::ostringstream os;
+            os << "sankey-beta\n";
+            if (sk->boolean("showValues", false))
+                os << "    showValues\n";
+            if (const Json* flows = sk->find("flows")) {
+                if (flows->isArr())
+                    for (auto& f : *flows->a) {
+                        os << "    " << f.str("from") << ","
+                           << f.str("to") << ","
+                           << f.num("value", 0) << "\n";
+                    }
+            }
+            return os.str();
+        }
+        // architecture-beta 导出
+        if (const Json* arch = g.properties.find("architecture")) {
+            std::ostringstream os;
+            os << "architecture-beta\n";
+            // 输出 groups
+            if (const Json* grps = arch->find("groups")) {
+                if (grps->isArr())
+                    for (auto& grp : *grps->a) {
+                        os << "    group " << grp.str("id");
+                        if (!grp.str("icon").empty())
+                            os << "(" << grp.str("icon") << ")";
+                        if (!grp.str("label").empty())
+                            os << "[" << grp.str("label") << "]";
+                        if (!grp.str("groupId").empty())
+                            os << " in " << grp.str("groupId");
+                        os << "\n";
+                    }
+            }
+            // 输出 services
+            if (const Json* svcs = arch->find("services")) {
+                if (svcs->isArr())
+                    for (auto& svc : *svcs->a) {
+                        os << "    service " << svc.str("id");
+                        if (!svc.str("icon").empty())
+                            os << "(" << svc.str("icon") << ")";
+                        if (!svc.str("label").empty())
+                            os << "[" << svc.str("label") << "]";
+                        if (!svc.str("groupId").empty())
+                            os << " in " << svc.str("groupId");
+                        os << "\n";
+                    }
+            }
+            // 输出 junctions
+            if (const Json* jns = arch->find("junctions")) {
+                if (jns->isArr())
+                    for (auto& jn : *jns->a) {
+                        os << "    junction " << jn.str("id");
+                        if (!jn.str("groupId").empty())
+                            os << " in " << jn.str("groupId");
+                        os << "\n";
+                    }
+            }
+            // 输出 edges
+            if (const Json* aEdges = arch->find("edges")) {
+                if (aEdges->isArr())
+                    for (auto& ae : *aEdges->a) {
+                        std::string arrow = ae.boolean("directed", false)
+                                            ? "-->" : "--";
+                        os << "    " << ae.str("from");
+                        if (!ae.str("fromPort").empty())
+                            os << ":" << ae.str("fromPort");
+                        os << " " << arrow << " ";
+                        if (!ae.str("toPort").empty())
+                            os << ae.str("toPort") << ":";
+                        os << ae.str("to") << "\n";
+                    }
+            }
+            return os.str();
+        }
+        // kanban 导出
+        if (const Json* kb = g.properties.find("kanban")) {
+            std::ostringstream os;
+            os << "kanban\n";
+            if (const Json* cols = kb->find("columns")) {
+                if (cols->isArr())
+                    for (auto& col : *cols->a) {
+                        os << "    " << col.str("id")
+                           << "[" << col.str("title") << "]\n";
+                        if (const Json* cards = col.find("cards")) {
+                            if (cards->isArr())
+                                for (auto& card : *cards->a) {
+                                    os << "        " << card.str("id")
+                                       << "[" << card.str("title") << "]";
+                                    // 元数据
+                                    bool hasMeta = false;
+                                    if (card.isObj() && card.o) {
+                                        for (auto& kv : *card.o)
+                                            if (kv.first != "id" && kv.first != "title") {
+                                                hasMeta = true; break;
+                                            }
+                                    }
+                                    if (hasMeta) {
+                                        os << "@{ ";
+                                        bool firstKv = true;
+                                        for (auto& kv : *card.o) {
+                                            if (kv.first == "id" || kv.first == "title") continue;
+                                            if (!firstKv) os << ", ";
+                                            os << kv.first << ": '" << kv.second.s << "'";
+                                            firstKv = false;
+                                        }
+                                        os << " }";
+                                    }
+                                    os << "\n";
+                                }
+                        }
+                    }
+            }
+            return os.str();
+        }
+        // gitGraph 导出
+        if (const Json* gg = g.properties.find("gitGraph")) {
+            std::ostringstream os;
+            os << "gitGraph\n";
+            // 按 order 排序 commits
+            std::map<int, const Json*> sorted;
+            if (const Json* commits = gg->find("commits")) {
+                if (commits->isArr())
+                    for (auto& cm : *commits->a)
+                        sorted[(int)cm.num("order", 0)] = &cm;
+            }
+            std::string curBranch;
+            for (auto& kv : sorted) {
+                auto& cm = *kv.second;
+                std::string b = cm.str("branch");
+                if (b != curBranch && !b.empty()) {
+                    os << "    checkout " << b << "\n";
+                    curBranch = b;
+                }
+                std::string ctype = cm.str("type");
+                if (ctype == "MERGE")
+                    os << "    merge " << cm.str("label") << "\n";
+                else if (ctype == "CHERRY_PICK")
+                    os << "    cherry-pick " << cm.str("label") << "\n";
+                else {
+                    os << "    commit";
+                    std::string cid = cm.str("id");
+                    if (!cid.empty()) os << " id:\"" << cid << "\"";
+                    std::string tag = cm.str("tag");
+                    if (!tag.empty()) os << " tag:\"" << tag << "\"";
+                    os << "\n";
+                }
+            }
+            return os.str();
+        }
+        // journey 导出
+        if (const Json* jn = g.properties.find("journey")) {
+            std::ostringstream os;
+            os << "journey\n";
+            std::string t = jn->str("title");
+            if (!t.empty()) os << "    title " << t << "\n";
+            if (const Json* secs = jn->find("sections")) {
+                if (secs->isArr())
+                    for (auto& sec : *secs->a) {
+                        std::string sn = sec.str("name");
+                        if (!sn.empty()) os << "    section " << sn << "\n";
+                        if (const Json* tasks = sec.find("tasks")) {
+                            if (tasks->isArr())
+                                for (auto& tk : *tasks->a) {
+                                    os << "        " << tk.str("label")
+                                       << ": " << (int)tk.num("score", 0) << ": ";
+                                    if (const Json* actors = tk.find("actors")) {
+                                        if (actors->isArr()) {
+                                            bool firstA = true;
+                                            for (auto& a : *actors->a) {
+                                                if (!firstA) os << ", ";
+                                                os << a.s;
+                                                firstA = false;
+                                            }
+                                        }
+                                    }
+                                    os << "\n";
+                                }
+                        }
+                    }
+            }
+            return os.str();
+        }
+        // timeline 导出
+        if (const Json* tl = g.properties.find("timeline")) {
+            std::ostringstream os;
+            os << "timeline\n";
+            std::string t = tl->str("title");
+            if (!t.empty()) os << "    title " << t << "\n";
+            if (const Json* secs = tl->find("sections")) {
+                if (secs->isArr())
+                    for (auto& sec : *secs->a) {
+                        std::string sn = sec.str("name");
+                        if (!sn.empty()) os << "    section " << sn << "\n";
+                        if (const Json* events = sec.find("events")) {
+                            if (events->isArr())
+                                for (auto& evt : *events->a) {
+                                    os << "        " << evt.str("period") << " :";
+                                    if (const Json* elist = evt.find("events")) {
+                                        if (elist->isArr())
+                                            for (auto& e : *elist->a)
+                                                os << " " << e.s << " :";
+                                    }
+                                    os << "\n";
+                                }
+                        }
+                    }
+            }
+            return os.str();
+        }
+        // quadrantChart 导出
+        if (const Json* qc = g.properties.find("quadrantChart")) {
+            std::ostringstream os;
+            os << "quadrantChart\n";
+            std::string t = qc->str("title");
+            if (!t.empty()) os << "    title " << t << "\n";
+            std::string xl = qc->str("xLeft"), xr = qc->str("xRight");
+            if (!xl.empty() || !xr.empty())
+                os << "    x-axis " << xl << " --> " << xr << "\n";
+            std::string yb = qc->str("yBottom"), yt = qc->str("yTop");
+            if (!yb.empty() || !yt.empty())
+                os << "    y-axis " << yb << " --> " << yt << "\n";
+            for (int qi = 1; qi <= 4; qi++) {
+                std::string qkey = "q" + std::to_string(qi);
+                std::string qv = qc->str(qkey);
+                if (!qv.empty())
+                    os << "    quadrant-" << qi << ": " << qv << "\n";
+            }
+            if (const Json* pts = qc->find("points")) {
+                if (pts->isArr())
+                    for (auto& pt : *pts->a)
+                        os << "    " << pt.str("label")
+                           << ": [" << pt.num("x", 0) << ", " << pt.num("y", 0) << "]\n";
+            }
+            return os.str();
+        }
+        // xychart 导出
+        if (const Json* xy = g.properties.find("xychart")) {
+            std::ostringstream os;
+            os << "xychart-beta\n";
+            std::string t = xy->str("title");
+            if (!t.empty()) os << "    title \"" << t << "\"\n";
+            if (xy->boolean("horizontal", false)) os << "    horizontal\n";
+            if (const Json* xa = xy->find("xAxis")) {
+                os << "    x-axis ";
+                if (xa->str("type") == "categorical") {
+                    os << "[";
+                    if (const Json* cats = xa->find("categories")) {
+                        bool firstC = true;
+                        if (cats->isArr())
+                            for (auto& c : *cats->a) {
+                                if (!firstC) os << ", ";
+                                os << "\"" << c.s << "\"";
+                                firstC = false;
+                            }
+                    }
+                    os << "]";
+                } else {
+                    os << xa->str("label");
+                }
+                os << "\n";
+            }
+            if (const Json* ya = xy->find("yAxis"))
+                os << "    y-axis " << ya->str("label") << "\n";
+            if (const Json* ser = xy->find("series")) {
+                if (ser->isArr())
+                    for (auto& s : *ser->a) {
+                        os << "    " << s.str("type");
+                        std::string sn = s.str("label");
+                        if (!sn.empty()) os << " \"" << sn << "\"";
+                        os << " [";
+                        if (const Json* data = s.find("data")) {
+                            if (data->isArr()) {
+                                bool firstV = true;
+                                for (auto& v : *data->a) {
+                                    if (!firstV) os << ", ";
+                                    os << v.as_num();
+                                    firstV = false;
+                                }
+                            }
+                        }
+                        os << "]\n";
+                    }
+            }
+            return os.str();
+        }
+        // block-beta 导出
+        if (const Json* bl = g.properties.find("block")) {
+            std::ostringstream os;
+            os << "block-beta\n";
+            int cols = (int)bl->num("columns", 0);
+            if (cols > 0) os << "    columns " << cols << "\n";
+            if (const Json* blks = bl->find("blocks")) {
+                if (blks->isArr())
+                    for (auto& bk : *blks->a) {
+                        os << "    " << bk.str("id");
+                        std::string shape = bk.str("shape");
+                        if (shape == "round") os << "(" << bk.str("label") << ")";
+                        else if (shape == "diamond") os << "{" << bk.str("label") << "}";
+                        else os << "[" << bk.str("label") << "]";
+                        // 不额外输出 label（已在括号语法中）
+                        int cs = (int)bk.num("colSpan", 1);
+                        if (cs > 1) os << ":" << cs;
+                        os << "\n";
+                    }
+            }
+            if (const Json* bedges = bl->find("edges")) {
+                if (bedges->isArr())
+                    for (auto& e : *bedges->a) {
+                        std::string arrow = e.boolean("directed", false)
+                                            ? "-->" : "---";
+                        os << "    " << e.str("from") << " " << arrow
+                           << " " << e.str("to") << "\n";
+                    }
+            }
+            return os.str();
+        }
+        // packet-beta 导出
+        if (const Json* pk = g.properties.find("packet")) {
+            std::ostringstream os;
+            os << "packet-beta\n";
+            std::string t = pk->str("title");
+            if (!t.empty()) os << "    title " << t << "\n";
+            if (const Json* flds = pk->find("fields")) {
+                int offset = 0;
+                if (flds->isArr())
+                    for (auto& f : *flds->a) {
+                        int bits = (int)f.num("bits", 0);
+                        int start = (int)f.num("start", -1);
+                        int end = (int)f.num("end", -1);
+                        if (start >= 0 && end >= 0)
+                            os << "    " << start << "-" << end;
+                        else if (bits > 0) {
+                            os << "    " << offset << "-" << (offset + bits - 1);
+                            offset += bits;
+                        } else
+                            os << "    0-7";
+                        os << ": \"" << f.str("label") << "\"\n";
+                    }
+            }
+            return os.str();
+        }
+    }
+
     // 透传模式：如果存有原始 Mermaid 文本（无法深度解析的类型），直接返回
     if (!g.rawMermaid.empty())
         return g.rawMermaid;

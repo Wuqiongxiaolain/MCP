@@ -57,7 +57,10 @@ enum class OpType {
     EDGE_INSERT,   // 插入边
     EDGE_UPDATE,   // 更新边属性
     EDGE_DELETE,   // 删除边
-    META_UPDATE    // 更新图级元数据（name / type）
+    META_UPDATE,   // 更新图级元数据（name / type）
+    PROPERTY_SET,  // 设置 properties 中的值
+    PROPERTY_INSERT, // 向 properties 数组插入元素
+    PROPERTY_DELETE  // 从 properties 中删除元素
 };
 
 inline const char* opTypeName(OpType t)
@@ -71,6 +74,9 @@ inline const char* opTypeName(OpType t)
         case OpType::EDGE_UPDATE: return "EDGE_UPDATE";
         case OpType::EDGE_DELETE: return "EDGE_DELETE";
         case OpType::META_UPDATE: return "META_UPDATE";
+        case OpType::PROPERTY_SET: return "PROPERTY_SET";
+        case OpType::PROPERTY_INSERT: return "PROPERTY_INSERT";
+        case OpType::PROPERTY_DELETE: return "PROPERTY_DELETE";
     }
     return "UNKNOWN";
 }
@@ -91,6 +97,12 @@ inline OpType opTypeFromString(const std::string& s)
         return OpType::EDGE_DELETE;
     if (s == "META_UPDATE")
         return OpType::META_UPDATE;
+    if (s == "PROPERTY_SET")
+        return OpType::PROPERTY_SET;
+    if (s == "PROPERTY_INSERT")
+        return OpType::PROPERTY_INSERT;
+    if (s == "PROPERTY_DELETE")
+        return OpType::PROPERTY_DELETE;
     return OpType::UNKNOWN;
 }
 
@@ -128,13 +140,17 @@ struct Operation
     std::string              targetType = "node";  // "node" | "edge" | "graph"
     std::vector<FieldChange> changes;    // 字段变更明细（UPDATE 操作）
     Json                     snapshot;   // 插入时的完整元素快照（INSERT 操作）
+    std::string              path;       // JSON 路径（PROPERTY_SET/INSERT/DELETE 用）
+    Json                     value;      // 新值（PROPERTY_SET/INSERT 用）
     std::string              timestamp;  // ISO 时间戳
 
     // 简短摘要（用于 CLI 展示）
     std::string summary() const
     {
         std::string s =
-            std::string(opTypeName(type)) + " " + targetType + " " + targetId;
+            std::string(opTypeName(type)) + " " + targetType;
+        if (!targetId.empty()) s += " " + targetId;
+        if (!path.empty()) s += " @ " + path;
         if (type == OpType::NODE_UPDATE || type == OpType::EDGE_UPDATE) {
             if (!changes.empty())
                 s += " (" + std::to_string(changes.size()) + " fields)";
@@ -156,6 +172,10 @@ struct Operation
         }
         if (snapshot.isObj() || snapshot.isArr())
             j.set("snapshot", snapshot);
+        if (!path.empty())
+            j.set("path", path);
+        if (value.isObj() || value.isArr() || value.isStr() || value.isNum())
+            j.set("value", value);
         j.set("timestamp", timestamp);
         return j;
     }
@@ -173,6 +193,9 @@ struct Operation
         }
         if (const Json* sn = j.find("snapshot"))
             op.snapshot = *sn;
+        op.path = j.str("path");
+        if (const Json* v = j.find("value"))
+            op.value = *v;
         op.timestamp = j.str("timestamp");
         return op;
     }
@@ -641,6 +664,18 @@ inline Graph Commit::rebuild(const Graph&                  parentModel,
                 else if (ch.field == "type")
                     g.type = ch.newValue;
             }
+        }
+        else if (op.type == OpType::PROPERTY_SET) {
+            if (!op.path.empty())
+                gj::pathSet(g.properties, op.path, op.value);
+        }
+        else if (op.type == OpType::PROPERTY_INSERT) {
+            if (!op.path.empty())
+                gj::pathInsert(g.properties, op.path, op.value);
+        }
+        else if (op.type == OpType::PROPERTY_DELETE) {
+            if (!op.path.empty())
+                gj::pathDelete(g.properties, op.path);
         }
     }
     return g;

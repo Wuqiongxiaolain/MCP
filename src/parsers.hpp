@@ -2,6 +2,7 @@
 // 支持输入：Mermaid（flowchart / mindmap / erDiagram）、Markdown 大纲、
 // CSV（边列表或层级）、简化 XML、Excalidraw JSON。
 #pragma once
+#include "csv_util.hpp"
 #include "model.hpp"
 #include <cctype>
 #include <cstring>
@@ -408,40 +409,7 @@ inline Graph parseMarkdownOutline(const std::string& text)
 
 // ------------------------------------------------------------------- CSV --
 
-// splitCsvLine: 解析单行 CSV，支持双引号字段及转义双引号
-inline std::vector<std::string> splitCsvLine(const std::string& line)
-{
-    std::vector<std::string> out;
-    std::string              cur;
-    bool                     inQ = false;
-    for (size_t i = 0; i < line.size(); i++) {
-        char c = line[i];
-        if (inQ) {
-            if (c == '"') {
-                if (i + 1 < line.size() && line[i + 1] == '"') {
-                    cur += '"';
-                    i++;
-                }
-                else
-                    inQ = false;
-            }
-            else
-                cur += c;
-        }
-        else {
-            if (c == '"')
-                inQ = true;
-            else if (c == ',') {
-                out.push_back(trim(cur));
-                cur.clear();
-            }
-            else
-                cur += c;
-        }
-    }
-    out.push_back(trim(cur));
-    return out;
-}
+using gcsv::splitCsvLine;
 
 // 两种 CSV 模式：
 //   边列表：from,to[,label]        -> flowchart
@@ -511,10 +479,12 @@ inline Graph parseCSV(const std::string& text)
 namespace detail {
 
     // XmlNode: 轻量 XML 中间结构（tag/attrs/children/text）
+    // attr_order: 属性首次出现顺序（与 attrs 并行；map 本身无序）
     struct XmlNode
     {
         std::string                        tag;
         std::map<std::string, std::string> attrs;
+        std::vector<std::string>           attr_order;
         std::vector<XmlNode>               children;
         std::string                        text;
     };
@@ -602,8 +572,11 @@ namespace detail {
                             pos++;
                     }
                 }
-                if (!aname.empty())
+                if (!aname.empty()) {
+                    if (!node.attrs.count(aname))
+                        node.attr_order.push_back(aname);
                     node.attrs[aname] = decodeEntities(aval);
+                }
             }
             if (pos < src.size() && src[pos] == '/') {  // 自闭合标签
                 pos++;

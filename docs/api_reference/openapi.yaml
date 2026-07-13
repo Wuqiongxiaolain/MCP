@@ -126,6 +126,9 @@ paths:
                 version:
                   type: number
                   description: "version to open (default: latest)"
+                launch:
+                  type: boolean
+                  description: actually launch the OS handler (default true; set false to only generate URL/file; also honored via GRAPHMCP_NO_LAUNCH=1)
               required:
                 - id
       responses:
@@ -698,6 +701,436 @@ paths:
               required:
                 - id
                 - cursor
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_create:
+    post:
+      operationId: table_create
+      summary: table_create
+      description: Create a first-class data table from CSV / table XML / model JSON (separate from graph edge-list CSV or graph XML import).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  description: "table source: CSV, table XML (<table>), or model JSON"
+                format:
+                  type: string
+                  description: csv|xml|model (default csv; not auto)
+                name:
+                  type: string
+                  description: table display name
+                id:
+                  type: string
+                  description: optional table id
+                force:
+                  type: boolean
+                  description: allow create to overwrite existing table id (default false; GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT=1|true restores upsert without force)
+                note:
+                  type: string
+                  description: version note
+              required:
+                - content
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_import:
+    post:
+      operationId: table_import
+      summary: table_import
+      description: Import CSV / table XML / model JSON into a new or existing table id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: existing table id to overwrite (optional)
+                content:
+                  type: string
+                  description: "table source: CSV, table XML (<table>), or model JSON"
+                format:
+                  type: string
+                  description: csv|xml|model (default csv)
+                name:
+                  type: string
+                  description: table name
+                note:
+                  type: string
+                  description: version note
+              required:
+                - content
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_export:
+    post:
+      operationId: table_export
+      summary: table_export
+      description: "Export a stored table to CSV, JSON model, or table XML."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: table id
+                to:
+                  type: string
+                  description: csv|model|xml (default csv)
+                path:
+                  type: string
+                  description: optional output file path
+                version:
+                  type: number
+                  description: version to export (default latest)
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_list:
+    post:
+      operationId: table_list
+      summary: table_list
+      description: List stored tables.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                format:
+                  type: string
+                  description: json|table (default json)
+              required: []
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_show:
+    post:
+      operationId: table_show
+      summary: table_show
+      description: Show table metadata and rows (optionally limited).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: table id
+                limit:
+                  type: number
+                  description: max data rows to include (default all)
+                version:
+                  type: number
+                  description: version (default latest)
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_delete:
+    post:
+      operationId: table_delete
+      summary: table_delete
+      description: Delete a table and its versions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: table id
+                force:
+                  type: boolean
+                  description: must be true to delete
+              required:
+                - id
+                - force
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_history:
+    post:
+      operationId: table_history
+      summary: table_history
+      description: List table versions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: table id
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_rollback:
+    post:
+      operationId: table_rollback
+      summary: table_rollback
+      description: Rollback table by re-saving an old snapshot as a new version.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: table id
+                version:
+                  type: number
+                  description: version to restore
+              required:
+                - id
+                - version
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_update:
+    post:
+      operationId: table_update
+      summary: table_update
+      description: Apply batch patches to a table and save a new version; returns an audit summary of changes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: table id
+                note:
+                  type: string
+                  description: version note
+                set_cells:
+                  type: string
+                  description: "JSON array of {row,column|col_index,value} (row 0-based); deprecated alias col still accepted"
+                add_rows:
+                  type: string
+                  description: JSON array of row arrays
+                delete_rows:
+                  type: string
+                  description: JSON array of row indices
+                add_columns:
+                  type: string
+                  description: "JSON array of {name,default?} objects"
+                set_column_values:
+                  type: string
+                  description: "JSON {column, values:[...]} fill column"
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_diff:
+    post:
+      operationId: table_diff
+      summary: table_diff
+      description: "Diff two table versions, or latest vs provided table content."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: table id
+                v1:
+                  type: number
+                  description: first version (0=latest)
+                v2:
+                  type: number
+                  description: second version (0=latest)
+                content:
+                  type: string
+                  description: optional CSV / table XML / model JSON to diff against latest
+                format:
+                  type: string
+                  description: csv|xml|model for content (default csv)
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_from_graph:
+    post:
+      operationId: table_from_graph
+      summary: table_from_graph
+      description: Lossy projection from graph to table (skeleton/edgelist/hierarchylist/nodelist).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                graph_id:
+                  type: string
+                  description: source graph id
+                mode:
+                  type: string
+                  description: skeleton|edgelist|hierarchylist|nodelist (default skeleton)
+                with_hint_row:
+                  type: boolean
+                  description: "skeleton: add enum/hint second row"
+                name:
+                  type: string
+                  description: output table name
+                save:
+                  type: boolean
+                  description: save table to store (default true)
+                preview_rows:
+                  type: number
+                  description: max rows in csv_preview (default 20; truncated responses include hint)
+              required:
+                - graph_id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_from_table:
+    post:
+      operationId: graph_from_table
+      summary: graph_from_table
+      description: Build a graph from edge/hierarchy table columns (lossy; other columns ignored). content may be CSV / table XML / model.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                table_id:
+                  type: string
+                  description: source table id
+                content:
+                  type: string
+                  description: optional CSV / table XML / model JSON instead of table_id
+                format:
+                  type: string
+                  description: csv|xml|model for content (default csv)
+                from_col:
+                  type: string
+                  description: edge list from column
+                to_col:
+                  type: string
+                  description: edge list to column
+                label_col:
+                  type: string
+                  description: optional label column
+                id_col:
+                  type: string
+                  description: hierarchy id column
+                parent_col:
+                  type: string
+                  description: hierarchy parent column
+                name:
+                  type: string
+                  description: graph name
+                save:
+                  type: boolean
+                  description: save graph (default true)
+              required: []
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_align:
+    post:
+      operationId: table_align
+      summary: table_align
+      description: Pad target table with missing primary-key rows (copy same-named columns when present).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                primary_id:
+                  type: string
+                  description: primary table id
+                target_id:
+                  type: string
+                  description: target table to pad
+                primary_key:
+                  type: string
+                  description: key column on primary
+                target_key:
+                  type: string
+                  description: key column on target
+                note:
+                  type: string
+                  description: version note
+              required:
+                - primary_id
+                - target_id
+                - primary_key
+                - target_key
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_check:
+    post:
+      operationId: table_check
+      summary: table_check
+      description: "Validate table cells against allowed enums; returns a violation report table (row,field,actual,expected,suggestion)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: table to check
+                allowed:
+                  type: string
+                  description: "JSON object {column:[values]|\"a|b\"} of allowed enums"
+                rules_id:
+                  type: string
+                  description: "optional rules table id (columns: column/field, allowed)"
+                save:
+                  type: boolean
+                  description: save report as a new table
+                ignore_hint_row:
+                  type: boolean
+                  description: skip first row when target.hasHintRow (default true if target has hint row; GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1|true forces default false)
+                name:
+                  type: string
+                  description: report table name
+              required:
+                - id
       responses:
         "200":
           description: MCP tools/call 成功返回（content 文本或结构化结果）

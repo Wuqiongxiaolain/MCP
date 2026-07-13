@@ -21,7 +21,7 @@ HDRS := src/json.hpp src/model.hpp src/parsers.hpp src/layout.hpp \
         src/exporters.hpp src/storage.hpp src/mcp.hpp \
         src/version_types.hpp src/cursor_types.hpp src/version_manager.hpp \
 
-.PHONY: all test test-all test-version test-cursor smoke mcp-smoke clean export-testout docs-api
+.PHONY: all test test-all test-version test-cursor smoke mcp-smoke table-smoke clean export-testout export-table-examples docs-api
 
 all: $(BIN)/graphmcp$(EXE) $(BIN)/graphmcp_tests$(EXE) \
      $(BIN)/graphmcp_version_tests$(EXE) $(BIN)/graphmcp_cursor_tests$(EXE)
@@ -61,8 +61,14 @@ smoke: $(BIN)/graphmcp$(EXE)
 mcp-smoke: $(BIN)/graphmcp$(EXE)
 	bash tests/mcp_smoke.sh $(BIN)/graphmcp$(EXE)
 
+table-smoke: $(BIN)/graphmcp$(EXE)
+	bash tests/table_smoke.sh $(BIN)/graphmcp$(EXE)
+
 export-testout: $(BIN)/graphmcp$(EXE)
 	bash scripts/export-example-testout.sh $(BIN)/graphmcp$(EXE)
+
+export-table-examples: $(BIN)/graphmcp$(EXE)
+	bash scripts/export-table-examples.sh $(BIN)/graphmcp$(EXE)
 
 # docs-api: 从运行中的 toolList() 生成 OpenAPI YAML（代码即文档）
 docs-api: $(BIN)/graphmcp$(EXE)

@@ -5,15 +5,15 @@
 // 浏览器 URL）、外部编辑器打开、版本管理（Draft/Stage/Commit）、
 // Cursor 元素操作，以及通过 MCP 协议提供服务。
 #include "cursor_types.hpp"
-#include "exporters.hpp"
 #include "mcp.hpp"
 #include "model.hpp"
 #include "parsers.hpp"
+#include "table_bridge.hpp"
+#include "table_storage.hpp"
+#include "table_xml.hpp"
 #include "version_manager.hpp"
 
-#include <algorithm>
 #include <iostream>
-#include <set>
 #ifdef _WIN32
 #    include <shellapi.h>
 #    include <windows.h>
@@ -189,6 +189,8 @@ int usage(const std::string& hint = "", int exitCode = 1)
            "  layout    {auto|layered|tree-h|tree-v|grid}\n"
            "  validate  {graph|input}\n"
            "  store     {list|show|load|delete}\n"
+           "  table     {create|import|export|list|show|update|delete|history|"
+           "rollback|from-graph|from-table|align|check}\n"
            "  version   {status|draft|stage|commit|log|show|diff|checkout}\n"
            "  graph     {show|update|insert|delete}\n"
            "  cursor    {open|get|next|prev|close}\n"
@@ -840,6 +842,341 @@ int cmdStore(Args& a, gs::Store& store)
     }
 
     usage("unknown store subcommand: " + a.subcommand);
+    return 1;
+}
+
+// ─── table 命令族（通用 CSV 表）────────────────────────────────
+int cmdTable(Args& a, gs::Store& store)
+{
+    gts::TableStore tables(store.root());
+
+    if (a.subcommand == "list") {
+        Json idx = tables.loadIndex();
+        for (auto& e : *idx["tables"].a) {
+            std::cout << e.str("id") << "\t" << e.str("name") << "\tcols="
+                      << (int)e.num("columns") << "\trows=" << (int)e.num("rows")
+                      << "\tv" << (int)e.num("versions") << "\n";
+        }
+        return 0;
+    }
+
+    if (a.subcommand == "create" || a.subcommand == "import") {
+        std::string content = readInput(a);
+        if (content.empty()) {
+            usage("missing --file/--content");
+            return 1;
+        }
+        std::vector<std::string> warnings;
+        gt::Table t = gtx::parseTableContent(content, a.get("format", "csv"),
+                                             &warnings);
+        for (auto& w : warnings)
+            std::cerr << "warning: " << w << "\n";
+        if (a.has("id"))
+            t.id = a.get("id");
+        if (a.has("name"))
+            t.name = a.get("name");
+        if (a.subcommand == "create" && !t.id.empty() && tables.exists(t.id) &&
+            !a.has("force")) {
+            // 向后兼容接口，等待后续处理或删除
+            if (ge::envFlagEnabled("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT")) {
+                std::cerr
+                    << "warning: GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT enabled; "
+                       "overwriting existing table\n";
+            }
+            else {
+                std::cerr << "error: table already exists: " << t.id
+                          << " (use --force or table import)\n";
+                return 1;
+            }
+        }
+        std::string err;
+        int v = tables.save(t, a.get("note", a.subcommand + " via CLI"), &err);
+        if (v < 0) {
+            std::cerr << "error: " << (err.empty() ? "save failed" : err)
+                      << "\n";
+            return 5;
+        }
+        std::cout << "table " << t.id << " v" << v << " (" << t.columns.size()
+                  << " cols, " << t.rows.size() << " rows)\n";
+        return 0;
+    }
+
+    std::string id = getGraphId(a);
+
+    if (a.subcommand == "show" || a.subcommand == "export") {
+        if (id.empty()) {
+            usage("missing table id");
+            return 1;
+        }
+        gt::Table   t;
+        std::string err;
+        int         ver = atoi(a.get("version", "0").c_str());
+        if (!tables.load(id, t, ver, &err)) {
+            std::cerr << "error: " << err << "\n";
+            return 5;
+        }
+        std::string to = a.get("to", "csv");
+        std::string text;
+        try {
+            text = gtx::exportTableText(t, to);
+        }
+        catch (const gt::TableError& e) {
+            std::cerr << "error: " << e.what() << "\n";
+            return 1;
+        }
+        if (a.has("output")) {
+            if (!ge::writeFile(a.get("output"), text)) {
+                std::cerr << "error: failed to write " << a.get("output")
+                          << "\n";
+                return 5;
+            }
+            std::cout << "wrote " << a.get("output") << "\n";
+        }
+        else {
+            std::cout << text;
+        }
+        return 0;
+    }
+
+    if (a.subcommand == "history") {
+        if (id.empty()) {
+            usage("missing table id");
+            return 1;
+        }
+        std::cout << tables.history(id).dump(2) << "\n";
+        return 0;
+    }
+
+    if (a.subcommand == "rollback") {
+        if (id.empty() || a.positionals.size() < 2) {
+            usage("table rollback <id> <version>");
+            return 1;
+        }
+        int         ver = atoi(a.positionals[1].c_str());
+        int         nv  = 0;
+        std::string err;
+        if (!tables.rollback(id, ver, &nv, &err)) {
+            std::cerr << "error: " << err << "\n";
+            return 5;
+        }
+        std::cout << "rolled back to new v" << nv << "\n";
+        return 0;
+    }
+
+    if (a.subcommand == "delete") {
+        if (id.empty()) {
+            usage("missing table id");
+            return 1;
+        }
+        if (!a.has("force")) {
+            std::cerr << "use --force to confirm deletion\n";
+            return 1;
+        }
+        std::string err;
+        if (!tables.remove(id, &err)) {
+            std::cerr << "error: " << err << "\n";
+            return 5;
+        }
+        std::cout << "deleted table: " << id << "\n";
+        return 0;
+    }
+
+    if (a.subcommand == "update") {
+        if (id.empty()) {
+            usage("missing table id");
+            return 1;
+        }
+        // CLI 便捷：--add-row CSV 行；--set col=value 作用于最后一行或 --row
+        gt::Table   t;
+        std::string err;
+        if (!tables.load(id, t, 0, &err)) {
+            std::cerr << "error: " << err << "\n";
+            return 5;
+        }
+        if (a.has("add-row")) {
+            t.appendRow(gt::splitCsvLine(a.get("add-row")));
+        }
+        if (a.has("add-column")) {
+            t.addColumn(a.get("add-column"), a.get("default", ""));
+        }
+        if (a.has("set")) {
+            int row = atoi(a.get("row", "-1").c_str());
+            if (row < 0)
+                row = (int)t.rows.size() - 1;
+            if (row < 0) {
+                t.appendRow({});
+                row = 0;
+            }
+            for (auto& pair : a.getAll("set")) {
+                size_t eq = pair.find('=');
+                if (eq == std::string::npos)
+                    continue;
+                std::string col = pair.substr(0, eq);
+                std::string val = pair.substr(eq + 1);
+                int         ci  = t.colIndex(col);
+                if (ci < 0) {
+                    std::cerr << "unknown column: " << col << "\n";
+                    return 1;
+                }
+                t.setCell((size_t)row, (size_t)ci, val);
+            }
+        }
+        std::string err2;
+        int v = tables.save(t, a.get("note", "updated via CLI"), &err2);
+        if (v < 0) {
+            std::cerr << "error: " << (err2.empty() ? "save failed" : err2)
+                      << "\n";
+            return 5;
+        }
+        std::cout << "table " << t.id << " v" << v << "\n";
+        return 0;
+    }
+
+    if (a.subcommand == "from-graph") {
+        std::string gid = a.get("graph-id");
+        if (gid.empty())
+            gid = a.has("graph") ? a.get("graph") : id;
+        if (gid.empty()) {
+            usage("table from-graph --graph-id <id> --mode skeleton");
+            return 1;
+        }
+        Graph       g;
+        std::string err;
+        if (!store.load(gid, g, 0, &err)) {
+            std::cerr << "error: " << err << "\n";
+            return 5;
+        }
+        gt::Table t = gtb::tableFromGraph(g, a.get("mode", "skeleton"),
+                                          a.has("with-hint-row"));
+        if (a.has("name"))
+            t.name = a.get("name");
+        int v = 0;
+        std::string saveErr;
+        v = tables.save(t, "from graph " + gid, &saveErr);
+        if (v < 0) {
+            std::cerr << "error: " << (saveErr.empty() ? "save failed" : saveErr)
+                      << "\n";
+            return 5;
+        }
+        std::cout << "table " << t.id << " v" << v << "\n";
+        std::cout << t.toCsv();
+        return 0;
+    }
+
+    if (a.subcommand == "from-table" || a.subcommand == "to-graph") {
+        // graph from table
+        if (id.empty() && !a.has("file") && !a.has("content")) {
+            usage("table from-table <table-id> or --file csv|xml");
+            return 1;
+        }
+        gt::Table t;
+        if (a.has("file") || a.has("content")) {
+            t = gtx::parseTableContent(readInput(a), a.get("format", "csv"));
+        }
+        else {
+            std::string err;
+            if (!tables.load(id, t, 0, &err)) {
+                std::cerr << "error: " << err << "\n";
+                return 5;
+            }
+        }
+        Graph g = gtb::graphFromTable(t, a.get("from-col"), a.get("to-col"),
+                                      a.get("label-col"), a.get("id-col"),
+                                      a.get("parent-col"));
+        if (a.has("name"))
+            g.name = a.get("name");
+        int v = store.save(g, "from table");
+        std::cout << "graph " << g.id << " v" << v << " nodes=" << g.nodes.size()
+                  << " edges=" << g.edges.size() << "\n";
+        return 0;
+    }
+
+    if (a.subcommand == "align") {
+        std::string pid = a.get("primary");
+        std::string tid = a.get("target");
+        if (pid.empty() || tid.empty()) {
+            usage("table align --primary <id> --target <id> --primary-key "
+                  "--target-key");
+            return 1;
+        }
+        gt::Table   primary, target;
+        std::string err;
+        if (!tables.load(pid, primary, 0, &err) ||
+            !tables.load(tid, target, 0, &err)) {
+            std::cerr << "error: " << err << "\n";
+            return 5;
+        }
+        Json align = gtb::tableAlign(primary, target, a.get("primary-key"),
+                                     a.get("target-key"));
+        std::string saveErr;
+        int  v     = tables.save(target, "aligned via CLI", &saveErr);
+        if (v < 0) {
+            std::cerr << "error: " << (saveErr.empty() ? "save failed" : saveErr)
+                      << "\n";
+            return 5;
+        }
+        std::cout << "aligned target " << tid << " v" << v << " "
+                  << align.dump() << "\n";
+        return 0;
+    }
+
+    if (a.subcommand == "check") {
+        if (id.empty()) {
+            usage("table check <id> --allowed '{...}'");
+            return 1;
+        }
+        gt::Table   target;
+        std::string err;
+        if (!tables.load(id, target, 0, &err)) {
+            std::cerr << "error: " << err << "\n";
+            return 5;
+        }
+        Json allowed;
+        if (a.has("allowed")) {
+            std::string perr;
+            allowed = Json::parse(a.get("allowed"), &perr);
+            if (!perr.empty()) {
+                std::cerr << "error: " << perr << "\n";
+                return 1;
+            }
+        }
+        gt::Table rules;
+        const gt::Table* rp = nullptr;
+        if (a.has("rules")) {
+            if (!tables.load(a.get("rules"), rules, 0, &err)) {
+                std::cerr << "error: " << err << "\n";
+                return 5;
+            }
+            rp = &rules;
+        }
+        bool ignore_hint_row = false;
+        if (a.has("ignore-hint-row")) {
+            // 支持 --ignore-hint-row / --ignore-hint-row=true|false
+            ignore_hint_row = ge::parseTruthy(a.get("ignore-hint-row", "true"));
+        }
+        else {
+            // 向后兼容接口，等待后续处理或删除
+            if (ge::envFlagEnabled("GRAPHMCP_TABLE_CHECK_LEGACY_HINT"))
+                ignore_hint_row = false;
+            else
+                ignore_hint_row = target.hasHintRow;
+        }
+        gt::Table report = gtb::tableCheck(target, allowed, rp, ignore_hint_row);
+        std::cout << report.toCsv();
+        if (a.has("save")) {
+            std::string saveErr;
+            int v = tables.save(report, "check report", &saveErr);
+            if (v < 0) {
+                std::cerr << "error: "
+                          << (saveErr.empty() ? "save failed" : saveErr) << "\n";
+                return 5;
+            }
+            std::cout << "# saved report " << report.id << " v" << v << "\n";
+        }
+        return 0;
+    }
+
+    usage("unknown table subcommand: " + a.subcommand);
     return 1;
 }
 
@@ -1582,6 +1919,8 @@ int main(int argc, char** argv)
             return cmdValidate(a, store);
         if (a.family == "store")
             return cmdStore(a, store);
+        if (a.family == "table")
+            return cmdTable(a, store);
         if (a.family == "version")
             return cmdVersion(a, store);
         if (a.family == "graph")

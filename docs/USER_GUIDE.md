@@ -572,7 +572,58 @@ cto,CTO,ceo
 dev,Developer,cto
 ```
 
-### XML
+### 通用 CSV 表（图↔表协作，非转图）
+
+业务宽表请用 `table` 命令族，不要用 `create from-csv`（后者只认边表/层级表）：
+
+```sh
+graphmcp table create --file examples/example_input/enemy_sample.csv --name enemies
+graphmcp table show <table-id>
+graphmcp table update <table-id> --add-row "5,新怪,测试,x,√,√,x,小怪"
+graphmcp table from-graph --graph-id <mindmap-id> --mode skeleton --with-hint-row
+graphmcp table from-table --file examples/example_input/skill_relations.csv
+```
+
+人侧若需 Excel：用 Excel「数据 → 自文本/CSV」打开导出的 CSV 即可；本项目不以 `.xlsx` 为权威格式。
+
+通用表命令补充约定：
+
+- `table create`：若指定 `--id` 且已存在，默认拒绝；需 `--force` 才允许覆盖（建议常用 `table import` 做更新导入）。临时兼容：`GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT=1`（仅 `1`/`true` 生效）。
+- `table update`：`set_cells`（MCP）支持 `column` 或 `col_index`；弃用别名 `col` 仍可用并返回去重后的 `compat_warnings`。
+- `table from-graph`：`csv_preview` 默认前 20 行；截断时含 `hint`，完整内容用 `table export`。
+- `table check`：有 hint 行时默认跳过首行；`GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1`（或 `true`）可使缺省不跳过。也可显式 `--ignore-hint-row` / `--ignore-hint-row=false`。
+
+### 通用表 XML（模式 A，非图 XML）
+
+业务宽表也可用表 XML 导入（根必须是 `<table>`，**不是**图描述用的 `<graph>`）：
+
+```sh
+graphmcp table create --file examples/example_input/enemy_sample.xml --format xml --name enemies
+graphmcp table export <table-id> --to xml -o enemies.xml
+```
+
+方言要点：根属性可带 `id`/`name`/`hasHintRow`；`<columns>/<col>` 定列；`<row>` 用**子元素名或属性名**作列名填值；允许一层嵌套拍扁为 `父.子`（`toXml` 按父标签聚合写出）；同名时子元素覆盖属性。列名须可安全用作 XML 标签（禁止空白与 `<>/&"'=`），否则导入/导出拒绝；重复列名会去重并 warning。未知 `format`/`to` 会报错（不静默回退）。
+
+```xml
+<table name="enemies" hasHintRow="false">
+  <columns>
+    <col>编号</col>
+    <col>名称</col>
+    <col>层级</col>
+  </columns>
+  <rows>
+    <row>
+      <编号>1</编号>
+      <名称>爬虫</名称>
+      <层级>小怪</层级>
+    </row>
+  </rows>
+</table>
+```
+
+维护说明：表 XML 与 CSV 并行解析后进入同一 `Table`；实现上有意少改 `fromCsv`。若两侧装表行为漂移、再增第三种表格式、或需表侧脱离图解析头，应单独做 `xml_util`/`buildTable` 抽离重构（见 `APPLICATION_LOGIC.md`）。
+
+### 图 XML
 
 ```xml
 <graph type="architecture" name="系统架构">

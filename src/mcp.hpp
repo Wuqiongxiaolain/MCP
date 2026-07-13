@@ -1,9 +1,10 @@
 // mcp.hpp - Model Context Protocol 服务端（基于 stdio 的 JSON-RPC 2.0，
 // 按行分隔消息）。对外提供图创建/转换/导出/打开/校验/布局/版本管理/
-// Cursor 操作等 25 个工具。
+// Cursor 操作与通用表（CSV）协作等工具。
 #pragma once
 #include "cursor_types.hpp"
 #include "exporters.hpp"
+#include "mcp_table_tools.hpp"
 #include "parsers.hpp"
 #include "storage.hpp"
 #include "version_manager.hpp"
@@ -154,6 +155,11 @@ inline Json toolList()
               prop("string", "explicit editor executable path (overrides "
                              "auto-detection and GRAPHMCP_EDITOR env var)"));
         p.set("version", prop("number", "version to open (default: latest)"));
+        p.set("launch",
+              prop("boolean",
+                   "actually launch the OS handler (default true; set false "
+                   "to only generate URL/file; also honored via "
+                   "GRAPHMCP_NO_LAUNCH=1)"));
         Json req = Json::arr();
         req.push(Json("id"));
         tools.push(toolDef("graph_open",
@@ -525,6 +531,234 @@ inline Json toolList()
         tools.push(toolDef("graph_cursor_close",
                            "Close the cursor and remove its state file.", p,
                            req));
+    }
+
+    // ── table_* 通用表工具（CSV / 表 XML / model）────────────────
+    {
+        Json p = Json::obj();
+        p.set("content",
+              prop("string",
+                   "table source: CSV, table XML (<table>), or model JSON"));
+        p.set("format",
+              prop("string",
+                   "csv|xml|model (default csv; not auto)"));
+        p.set("name", prop("string", "table display name"));
+        p.set("id", prop("string", "optional table id"));
+        p.set("force",
+              prop("boolean",
+                   "allow create to overwrite existing table id (default false; "
+                   "GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT=1|true restores upsert "
+                   "without force)"));
+        p.set("note", prop("string", "version note"));
+        Json req = Json::arr();
+        req.push(Json("content"));
+        tools.push(toolDef(
+            "table_create",
+            "Create a first-class data table from CSV / table XML / model JSON "
+            "(separate from graph edge-list CSV or graph XML import).",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "existing table id to overwrite (optional)"));
+        p.set("content",
+              prop("string",
+                   "table source: CSV, table XML (<table>), or model JSON"));
+        p.set("format",
+              prop("string", "csv|xml|model (default csv)"));
+        p.set("name", prop("string", "table name"));
+        p.set("note", prop("string", "version note"));
+        Json req = Json::arr();
+        req.push(Json("content"));
+        tools.push(toolDef(
+            "table_import",
+            "Import CSV / table XML / model JSON into a new or existing table "
+            "id.",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "table id"));
+        p.set("to", prop("string", "csv|model|xml (default csv)"));
+        p.set("path", prop("string", "optional output file path"));
+        p.set("version", prop("number", "version to export (default latest)"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        tools.push(toolDef("table_export",
+                           "Export a stored table to CSV, JSON model, or table "
+                           "XML.",
+                           p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("format", prop("string", "json|table (default json)"));
+        tools.push(
+            toolDef("table_list", "List stored tables.", p, Json::arr()));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "table id"));
+        p.set("limit", prop("number", "max data rows to include (default all)"));
+        p.set("version", prop("number", "version (default latest)"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        tools.push(toolDef("table_show",
+                           "Show table metadata and rows (optionally limited).",
+                           p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "table id"));
+        p.set("force", prop("boolean", "must be true to delete"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("force"));
+        tools.push(toolDef("table_delete", "Delete a table and its versions.",
+                           p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "table id"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        tools.push(toolDef("table_history", "List table versions.", p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "table id"));
+        p.set("version", prop("number", "version to restore"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("version"));
+        tools.push(toolDef(
+            "table_rollback",
+            "Rollback table by re-saving an old snapshot as a new version.", p,
+            req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "table id"));
+        p.set("note", prop("string", "version note"));
+        p.set("set_cells",
+              prop("string",
+                   "JSON array of {row,column|col_index,value} (row 0-based); "
+                   "deprecated alias col still accepted"));
+        p.set("add_rows", prop("string", "JSON array of row arrays"));
+        p.set("delete_rows", prop("string", "JSON array of row indices"));
+        p.set("add_columns",
+              prop("string", "JSON array of {name,default?} objects"));
+        p.set("set_column_values",
+              prop("string", "JSON {column, values:[...]} fill column"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        tools.push(toolDef(
+            "table_update",
+            "Apply batch patches to a table and save a new version; returns "
+            "an audit summary of changes.",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "table id"));
+        p.set("v1", prop("number", "first version (0=latest)"));
+        p.set("v2", prop("number", "second version (0=latest)"));
+        p.set("content",
+              prop("string",
+                   "optional CSV / table XML / model JSON to diff against "
+                   "latest"));
+        p.set("format",
+              prop("string", "csv|xml|model for content (default csv)"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        tools.push(toolDef(
+            "table_diff",
+            "Diff two table versions, or latest vs provided table content.", p,
+            req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("graph_id", prop("string", "source graph id"));
+        p.set("mode",
+              prop("string",
+                   "skeleton|edgelist|hierarchylist|nodelist (default "
+                   "skeleton)"));
+        p.set("with_hint_row",
+              prop("boolean", "skeleton: add enum/hint second row"));
+        p.set("name", prop("string", "output table name"));
+        p.set("save", prop("boolean", "save table to store (default true)"));
+        p.set("preview_rows",
+              prop("number",
+                   "max rows in csv_preview (default 20; truncated responses "
+                   "include hint)"));
+        Json req = Json::arr();
+        req.push(Json("graph_id"));
+        tools.push(toolDef(
+            "table_from_graph",
+            "Lossy projection from graph to table (skeleton/edgelist/"
+            "hierarchylist/nodelist).",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("table_id", prop("string", "source table id"));
+        p.set("content",
+              prop("string",
+                   "optional CSV / table XML / model JSON instead of table_id"));
+        p.set("format",
+              prop("string", "csv|xml|model for content (default csv)"));
+        p.set("from_col", prop("string", "edge list from column"));
+        p.set("to_col", prop("string", "edge list to column"));
+        p.set("label_col", prop("string", "optional label column"));
+        p.set("id_col", prop("string", "hierarchy id column"));
+        p.set("parent_col", prop("string", "hierarchy parent column"));
+        p.set("name", prop("string", "graph name"));
+        p.set("save", prop("boolean", "save graph (default true)"));
+        tools.push(toolDef(
+            "graph_from_table",
+            "Build a graph from edge/hierarchy table columns (lossy; other "
+            "columns ignored). content may be CSV / table XML / model.",
+            p, Json::arr()));
+    }
+    {
+        Json p = Json::obj();
+        p.set("primary_id", prop("string", "primary table id"));
+        p.set("target_id", prop("string", "target table to pad"));
+        p.set("primary_key", prop("string", "key column on primary"));
+        p.set("target_key", prop("string", "key column on target"));
+        p.set("note", prop("string", "version note"));
+        Json req = Json::arr();
+        req.push(Json("primary_id"));
+        req.push(Json("target_id"));
+        req.push(Json("primary_key"));
+        req.push(Json("target_key"));
+        tools.push(toolDef(
+            "table_align",
+            "Pad target table with missing primary-key rows (copy same-named "
+            "columns when present).",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "table to check"));
+        p.set("allowed",
+              prop("string",
+                   "JSON object {column:[values]|\"a|b\"} of allowed enums"));
+        p.set("rules_id", prop("string", "optional rules table id "
+                                         "(columns: column/field, allowed)"));
+        p.set("save", prop("boolean", "save report as a new table"));
+        p.set("ignore_hint_row",
+              prop("boolean",
+                   "skip first row when target.hasHintRow (default true if "
+                   "target has hint row; GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1|true "
+                   "forces default false)"));
+        p.set("name", prop("string", "report table name"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        tools.push(toolDef(
+            "table_check",
+            "Validate table cells against allowed enums; returns a violation "
+            "report table (row,field,actual,expected,suggestion).",
+            p, req));
     }
 
     return tools;
@@ -922,7 +1156,9 @@ parseSetPairs(const Json& args)
 // ToolRunner: MCP 工具执行器（工具名 -> 具体业务逻辑）
 class ToolRunner {
   public:
-    explicit ToolRunner(gs::Store& store) : store_(store), vm_(store.root()) {}
+    explicit ToolRunner(gs::Store& store)
+        : store_(store), tables_(store.root()), vm_(store.root())
+    {}
 
     // call: 工具分发总入口，统一捕获异常并返回 isError 文本
     Json call(const std::string& name, const Json& args)
@@ -981,6 +1217,35 @@ class ToolRunner {
                 return cursorMove(args);
             if (name == "graph_cursor_close")
                 return cursorClose(args);
+            // ── 通用表工具 ──
+            if (name == "table_create")
+                return tableCreate(args);
+            if (name == "table_import")
+                return tableImport(args);
+            if (name == "table_export")
+                return tableExport(args);
+            if (name == "table_list")
+                return tableList(args);
+            if (name == "table_show")
+                return tableShow(args);
+            if (name == "table_delete")
+                return tableDelete(args);
+            if (name == "table_history")
+                return tableHistory(args);
+            if (name == "table_rollback")
+                return tableRollback(args);
+            if (name == "table_update")
+                return tableUpdate(args);
+            if (name == "table_diff")
+                return tableDiffTool(args);
+            if (name == "table_from_graph")
+                return tableFromGraphTool(args);
+            if (name == "graph_from_table")
+                return graphFromTableTool(args);
+            if (name == "table_align")
+                return tableAlignTool(args);
+            if (name == "table_check")
+                return tableCheckTool(args);
             return textContent("unknown tool: " + name, true);
         }
         catch (const std::exception& e) {
@@ -990,6 +1255,7 @@ class ToolRunner {
 
   private:
     gs::Store&              store_;
+    gts::TableStore         tables_;
     gv::GraphVersionManager vm_;
 
     // ==========================================================
@@ -1090,8 +1356,12 @@ class ToolRunner {
                 return textContent(r.message, true);
         }
         std::string editorPath = ge::resolveEditor(editor, a.str("editorPath"));
-        bool        launched   = ge::openExternal(target, editorPath);
-        Json        out        = Json::obj();
+        // launch=false 或 GRAPHMCP_NO_LAUNCH 时只生成目标，不拉起外部程序
+        bool do_launch = a.boolean("launch", true);
+        bool launched  = false;
+        if (do_launch)
+            launched = ge::openExternal(target, editorPath);
+        Json out = Json::obj();
         out.set("target", target);
         out.set("launched", launched);
         out.set("editor", editor);
@@ -1108,6 +1378,8 @@ class ToolRunner {
         else
             out.set("availableEditors", "");
         out.set("hint",
+                !do_launch ?
+                    "launch skipped; open the target manually" :
                 launched ?
                     (editorPath.empty() ? "opened with system default handler" :
                                           "opened with editor: " + editorPath) :
@@ -1883,6 +2155,52 @@ class ToolRunner {
         const Json* err = r.find("error");
         return textContent(err ? err->s : r.dump(2), err != nullptr);
     }
+
+    // ==========================================================
+    // 通用表工具
+    // ==========================================================
+
+    Json tableCreate(const Json& a)
+    { return tabletools::tableCreate(tables_, a); }
+
+    Json tableImport(const Json& a)
+    { return tabletools::tableImport(tables_, a); }
+
+    Json tableExport(const Json& a)
+    { return tabletools::tableExport(tables_, a); }
+
+    Json tableList(const Json& a)
+    { return tabletools::tableList(tables_, a); }
+
+    Json tableShow(const Json& a)
+    { return tabletools::tableShow(tables_, a); }
+
+    Json tableDelete(const Json& a)
+    { return tabletools::tableDelete(tables_, a); }
+
+    Json tableHistory(const Json& a)
+    { return tabletools::tableHistory(tables_, a); }
+
+    Json tableRollback(const Json& a)
+    { return tabletools::tableRollback(tables_, a); }
+
+    Json tableUpdate(const Json& a)
+    { return tabletools::tableUpdate(tables_, a); }
+
+    Json tableDiffTool(const Json& a)
+    { return tabletools::tableDiffTool(tables_, a); }
+
+    Json tableFromGraphTool(const Json& a)
+    { return tabletools::tableFromGraphTool(store_, tables_, a); }
+
+    Json graphFromTableTool(const Json& a)
+    { return tabletools::graphFromTableTool(store_, tables_, a); }
+
+    Json tableAlignTool(const Json& a)
+    { return tabletools::tableAlignTool(tables_, a); }
+
+    Json tableCheckTool(const Json& a)
+    { return tabletools::tableCheckTool(tables_, a); }
 };
 
 // ---- JSON-RPC 通信处理 ----

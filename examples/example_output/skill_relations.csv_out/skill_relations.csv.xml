@@ -1,0 +1,24 @@
+<table id="ex-skill-relations" name="skills" hasHintRow="false">
+  <columns>
+    <col>from</col>
+    <col>to</col>
+    <col>label</col>
+  </columns>
+  <rows>
+    <row>
+      <from>slash</from>
+      <to>thrust</to>
+      <label>前置</label>
+    </row>
+    <row>
+      <from>thrust</from>
+      <to>combo</to>
+      <label>派生</label>
+    </row>
+    <row>
+      <from>slash</from>
+      <to>guard</to>
+      <label>互斥</label>
+    </row>
+  </rows>
+</table>

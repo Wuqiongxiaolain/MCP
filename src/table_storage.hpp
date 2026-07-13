@@ -5,8 +5,8 @@
 //   <root>/tables/<tableId>/versions/v<N>.json
 //   <root>/tables/<tableId>/HEAD
 #pragma once
-#include "exporters.hpp"
-#include "storage.hpp"  // gs::makeDir / gs::nowIso
+#include "exporters.hpp"  // writeFileAtomic / readFile
+#include "storage.hpp"    // gs::makeDir / gs::nowIso
 #include "table_model.hpp"
 #include "version_types.hpp"
 
@@ -55,7 +55,7 @@ class TableStore {
     }
 
     bool saveIndex(const Json& idx) const
-    { return ge::writeFile(tablesRoot() + "/index.json", idx.dump(2)); }
+    { return ge::writeFileAtomic(tablesRoot() + "/index.json", idx.dump(2)); }
 
     bool exists(const std::string& id) const
     {
@@ -86,19 +86,23 @@ class TableStore {
         gs::makeDir(dir);
         gs::makeDir(dir + "/versions");
 
-        Json  idx   = loadIndex();
-        Json* entry = nullptr;
-        for (auto& item : *idx["tables"].a)
-            if (item.str("id") == t.id) {
-                entry = &item;
-                break;
+        Json   idx       = loadIndex();
+        size_t entry_idx = static_cast<size_t>(-1);
+        if (idx["tables"].isArr() && idx["tables"].a) {
+            for (size_t i = 0; i < idx["tables"].a->size(); i++) {
+                if ((*idx["tables"].a)[i].str("id") == t.id) {
+                    entry_idx = i;
+                    break;
+                }
             }
+        }
         int version = 1;
-        if (entry)
-            version = (int)entry->num("versions") + 1;
+        if (entry_idx != static_cast<size_t>(-1))
+            version =
+                (int)(*idx["tables"].a)[entry_idx].num("versions") + 1;
 
         Json model = t.toJson();
-        if (!ge::writeFile(dir + "/latest.json", model.dump(2))) {
+        if (!ge::writeFileAtomic(dir + "/latest.json", model.dump(2))) {
             if (err)
                 *err = "failed to write latest.json";
             return -1;
@@ -109,25 +113,26 @@ class TableStore {
         snap.set("savedAt", gs::nowIso());
         snap.set("note", note);
         snap.set("model", model);
-        if (!ge::writeFile(dir + "/versions/v" + std::to_string(version) +
-                               ".json",
-                           snap.dump(2))) {
+        if (!ge::writeFileAtomic(dir + "/versions/v" + std::to_string(version) +
+                                     ".json",
+                                 snap.dump(2))) {
             if (err)
                 *err = "failed to write version snapshot";
             return -1;
         }
-        if (!ge::writeFile(dir + "/HEAD", std::to_string(version))) {
+        if (!ge::writeFileAtomic(dir + "/HEAD", std::to_string(version))) {
             if (err)
                 *err = "failed to write HEAD";
             return -1;
         }
 
-        if (entry) {
-            entry->set("name", t.name);
-            entry->set("columns", (double)t.columns.size());
-            entry->set("rows", (double)t.rows.size());
-            entry->set("versions", version);
-            entry->set("updatedAt", gs::nowIso());
+        if (entry_idx != static_cast<size_t>(-1)) {
+            Json& entry = (*idx["tables"].a)[entry_idx];
+            entry.set("name", t.name);
+            entry.set("columns", (double)t.columns.size());
+            entry.set("rows", (double)t.rows.size());
+            entry.set("versions", version);
+            entry.set("updatedAt", gs::nowIso());
         }
         else {
             Json e = Json::obj();

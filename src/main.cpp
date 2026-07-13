@@ -5,7 +5,6 @@
 // 浏览器 URL）、外部编辑器打开、版本管理（Draft/Stage/Commit）、
 // Cursor 元素操作，以及通过 MCP 协议提供服务。
 #include "cursor_types.hpp"
-#include "exporters.hpp"
 #include "mcp.hpp"
 #include "model.hpp"
 #include "parsers.hpp"
@@ -13,9 +12,7 @@
 #include "table_storage.hpp"
 #include "version_manager.hpp"
 
-#include <algorithm>
 #include <iostream>
-#include <set>
 #ifdef _WIN32
 #    include <shellapi.h>
 #    include <windows.h>
@@ -875,9 +872,17 @@ int cmdTable(Args& a, gs::Store& store)
             t.name = a.get("name");
         if (a.subcommand == "create" && !t.id.empty() && tables.exists(t.id) &&
             !a.has("force")) {
-            std::cerr << "error: table already exists: " << t.id
-                      << " (use --force or table import)\n";
-            return 1;
+            // 向后兼容接口，等待后续处理或删除
+            std::string legacy =
+                ge::getEnvVar("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT");
+            if (legacy.empty() || legacy == "0") {
+                std::cerr << "error: table already exists: " << t.id
+                          << " (use --force or table import)\n";
+                return 1;
+            }
+            std::cerr
+                << "warning: GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT enabled; "
+                   "overwriting existing table\n";
         }
         std::string err;
         int v = tables.save(t, a.get("note", a.subcommand + " via CLI"), &err);
@@ -908,7 +913,11 @@ int cmdTable(Args& a, gs::Store& store)
         std::string text =
             (a.get("to", "csv") == "model") ? t.toJson().dump(2) : t.toCsv();
         if (a.has("output")) {
-            ge::writeFile(a.get("output"), text);
+            if (!ge::writeFile(a.get("output"), text)) {
+                std::cerr << "error: failed to write " << a.get("output")
+                          << "\n";
+                return 5;
+            }
             std::cout << "wrote " << a.get("output") << "\n";
         }
         else {
@@ -1128,8 +1137,19 @@ int cmdTable(Args& a, gs::Store& store)
             }
             rp = &rules;
         }
-        bool ignore_hint_row =
-            a.has("ignore-hint-row") ? true : target.hasHintRow;
+        bool ignore_hint_row = false;
+        if (a.has("ignore-hint-row")) {
+            ignore_hint_row = true;
+        }
+        else {
+            // 向后兼容接口，等待后续处理或删除
+            std::string legacy =
+                ge::getEnvVar("GRAPHMCP_TABLE_CHECK_LEGACY_HINT");
+            if (!legacy.empty() && legacy != "0")
+                ignore_hint_row = false;
+            else
+                ignore_hint_row = target.hasHintRow;
+        }
         gt::Table report = gtb::tableCheck(target, allowed, rp, ignore_hint_row);
         std::cout << report.toCsv();
         if (a.has("save")) {

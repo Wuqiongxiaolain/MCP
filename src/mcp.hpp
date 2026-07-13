@@ -4,17 +4,14 @@
 #pragma once
 #include "cursor_types.hpp"
 #include "exporters.hpp"
+#include "mcp_table_tools.hpp"
 #include "parsers.hpp"
 #include "storage.hpp"
-#include "table_bridge.hpp"
-#include "table_storage.hpp"
 #include "version_manager.hpp"
-#include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
-#include <functional>
 #include <iostream>
 #include <sstream>
 
@@ -630,7 +627,8 @@ inline Json toolList()
         p.set("note", prop("string", "version note"));
         p.set("set_cells",
               prop("string",
-                   "JSON array of {row,column|col_index,value} (row 0-based)"));
+                   "JSON array of {row,column|col_index,value} (row 0-based); "
+                   "deprecated alias col still accepted"));
         p.set("add_rows", prop("string", "JSON array of row arrays"));
         p.set("delete_rows", prop("string", "JSON array of row indices"));
         p.set("add_columns",
@@ -1045,8 +1043,6 @@ inline Json textContent(const std::string& text, bool isError = false)
         result.set("isError", true);
     return result;
 }
-
-#include "mcp_table_tools.hpp"
 
 // logLevel: 读取 GRAPHMCP_LOG 日志级别
 inline const char* logLevel()

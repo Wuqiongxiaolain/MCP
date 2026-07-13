@@ -188,6 +188,37 @@ inline bool writeFile(const std::string& path, const std::string& content)
     return f.good();
 }
 
+// writeFileAtomic: 先写 path.tmp 再原子替换到 path，降低半写入风险
+inline bool writeFileAtomic(const std::string& path, const std::string& content)
+{
+    std::string tmp = path + ".tmp";
+    if (!writeFile(tmp, content))
+        return false;
+#ifdef _WIN32
+    auto toWide = [](const std::string& s) {
+        int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
+        std::wstring w((size_t)(n > 0 ? n - 1 : 0), L'\0');
+        if (n > 0)
+            MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &w[0], n);
+        return w;
+    };
+    std::wstring wtmp  = toWide(tmp);
+    std::wstring wpath = toWide(path);
+    if (!MoveFileExW(wtmp.c_str(), wpath.c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        DeleteFileW(wtmp.c_str());
+        return false;
+    }
+    return true;
+#else
+    if (std::rename(tmp.c_str(), path.c_str()) != 0) {
+        std::remove(tmp.c_str());
+        return false;
+    }
+    return true;
+#endif
+}
+
 inline std::string readFile(const std::string& path)
 {
     std::ifstream f(path, std::ios::binary);
@@ -2267,3 +2298,4 @@ inline bool openExternal(const std::string& target,
 }
 
 }  // namespace ge
+

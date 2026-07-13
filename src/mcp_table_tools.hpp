@@ -44,6 +44,25 @@ inline Json parseJsonField(const Json& args, const std::string& key)
     return j;
 }
 
+// envFlagEnabled: 非空且非 "0" 视为启用
+inline bool envFlagEnabled(const char* name)
+{
+    std::string v = ge::getEnvVar(name);
+    return !v.empty() && v != "0";
+}
+
+// appendCompatWarning: 向响应对象追加 compat_warnings 字符串
+inline void appendCompatWarning(Json& out, const std::string& msg)
+{
+    Json warnings = Json::arr();
+    if (const Json* existing = out.find("compat_warnings")) {
+        if (existing->isArr())
+            warnings = *existing;
+    }
+    warnings.push(Json(msg));
+    out.set("compat_warnings", warnings);
+}
+
 inline Json tableCreate(gts::TableStore& tables, const Json& a)
 {
     gt::Table t = gt::Table::fromCsv(a.str("content"));
@@ -53,11 +72,19 @@ inline Json tableCreate(gts::TableStore& tables, const Json& a)
         t.name = a.str("name");
 
     bool force = a.boolean("force", false);
-    if (!t.id.empty() && tables.exists(t.id) && !force)
-        return textContent(
-            "table already exists: " + t.id +
-                " (use force=true or table_import for upsert)",
-            true);
+    // 向后兼容接口，等待后续处理或删除
+    bool legacy_upsert =
+        envFlagEnabled("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT");
+    bool used_legacy_upsert = false;
+    if (!t.id.empty() && tables.exists(t.id) && !force) {
+        if (legacy_upsert)
+            used_legacy_upsert = true;
+        else
+            return textContent(
+                "table already exists: " + t.id +
+                    " (use force=true or table_import for upsert)",
+                true);
+    }
 
     std::string err;
     int         v = tables.save(t, a.str("note", "created via MCP"), &err);
@@ -70,6 +97,12 @@ inline Json tableCreate(gts::TableStore& tables, const Json& a)
     out.set("version", (double)v);
     out.set("columns", (double)t.columns.size());
     out.set("rows", (double)t.rows.size());
+    // 向后兼容接口，等待后续处理或删除
+    if (used_legacy_upsert)
+        appendCompatWarning(
+            out,
+            "GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT enabled; prefer force=true "
+            "or table_import");
     return textContent(out.dump(2));
 }
 
@@ -178,7 +211,8 @@ inline Json tableRollback(gts::TableStore& tables, const Json& a)
     return textContent(out.dump(2));
 }
 
-inline void applyTablePatches(gt::Table& t, const Json& a, Json& summary)
+inline void applyTablePatches(gt::Table& t, const Json& a, Json& summary,
+                              Json& compat_out)
 {
     int cells = 0, addedRows = 0, deletedRows = 0, addedCols = 0;
 
@@ -198,6 +232,25 @@ inline void applyTablePatches(gt::Table& t, const Json& a, Json& summary)
             }
             else if (item.find("col_index")) {
                 col = (int)item.num("col_index", -1);
+            }
+            // 向后兼容接口，等待后续处理或删除
+            else if (const Json* legacy_col = item.find("col")) {
+                if (legacy_col->isStr()) {
+                    col = t.colIndex(legacy_col->s);
+                    if (col < 0)
+                        throw gt::TableError("unknown column: " +
+                                             legacy_col->s);
+                }
+                else if (legacy_col->isNum()) {
+                    col = (int)legacy_col->as_num();
+                }
+                else {
+                    throw gt::TableError(
+                        "set_cells.col must be string or number");
+                }
+                appendCompatWarning(
+                    compat_out,
+                    "set_cells.col is deprecated; use column or col_index");
             }
             else {
                 throw gt::TableError(
@@ -288,11 +341,11 @@ inline Json tableUpdate(gts::TableStore& tables, const Json& a)
     if (!tables.load(a.str("id"), t, 0, &err))
         return textContent(err, true);
     Json summary = Json::obj();
-    applyTablePatches(t, a, summary);
+    Json out     = Json::obj();
+    applyTablePatches(t, a, summary, out);
     int v = tables.save(t, a.str("note", "updated via MCP"), &err);
     if (v < 0)
         return textContent(err.empty() ? "failed to save table" : err, true);
-    Json out = Json::obj();
     out.set("status", "updated");
     out.set("id", t.id);
     out.set("version", (double)v);
@@ -356,6 +409,8 @@ inline Json tableFromGraphTool(gs::Store& store, gts::TableStore& tables,
         preview.rows.resize((size_t)previewRows);
         out.set("truncated", true);
         out.set("total_rows", (double)t.rows.size());
+        out.set("hint",
+                "csv_preview truncated; use table_export for full content");
     }
     out.set("csv_preview", preview.toCsv());
     return textContent(out.dump(2));
@@ -442,7 +497,21 @@ inline Json tableCheckTool(gts::TableStore& tables, const Json& a)
         rulesPtr = &rules;
     }
 
-    bool ignoreHint = a.boolean("ignore_hint_row", target.hasHintRow);
+    bool ignoreHint = false;
+    bool used_legacy_hint_default = false;
+    if (a.find("ignore_hint_row")) {
+        ignoreHint = a.boolean("ignore_hint_row", false);
+    }
+    else {
+        // 向后兼容接口，等待后续处理或删除
+        if (envFlagEnabled("GRAPHMCP_TABLE_CHECK_LEGACY_HINT")) {
+            ignoreHint               = false;
+            used_legacy_hint_default = true;
+        }
+        else {
+            ignoreHint = target.hasHintRow;
+        }
+    }
     gt::Table report = gtb::tableCheck(target, allowed, rulesPtr, ignoreHint);
     if (!a.str("name").empty())
         report.name = a.str("name");
@@ -450,6 +519,12 @@ inline Json tableCheckTool(gts::TableStore& tables, const Json& a)
     out.set("status", "ok");
     out.set("violations", (double)report.rows.size());
     out.set("ignore_hint_row", ignoreHint);
+    // 向后兼容接口，等待后续处理或删除
+    if (used_legacy_hint_default)
+        appendCompatWarning(
+            out,
+            "GRAPHMCP_TABLE_CHECK_LEGACY_HINT enabled; default ignore_hint_row "
+            "forced to false");
     out.set("report_csv", report.toCsv());
     if (a.boolean("save", false)) {
         int v = tables.save(report, "check report for " + target.id, &err);

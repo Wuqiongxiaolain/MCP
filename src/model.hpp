@@ -28,7 +28,9 @@ struct Node
                         // stadium | group
     std::string              parent;  // 层级关系：父节点 id（空字符串表示根层）
     std::string              style;   // 自由样式提示（颜色等）
-    std::vector<std::string> attrs;   // ER 属性列表：形如 "type name"
+    std::string              fillColor;    // 填充色 (如 "#eef4ff"；空串用默认)
+    std::string              strokeColor;  // 描边色 (如 "#4a72b8"；空串用默认)
+    std::vector<std::string> attrs;        // ER 属性列表：形如 "type name"
     double                   x = 0, y = 0, w = 0, h = 0;
 };
 
@@ -38,17 +40,23 @@ struct Edge
     std::string id;
     std::string from, to;
     std::string label;
+<<<<<<< HEAD
     std::string style;  // 线型：solid | dashed | dotted | thick
 
     // 箭头装饰（取代单一 arrow 字段的粗糙分类）
     // 旧 arrow 字段保留为派生/兼容属性，toJson 和现有代码仍可使用
-    std::string arrow = "arrow";     // arrow | none | both (backward compat)
-    std::string headStart = "none";  // none | arrow | open | cross
-    std::string headEnd   = "arrow"; // none | arrow | open | cross
+    std::string arrow     = "arrow";  // arrow | none | both (backward compat)
+    std::string headStart = "none";   // none | arrow | open | cross
+    std::string headEnd   = "arrow";  // none | arrow | open | cross
 
     // 序列图 / gitGraph 专用
-    int  seqNum  = 0;       // 消息序号
-    bool isAsync = false;   // 异步消息（->>）
+    int  seqNum  = 0;      // 消息序号
+    bool isAsync = false;  // 异步消息（->>）
+=======
+    std::string style;        // 线型：solid | dashed | thick
+    std::string arrow;        // 箭头：arrow | none | both
+    std::string strokeColor;  // 描边色 (如 "#333"；空串使用默认)
+>>>>>>> 25c1e2e (feat(color): 图颜色支持 — Node/Edge 填色+描边全链路)
 };
 
 // Graph: 统一图模型容器（命名上 g 常用于 Graph 实例）
@@ -110,9 +118,9 @@ struct Graph
     // headStart/headEnd 控制两端箭头装饰，默认 from 端无箭头、to 端有箭头
     void addEdge(const std::string& from,
                  const std::string& to,
-                 const std::string& label = "",
-                 const std::string& style = "solid",
-                 const std::string& arrow = "arrow",
+                 const std::string& label     = "",
+                 const std::string& style     = "solid",
+                 const std::string& arrow     = "arrow",
                  const std::string& headStart = "none",
                  const std::string& headEnd   = "arrow")
     {
@@ -150,6 +158,10 @@ struct Graph
                 jn.set("parent", n.parent);
             if (!n.style.empty())
                 jn.set("style", n.style);
+            if (!n.fillColor.empty())
+                jn.set("fillColor", n.fillColor);
+            if (!n.strokeColor.empty())
+                jn.set("strokeColor", n.strokeColor);
             if (!n.attrs.empty()) {
                 Json ja = Json::arr();
                 for (auto& a : n.attrs)
@@ -173,6 +185,7 @@ struct Graph
                 je.set("label", e.label);
             je.set("style", e.style);
             je.set("arrow", e.arrow);
+<<<<<<< HEAD
             // 扩展箭头信息：仅当与默认值不同时才序列化，减少 JSON 冗余
             if (e.headStart != "none")
                 je.set("headStart", e.headStart);
@@ -182,6 +195,10 @@ struct Graph
                 je.set("seqNum", (double)e.seqNum);
             if (e.isAsync)
                 je.set("isAsync", true);
+=======
+            if (!e.strokeColor.empty())
+                je.set("strokeColor", e.strokeColor);
+>>>>>>> 25c1e2e (feat(color): 图颜色支持 — Node/Edge 填色+描边全链路)
             es.push(je);
         }
         j.set("edges", es);
@@ -207,22 +224,24 @@ struct Graph
     static Graph fromJson(const Json& j)
     {
         Graph g;
-        g.id      = j.str("id");
-        g.name    = j.str("name");
-        g.type       = j.str("type", "flowchart");
-        g.rawMermaid = j.str("rawMermaid");
-        g.laidOut    = j.boolean("laidOut", false);
+        g.id           = j.str("id");
+        g.name         = j.str("name");
+        g.type         = j.str("type", "flowchart");
+        g.rawMermaid   = j.str("rawMermaid");
+        g.laidOut      = j.boolean("laidOut", false);
         g.edgeCounter_ = (int)j.num("edgeCounter", 0);
         g.nodeCounter_ = (int)j.num("nodeCounter", 0);
         if (const Json* ns = j.find("nodes")) {
             if (ns->isArr())
                 for (auto& jn : *ns->a) {
                     Node n;
-                    n.id     = jn.str("id");
-                    n.label  = jn.str("label");
-                    n.shape  = jn.str("shape", "rect");
-                    n.parent = jn.str("parent");
-                    n.style  = jn.str("style");
+                    n.id          = jn.str("id");
+                    n.label       = jn.str("label");
+                    n.shape       = jn.str("shape", "rect");
+                    n.parent      = jn.str("parent");
+                    n.style       = jn.str("style");
+                    n.fillColor   = jn.str("fillColor");
+                    n.strokeColor = jn.str("strokeColor");
                     if (const Json* ja = jn.find("attrs")) {
                         if (ja->isArr())
                             for (auto& a : *ja->a)
@@ -244,15 +263,21 @@ struct Graph
                     e.from  = je.str("from");
                     e.to    = je.str("to");
                     e.label = je.str("label");
+<<<<<<< HEAD
                     e.style = je.str("style", "solid");
                     e.arrow = je.str("arrow", "arrow");
                     // 扩展箭头信息：读新字段，若不存在则从 arrow 推导
-                    e.headStart = je.str("headStart",
-                        (e.arrow == "both") ? "arrow" : "none");
-                    e.headEnd   = je.str("headEnd",
-                        (e.arrow == "none") ? "none" : "arrow");
+                    e.headStart = je.str(
+                        "headStart", (e.arrow == "both") ? "arrow" : "none");
+                    e.headEnd = je.str("headEnd",
+                                       (e.arrow == "none") ? "none" : "arrow");
                     e.seqNum  = (int)je.num("seqNum", 0);
                     e.isAsync = je.boolean("isAsync", false);
+=======
+                    e.style       = je.str("style", "solid");
+                    e.arrow       = je.str("arrow", "arrow");
+                    e.strokeColor = je.str("strokeColor");
+>>>>>>> 25c1e2e (feat(color): 图颜色支持 — Node/Edge 填色+描边全链路)
                     g.edges.push_back(e);
                 }
         }

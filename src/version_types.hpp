@@ -50,17 +50,17 @@ inline std::string nowIso()
 
 // ─── OpType: 原子修改操作类型 ────────────────────────────────────
 enum class OpType {
-    UNKNOWN = -1,  // 无效操作类型（解析错误）
-    NODE_INSERT,   // 插入节点
-    NODE_UPDATE,   // 更新节点属性
-    NODE_DELETE,   // 删除节点（级联删除关联边）
-    EDGE_INSERT,   // 插入边
-    EDGE_UPDATE,   // 更新边属性
-    EDGE_DELETE,   // 删除边
-    META_UPDATE,   // 更新图级元数据（name / type）
-    PROPERTY_SET,  // 设置 properties 中的值
-    PROPERTY_INSERT, // 向 properties 数组插入元素
-    PROPERTY_DELETE  // 从 properties 中删除元素
+    UNKNOWN = -1,     // 无效操作类型（解析错误）
+    NODE_INSERT,      // 插入节点
+    NODE_UPDATE,      // 更新节点属性
+    NODE_DELETE,      // 删除节点（级联删除关联边）
+    EDGE_INSERT,      // 插入边
+    EDGE_UPDATE,      // 更新边属性
+    EDGE_DELETE,      // 删除边
+    META_UPDATE,      // 更新图级元数据（name / type）
+    PROPERTY_SET,     // 设置 properties 中的值
+    PROPERTY_INSERT,  // 向 properties 数组插入元素
+    PROPERTY_DELETE   // 从 properties 中删除元素
 };
 
 inline const char* opTypeName(OpType t)
@@ -138,19 +138,20 @@ struct Operation
     OpType                   type = OpType::NODE_UPDATE;
     std::string              targetId;             // 目标元素 id
     std::string              targetType = "node";  // "node" | "edge" | "graph"
-    std::vector<FieldChange> changes;    // 字段变更明细（UPDATE 操作）
-    Json                     snapshot;   // 插入时的完整元素快照（INSERT 操作）
-    std::string              path;       // JSON 路径（PROPERTY_SET/INSERT/DELETE 用）
-    Json                     value;      // 新值（PROPERTY_SET/INSERT 用）
-    std::string              timestamp;  // ISO 时间戳
+    std::vector<FieldChange> changes;   // 字段变更明细（UPDATE 操作）
+    Json                     snapshot;  // 插入时的完整元素快照（INSERT 操作）
+    std::string path;       // JSON 路径（PROPERTY_SET/INSERT/DELETE 用）
+    Json        value;      // 新值（PROPERTY_SET/INSERT 用）
+    std::string timestamp;  // ISO 时间戳
 
     // 简短摘要（用于 CLI 展示）
     std::string summary() const
     {
-        std::string s =
-            std::string(opTypeName(type)) + " " + targetType;
-        if (!targetId.empty()) s += " " + targetId;
-        if (!path.empty()) s += " @ " + path;
+        std::string s = std::string(opTypeName(type)) + " " + targetType;
+        if (!targetId.empty())
+            s += " " + targetId;
+        if (!path.empty())
+            s += " @ " + path;
         if (type == OpType::NODE_UPDATE || type == OpType::EDGE_UPDATE) {
             if (!changes.empty())
                 s += " (" + std::to_string(changes.size()) + " fields)";
@@ -174,8 +175,8 @@ struct Operation
             j.set("snapshot", snapshot);
         if (!path.empty())
             j.set("path", path);
-        if (value.isObj() || value.isArr() || value.isStr() ||
-            value.isNum() || value.isBool() || value.isNull())
+        if (value.isObj() || value.isArr() || value.isStr() || value.isNum() ||
+            value.isBool() || value.isNull())
             j.set("value", value);
         j.set("timestamp", timestamp);
         return j;

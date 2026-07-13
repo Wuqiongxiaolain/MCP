@@ -1816,6 +1816,8 @@ class ToolRunner {
             out.set("shape", n->shape);
             out.set("parent", n->parent);
             out.set("style", n->style);
+            out.set("fillColor", n->fillColor);
+            out.set("strokeColor", n->strokeColor);
             out.set("x", n->x);
             out.set("y", n->y);
             out.set("w", n->w);
@@ -1855,6 +1857,7 @@ class ToolRunner {
             out.set("label", e->label);
             out.set("style", e->style);
             out.set("arrow", e->arrow);
+            out.set("strokeColor", e->strokeColor);
             return textContent(out.dump(2));
         }
 

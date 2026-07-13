@@ -708,7 +708,7 @@ paths:
     post:
       operationId: table_create
       summary: table_create
-      description: Create a first-class data table from CSV content and save it (separate from graph edge-list CSV import).
+      description: Create a first-class data table from CSV / table XML / model JSON (separate from graph edge-list CSV or graph XML import).
       requestBody:
         required: true
         content:
@@ -718,7 +718,10 @@ paths:
               properties:
                 content:
                   type: string
-                  description: CSV text (header + rows)
+                  description: table source — CSV, table XML (root table), or model JSON
+                format:
+                  type: string
+                  description: csv|xml|model (default csv; not auto)
                 name:
                   type: string
                   description: table display name
@@ -740,7 +743,7 @@ paths:
     post:
       operationId: table_import
       summary: table_import
-      description: Import CSV into a new or existing table id.
+      description: Import CSV / table XML / model JSON into a new or existing table id.
       requestBody:
         required: true
         content:
@@ -753,7 +756,10 @@ paths:
                   description: existing table id to overwrite (optional)
                 content:
                   type: string
-                  description: CSV text
+                  description: table source — CSV, table XML (root table), or model JSON
+                format:
+                  type: string
+                  description: csv|xml|model (default csv)
                 name:
                   type: string
                   description: table name
@@ -769,7 +775,7 @@ paths:
     post:
       operationId: table_export
       summary: table_export
-      description: Export a stored table to CSV or JSON model.
+      description: Export a stored table to CSV, JSON model, or table XML.
       requestBody:
         required: true
         content:
@@ -782,7 +788,7 @@ paths:
                   description: table id
                 to:
                   type: string
-                  description: csv|model (default csv)
+                  description: csv|model|xml (default csv)
                 path:
                   type: string
                   description: optional output file path

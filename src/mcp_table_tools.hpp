@@ -5,6 +5,7 @@
 #include "storage.hpp"
 #include "table_bridge.hpp"
 #include "table_storage.hpp"
+#include "table_xml.hpp"
 #include <algorithm>
 #include <functional>
 #include <sstream>
@@ -65,7 +66,8 @@ inline void appendCompatWarning(Json& out, const std::string& msg)
 
 inline Json tableCreate(gts::TableStore& tables, const Json& a)
 {
-    gt::Table t = gt::Table::fromCsv(a.str("content"));
+    gt::Table t =
+        gtx::parseTableContent(a.str("content"), a.str("format", "csv"));
     if (!a.str("id").empty())
         t.id = a.str("id");
     if (!a.str("name").empty())
@@ -108,7 +110,8 @@ inline Json tableCreate(gts::TableStore& tables, const Json& a)
 
 inline Json tableImport(gts::TableStore& tables, const Json& a)
 {
-    gt::Table t = gt::Table::fromCsv(a.str("content"));
+    gt::Table t =
+        gtx::parseTableContent(a.str("content"), a.str("format", "csv"));
     if (!a.str("id").empty())
         t.id = a.str("id");
     if (!a.str("name").empty())
@@ -132,8 +135,14 @@ inline Json tableExport(gts::TableStore& tables, const Json& a)
     std::string err;
     if (!tables.load(a.str("id"), t, (int)a.num("version", 0), &err))
         return textContent(err, true);
-    std::string to   = a.str("to", "csv");
-    std::string text = (to == "model") ? t.toJson().dump(2) : t.toCsv();
+    std::string to = a.str("to", "csv");
+    std::string text;
+    if (to == "model")
+        text = t.toJson().dump(2);
+    else if (to == "xml")
+        text = gtx::toXml(t);
+    else
+        text = t.toCsv();
     std::string path = a.str("path");
     if (!path.empty()) {
         if (!ge::writeFile(path, text))
@@ -363,7 +372,7 @@ inline Json tableDiffTool(gts::TableStore& tables, const Json& a)
     if (!content.empty()) {
         if (!tables.load(a.str("id"), aT, 0, &err))
             return textContent(err, true);
-        bT = gt::Table::fromCsv(content);
+        bT = gtx::parseTableContent(content, a.str("format", "csv"));
     }
     else {
         int v1 = (int)a.num("v1", 0);
@@ -421,7 +430,7 @@ inline Json graphFromTableTool(gs::Store& store, gts::TableStore& tables,
 {
     gt::Table t;
     if (!a.str("content").empty()) {
-        t = gt::Table::fromCsv(a.str("content"));
+        t = gtx::parseTableContent(a.str("content"), a.str("format", "csv"));
     }
     else {
         std::string err;

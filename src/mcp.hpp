@@ -533,10 +533,15 @@ inline Json toolList()
                            req));
     }
 
-    // ── table_* 通用 CSV 表工具 ───────────────────────────────
+    // ── table_* 通用表工具（CSV / 表 XML / model）────────────────
     {
         Json p = Json::obj();
-        p.set("content", prop("string", "CSV text (header + rows)"));
+        p.set("content",
+              prop("string",
+                   "table source: CSV, table XML (<table>), or model JSON"));
+        p.set("format",
+              prop("string",
+                   "csv|xml|model (default csv; not auto)"));
         p.set("name", prop("string", "table display name"));
         p.set("id", prop("string", "optional table id"));
         p.set("force",
@@ -549,33 +554,40 @@ inline Json toolList()
         req.push(Json("content"));
         tools.push(toolDef(
             "table_create",
-            "Create a first-class data table from CSV content and save it "
-            "(separate from graph edge-list CSV import).",
+            "Create a first-class data table from CSV / table XML / model JSON "
+            "(separate from graph edge-list CSV or graph XML import).",
             p, req));
     }
     {
         Json p = Json::obj();
         p.set("id", prop("string", "existing table id to overwrite (optional)"));
-        p.set("content", prop("string", "CSV text"));
+        p.set("content",
+              prop("string",
+                   "table source: CSV, table XML (<table>), or model JSON"));
+        p.set("format",
+              prop("string", "csv|xml|model (default csv)"));
         p.set("name", prop("string", "table name"));
         p.set("note", prop("string", "version note"));
         Json req = Json::arr();
         req.push(Json("content"));
-        tools.push(toolDef("table_import",
-                           "Import CSV into a new or existing table id.", p,
-                           req));
+        tools.push(toolDef(
+            "table_import",
+            "Import CSV / table XML / model JSON into a new or existing table "
+            "id.",
+            p, req));
     }
     {
         Json p = Json::obj();
         p.set("id", prop("string", "table id"));
-        p.set("to", prop("string", "csv|model (default csv)"));
+        p.set("to", prop("string", "csv|model|xml (default csv)"));
         p.set("path", prop("string", "optional output file path"));
         p.set("version", prop("number", "version to export (default latest)"));
         Json req = Json::arr();
         req.push(Json("id"));
         tools.push(toolDef("table_export",
-                           "Export a stored table to CSV or JSON model.", p,
-                           req));
+                           "Export a stored table to CSV, JSON model, or table "
+                           "XML.",
+                           p, req));
     }
     {
         Json p = Json::obj();

@@ -10,6 +10,7 @@
 #include "parsers.hpp"
 #include "table_bridge.hpp"
 #include "table_storage.hpp"
+#include "table_xml.hpp"
 #include "version_manager.hpp"
 
 #include <iostream>
@@ -865,7 +866,7 @@ int cmdTable(Args& a, gs::Store& store)
             usage("missing --file/--content");
             return 1;
         }
-        gt::Table t = gt::Table::fromCsv(content);
+        gt::Table t = gtx::parseTableContent(content, a.get("format", "csv"));
         if (a.has("id"))
             t.id = a.get("id");
         if (a.has("name"))
@@ -910,8 +911,14 @@ int cmdTable(Args& a, gs::Store& store)
             std::cerr << "error: " << err << "\n";
             return 5;
         }
-        std::string text =
-            (a.get("to", "csv") == "model") ? t.toJson().dump(2) : t.toCsv();
+        std::string to = a.get("to", "csv");
+        std::string text;
+        if (to == "model")
+            text = t.toJson().dump(2);
+        else if (to == "xml")
+            text = gtx::toXml(t);
+        else
+            text = t.toCsv();
         if (a.has("output")) {
             if (!ge::writeFile(a.get("output"), text)) {
                 std::cerr << "error: failed to write " << a.get("output")
@@ -1054,12 +1061,12 @@ int cmdTable(Args& a, gs::Store& store)
     if (a.subcommand == "from-table" || a.subcommand == "to-graph") {
         // graph from table
         if (id.empty() && !a.has("file") && !a.has("content")) {
-            usage("table from-table <table-id> or --file csv");
+            usage("table from-table <table-id> or --file csv|xml");
             return 1;
         }
         gt::Table t;
         if (a.has("file") || a.has("content")) {
-            t = gt::Table::fromCsv(readInput(a));
+            t = gtx::parseTableContent(readInput(a), a.get("format", "csv"));
         }
         else {
             std::string err;

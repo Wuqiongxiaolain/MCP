@@ -28,6 +28,11 @@ jobs:
       - name: 编译
         run: make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
 
+      - name: 校验 OpenAPI 文档与 schema 同步
+        run: |
+          make docs-api
+          git diff --exit-code -- docs/api_reference/openapi.yaml
+
       - name: 单元测试
         run: make test-all
 

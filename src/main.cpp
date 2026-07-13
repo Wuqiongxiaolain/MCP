@@ -28,7 +28,7 @@ namespace {
 // ===================================================================
 // Args: 命令行参数解析结果
 // family    = 命令族
-// (create/convert/export/edit/layout/validate/store/version/graph/serve)
+// (create/convert/export/edit/layout/validate/store/version/graph/serve/dump-tools)
 // subcommand = 子命令 (from-mermaid/draft/commit/show/update/insert/delete...)
 // positionals = 位置参数 (图 ID、版本号等)
 // opts       = --key value 选项（多值）
@@ -194,6 +194,7 @@ int usage(const std::string& hint = "", int exitCode = 1)
            "  cursor    {open|get|next|prev|close}\n"
            "  draft     {status|discard}\n"
            "  serve     (no subcommand)\n"
+           "  dump-tools  export MCP tool schemas (openapi|json)\n"
            "\n"
            "common options:\n"
            "  --file <path>       input file\n"
@@ -1532,6 +1533,33 @@ int main(int argc, char** argv)
         // ── serve (特殊：直接启动 MCP，不经过 handleLegacyCommand) ──
         if (a.family == "serve" && a.subcommand.empty())
             return mcp::serve(store);
+
+        // ── dump-tools：从 toolList() 导出 OpenAPI / JSON schema ──
+        if (a.family == "dump-tools") {
+            std::string fmt = a.get("format", "openapi");
+            std::string text;
+            if (fmt == "openapi") {
+                text = mcp::dumpOpenApiYaml();
+            }
+            else if (fmt == "json") {
+                text = mcp::toolList().dump(2) + "\n";
+            }
+            else {
+                std::cerr << "error: unknown --format '" << fmt
+                          << "' (expected openapi|json)\n";
+                return 1;
+            }
+            if (a.has("output")) {
+                if (!ge::writeFile(a.get("output"), text)) {
+                    std::cerr << "error: cannot write " << a.get("output")
+                              << "\n";
+                    return 1;
+                }
+                return 0;
+            }
+            std::cout << text;
+            return 0;
+        }
 
         // ── 尝试旧版指令兼容 ──
         if (a.subcommand.empty() && handleLegacyCommand(a.family, a, store))

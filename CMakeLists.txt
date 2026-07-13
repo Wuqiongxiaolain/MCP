@@ -34,3 +34,11 @@ target_include_directories(graphmcp_cursor_tests PRIVATE src)
 add_test(NAME cursor_tests COMMAND graphmcp_cursor_tests)
 
 install(TARGETS graphmcp RUNTIME DESTINATION bin)
+
+# docs-api: 从运行中的 toolList() 生成 OpenAPI YAML
+add_custom_target(docs-api
+    COMMAND $<TARGET_FILE:graphmcp> dump-tools --format openapi -o ${CMAKE_SOURCE_DIR}/docs/api_reference/openapi.yaml
+    DEPENDS graphmcp
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Generate docs/api_reference/openapi.yaml from toolList()"
+)

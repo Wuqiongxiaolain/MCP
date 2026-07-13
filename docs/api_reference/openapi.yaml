@@ -1,0 +1,703 @@
+openapi: "3.0.3"
+info:
+  title: graphmcp MCP API
+  version: v0.1.1
+  description: graphmcp MCP tools/call 契约（非 HTTP REST）。实际传输：JSON-RPC 2.0 over stdio（graphmcp serve）。本文档由 graphmcp dump-tools 从 toolList() 自动生成。
+servers:
+  - url: "mcp://graphmcp"
+    description: 本地 MCP 进程（示意，非真实 HTTP）
+paths:
+  /graph_create:
+    post:
+      operationId: graph_create
+      summary: graph_create
+      description: "Parse structured diagram content into the unified graph model, optionally validate and auto-layout, and save to the versioned store. Returns the graph id."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  description: "diagram source text (Mermaid, Markdown outline, CSV, XML or Excalidraw JSON)"
+                format:
+                  type: string
+                  description: "input format: mermaid|markdown|csv|xml|excalidraw|model|auto (default auto)"
+                type:
+                  type: string
+                  description: "diagram type override: flowchart|architecture|er|orgchart|mindmap|whiteboard"
+                name:
+                  type: string
+                  description: human readable graph name
+                no_validate:
+                  type: boolean
+                  description: skip structural validation (default false)
+                no_layout:
+                  type: boolean
+                  description: skip automatic layout (default false)
+                note:
+                  type: string
+                  description: version note
+              required:
+                - content
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_convert:
+    post:
+      operationId: graph_convert
+      summary: graph_convert
+      description: One-shot conversion between diagram formats without saving to the store.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  description: diagram source text to convert
+                format:
+                  type: string
+                  description: input format (default auto)
+                to:
+                  type: string
+                  description: "target format: drawio|mermaid|excalidraw|svg|png|pdf|model|url"
+              required:
+                - content
+                - to
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_export:
+    post:
+      operationId: graph_export
+      summary: graph_export
+      description: "Export a stored graph to a file or inline content. png/pdf use an external converter when available, otherwise an SVG fallback is written."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id returned by graph_create
+                to:
+                  type: string
+                  description: "target format: drawio|mermaid|excalidraw|svg|png|pdf|url|model"
+                path:
+                  type: string
+                  description: output file path (optional; content returned inline when omitted)
+                version:
+                  type: number
+                  description: "specific version to export (default: latest)"
+              required:
+                - id
+                - to
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_open:
+    post:
+      operationId: graph_open
+      summary: graph_open
+      description: "Open a stored graph in an external editor: generates a mermaid.live browser URL or writes a .drawio/.excalidraw/.svg file and launches the OS default handler."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id to open
+                editor:
+                  type: string
+                  description: "target editor: browser | drawio | excalidraw | svg (default browser)"
+                editorPath:
+                  type: string
+                  description: explicit editor executable path (overrides auto-detection and GRAPHMCP_EDITOR env var)
+                version:
+                  type: number
+                  description: "version to open (default: latest)"
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_import:
+    post:
+      operationId: graph_import
+      summary: graph_import
+      description: "Re-import an externally edited diagram: reads the open.<ext> file (or provided content), parses it, validates, and saves as a new version."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id to re-import after external edit
+                content:
+                  type: string
+                  description: edited diagram source (optional; auto-detects open.<ext> from store)
+                format:
+                  type: string
+                  description: "input format: drawio|excalidraw|mermaid|markdown|csv|xml|auto (default auto)"
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_validate:
+    post:
+      operationId: graph_validate
+      summary: graph_validate
+      description: "Validate graph structure: duplicate ids, dangling edges, hierarchy cycles, isolated nodes. Returns {valid, issues[]}."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  description: diagram source to validate (alternative to id)
+                format:
+                  type: string
+                  description: input format (default auto)
+                id:
+                  type: string
+                  description: stored graph id to validate (alternative to content)
+                strict:
+                  type: boolean
+                  description: treat warnings as errors
+              required: []
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_list:
+    post:
+      operationId: graph_list
+      summary: graph_list
+      description: "List all graphs in the store with type, version count and timestamps."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  description: filter by diagram type
+                format:
+                  type: string
+                  description: "output format: table|json (default json)"
+              required: []
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_history:
+    post:
+      operationId: graph_history
+      summary: graph_history
+      description: Show the saved version history of a graph with optional limit and format.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                limit:
+                  type: number
+                  description: "max entries to return (default: all)"
+                format:
+                  type: string
+                  description: "output format: full|oneline (default full)"
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_rollback:
+    post:
+      operationId: graph_rollback
+      summary: graph_rollback
+      description: "Restore an old version as the new latest version (non-destructive: old snapshot saved as new version)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                version:
+                  type: number
+                  description: version number to roll back to
+              required:
+                - id
+                - version
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_layout:
+    post:
+      operationId: graph_layout
+      summary: graph_layout
+      description: "Apply automatic layout to a stored graph. Supports layered (flowchart), tree-h (mindmap), tree-v (orgchart), grid, and auto strategies. Optionally saves the result as a new version."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                strategy:
+                  type: string
+                  description: "layout strategy: auto|layered|tree-h|tree-v|grid (default auto)"
+                save:
+                  type: boolean
+                  description: save layout result back to store (default false)
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_delete:
+    post:
+      operationId: graph_delete
+      summary: graph_delete
+      description: Delete a graph and all its version history from the store. This operation is irreversible.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id to delete
+                force:
+                  type: boolean
+                  description: skip confirmation (required)
+              required:
+                - id
+                - force
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_show:
+    post:
+      operationId: graph_show
+      summary: graph_show
+      description: "Show graph summary, node details, or edge details. Without node/edge params, returns the full structure (nodes + edges list)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                node:
+                  type: string
+                  description: show details for a specific node id
+                edge:
+                  type: string
+                  description: show details for a specific edge id
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_update:
+    post:
+      operationId: graph_update
+      summary: graph_update
+      description: Update node/edge attributes via cursor operation. Changes go to the draft. Use --node/--edge for single element or --selector for batch. Multiple --set flags allowed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                node:
+                  type: string
+                  description: target node id
+                edge:
+                  type: string
+                  description: target edge id
+                selector:
+                  type: string
+                  description: "batch selector: shape=rect|label~=Step|parent=g1"
+                set:
+                  type: string
+                  description: field=value pairs (can be specified multiple times)
+              required:
+                - id
+                - set
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_insert:
+    post:
+      operationId: graph_insert
+      summary: graph_insert
+      description: "Insert a node or edge into the graph. Changes go to the draft. For nodes: specify type, label, position, size, parent. For edges: specify from, to, label, style, arrow."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                element:
+                  type: string
+                  description: "element type to insert: node|edge"
+                type:
+                  type: string
+                  description: "node shape: rect|round|diamond|ellipse|circle|stadium|group (default rect)"
+                label:
+                  type: string
+                  description: element label
+                position:
+                  type: string
+                  description: "position as 'x y' (e.g. '400 200')"
+                size:
+                  type: string
+                  description: "size as 'w h' (e.g. '120 50')"
+                parent:
+                  type: string
+                  description: parent node id
+                from:
+                  type: string
+                  description: edge source node id
+                to:
+                  type: string
+                  description: edge target node id
+                style:
+                  type: string
+                  description: "edge style: solid|dashed|thick (default solid)"
+                arrow:
+                  type: string
+                  description: "edge arrow: arrow|none|both (default arrow)"
+              required:
+                - id
+                - element
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_delete_element:
+    post:
+      operationId: graph_delete_element
+      summary: graph_delete_element
+      description: Delete a node or edge from the graph via cursor. Changes go to the draft. Deleting a node cascades to its connected edges. Use --selector for batch deletion.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                node:
+                  type: string
+                  description: node id to delete (cascades to connected edges)
+                edge:
+                  type: string
+                  description: edge id to delete
+                selector:
+                  type: string
+                  description: batch selector for mass deletion
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_status:
+    post:
+      operationId: graph_status
+      summary: graph_status
+      description: "Show working tree status: HEAD version, draft operation count, staged operation count, and whether the working tree is clean or dirty."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_draft:
+    post:
+      operationId: graph_draft
+      summary: graph_draft
+      description: "Manage the working draft. 'show' lists pending operations, 'status' compares draft vs latest (added/removed/modified counts), 'reset' discards all uncommitted changes (irreversible)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                action:
+                  type: string
+                  description: "action: show|reset|status (default show)"
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_stage:
+    post:
+      operationId: graph_stage
+      summary: graph_stage
+      description: "Manage the staging area. 'add' stages draft operations for commit. 'show' displays staged operations. 'clear' empties the staging area."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                action:
+                  type: string
+                  description: "action: add|show|clear (default add)"
+                select:
+                  type: string
+                  description: "comma-separated operation indices to stage (default: all)"
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_commit:
+    post:
+      operationId: graph_commit
+      summary: graph_commit
+      description: Commit staged (or all draft) changes as a new immutable version. Clears the staging area and submitted draft operations on success.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                message:
+                  type: string
+                  description: commit message (required)
+                all:
+                  type: boolean
+                  description: skip staging and commit all draft changes directly
+                author:
+                  type: string
+                  description: "author identifier (default 'mcp')"
+              required:
+                - id
+                - message
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_diff:
+    post:
+      operationId: graph_diff
+      summary: graph_diff
+      description: "Compare two versions and return the difference as a list of operations (node/edge insertions, updates, and deletions)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                v1:
+                  type: number
+                  description: old version number
+                v2:
+                  type: number
+                  description: new version number
+                format:
+                  type: string
+                  description: "output format: unified|json (default unified)"
+              required:
+                - id
+                - v1
+                - v2
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_checkout:
+    post:
+      operationId: graph_checkout
+      summary: graph_checkout
+      description: Move HEAD to a specified version without creating a new commit. Requires a clean working tree (no draft) unless --force is used.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                version:
+                  type: number
+                  description: target version number
+                force:
+                  type: boolean
+                  description: force checkout even with dirty draft (discards draft)
+              required:
+                - id
+                - version
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_cursor_open:
+    post:
+      operationId: graph_cursor_open
+      summary: graph_cursor_open
+      description: Open a persistent cursor over nodes or edges. Creates a draft if none exists. Returns a cursor id for subsequent operations.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                target:
+                  type: string
+                  description: "collection to traverse: nodes|edges (default nodes)"
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_cursor_get:
+    post:
+      operationId: graph_cursor_get
+      summary: graph_cursor_get
+      description: Read the current item at the cursor position.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                cursor:
+                  type: string
+                  description: cursor id from graph_cursor_open
+              required:
+                - id
+                - cursor
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_cursor_move:
+    post:
+      operationId: graph_cursor_move
+      summary: graph_cursor_move
+      description: Move the cursor forward (delta=1) or backward (delta=-1).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                cursor:
+                  type: string
+                  description: cursor id
+                delta:
+                  type: number
+                  description: "+1 for next, -1 for prev (default 1)"
+              required:
+                - id
+                - cursor
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_cursor_close:
+    post:
+      operationId: graph_cursor_close
+      summary: graph_cursor_close
+      description: Close the cursor and remove its state file.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                cursor:
+                  type: string
+                  description: cursor id
+              required:
+                - id
+                - cursor
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）

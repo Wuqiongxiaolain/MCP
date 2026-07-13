@@ -88,18 +88,21 @@ class TableStore {
 
         Json   idx       = loadIndex();
         size_t entry_idx = static_cast<size_t>(-1);
-        if (idx["tables"].isArr() && idx["tables"].a) {
-            for (size_t i = 0; i < idx["tables"].a->size(); i++) {
-                if ((*idx["tables"].a)[i].str("id") == t.id) {
+        // 缓存 tables 数组，避免后续在 entry_idx 有效时再次解引用未校验的 .a
+        std::shared_ptr<gj::JArray> tables;
+        if (idx["tables"].isArr() && idx["tables"].a)
+            tables = idx["tables"].a;
+        if (tables) {
+            for (size_t i = 0; i < tables->size(); i++) {
+                if ((*tables)[i].str("id") == t.id) {
                     entry_idx = i;
                     break;
                 }
             }
         }
         int version = 1;
-        if (entry_idx != static_cast<size_t>(-1))
-            version =
-                (int)(*idx["tables"].a)[entry_idx].num("versions") + 1;
+        if (entry_idx != static_cast<size_t>(-1) && tables)
+            version = (int)(*tables)[entry_idx].num("versions") + 1;
 
         Json model = t.toJson();
         if (!ge::writeFileAtomic(dir + "/latest.json", model.dump(2))) {
@@ -126,8 +129,8 @@ class TableStore {
             return -1;
         }
 
-        if (entry_idx != static_cast<size_t>(-1)) {
-            Json& entry = (*idx["tables"].a)[entry_idx];
+        if (entry_idx != static_cast<size_t>(-1) && tables) {
+            Json& entry = (*tables)[entry_idx];
             entry.set("name", t.name);
             entry.set("columns", (double)t.columns.size());
             entry.set("rows", (double)t.rows.size());

@@ -873,9 +873,17 @@ int cmdTable(Args& a, gs::Store& store)
             t.id = a.get("id");
         if (a.has("name"))
             t.name = a.get("name");
-        int v = tables.save(t, a.get("note", a.subcommand + " via CLI"));
+        if (a.subcommand == "create" && !t.id.empty() && tables.exists(t.id) &&
+            !a.has("force")) {
+            std::cerr << "error: table already exists: " << t.id
+                      << " (use --force or table import)\n";
+            return 1;
+        }
+        std::string err;
+        int v = tables.save(t, a.get("note", a.subcommand + " via CLI"), &err);
         if (v < 0) {
-            std::cerr << "error: save failed\n";
+            std::cerr << "error: " << (err.empty() ? "save failed" : err)
+                      << "\n";
             return 5;
         }
         std::cout << "table " << t.id << " v" << v << " (" << t.columns.size()
@@ -992,7 +1000,13 @@ int cmdTable(Args& a, gs::Store& store)
                 t.setCell((size_t)row, (size_t)ci, val);
             }
         }
-        int v = tables.save(t, a.get("note", "updated via CLI"));
+        std::string err2;
+        int v = tables.save(t, a.get("note", "updated via CLI"), &err2);
+        if (v < 0) {
+            std::cerr << "error: " << (err2.empty() ? "save failed" : err2)
+                      << "\n";
+            return 5;
+        }
         std::cout << "table " << t.id << " v" << v << "\n";
         return 0;
     }
@@ -1015,7 +1029,14 @@ int cmdTable(Args& a, gs::Store& store)
                                           a.has("with-hint-row"));
         if (a.has("name"))
             t.name = a.get("name");
-        int v = tables.save(t, "from graph " + gid);
+        int v = 0;
+        std::string saveErr;
+        v = tables.save(t, "from graph " + gid, &saveErr);
+        if (v < 0) {
+            std::cerr << "error: " << (saveErr.empty() ? "save failed" : saveErr)
+                      << "\n";
+            return 5;
+        }
         std::cout << "table " << t.id << " v" << v << "\n";
         std::cout << t.toCsv();
         return 0;
@@ -1066,7 +1087,13 @@ int cmdTable(Args& a, gs::Store& store)
         }
         Json align = gtb::tableAlign(primary, target, a.get("primary-key"),
                                      a.get("target-key"));
-        int  v     = tables.save(target, "aligned via CLI");
+        std::string saveErr;
+        int  v     = tables.save(target, "aligned via CLI", &saveErr);
+        if (v < 0) {
+            std::cerr << "error: " << (saveErr.empty() ? "save failed" : saveErr)
+                      << "\n";
+            return 5;
+        }
         std::cout << "aligned target " << tid << " v" << v << " "
                   << align.dump() << "\n";
         return 0;
@@ -1101,10 +1128,18 @@ int cmdTable(Args& a, gs::Store& store)
             }
             rp = &rules;
         }
-        gt::Table report = gtb::tableCheck(target, allowed, rp);
+        bool ignore_hint_row =
+            a.has("ignore-hint-row") ? true : target.hasHintRow;
+        gt::Table report = gtb::tableCheck(target, allowed, rp, ignore_hint_row);
         std::cout << report.toCsv();
         if (a.has("save")) {
-            int v = tables.save(report, "check report");
+            std::string saveErr;
+            int v = tables.save(report, "check report", &saveErr);
+            if (v < 0) {
+                std::cerr << "error: "
+                          << (saveErr.empty() ? "save failed" : saveErr) << "\n";
+                return 5;
+            }
             std::cout << "# saved report " << report.id << " v" << v << "\n";
         }
         return 0;

@@ -158,6 +158,11 @@ inline Json toolList()
               prop("string", "explicit editor executable path (overrides "
                              "auto-detection and GRAPHMCP_EDITOR env var)"));
         p.set("version", prop("number", "version to open (default: latest)"));
+        p.set("launch",
+              prop("boolean",
+                   "actually launch the OS handler (default true; set false "
+                   "to only generate URL/file; also honored via "
+                   "GRAPHMCP_NO_LAUNCH=1)"));
         Json req = Json::arr();
         req.push(Json("id"));
         tools.push(toolDef("graph_open",
@@ -537,6 +542,9 @@ inline Json toolList()
         p.set("content", prop("string", "CSV text (header + rows)"));
         p.set("name", prop("string", "table display name"));
         p.set("id", prop("string", "optional table id"));
+        p.set("force",
+              prop("boolean",
+                   "allow create to overwrite existing table id (default false)"));
         p.set("note", prop("string", "version note"));
         Json req = Json::arr();
         req.push(Json("content"));
@@ -622,7 +630,7 @@ inline Json toolList()
         p.set("note", prop("string", "version note"));
         p.set("set_cells",
               prop("string",
-                   "JSON array of {row,column|col,value} (row 0-based)"));
+                   "JSON array of {row,column|col_index,value} (row 0-based)"));
         p.set("add_rows", prop("string", "JSON array of row arrays"));
         p.set("delete_rows", prop("string", "JSON array of row indices"));
         p.set("add_columns",
@@ -661,6 +669,8 @@ inline Json toolList()
               prop("boolean", "skeleton: add enum/hint second row"));
         p.set("name", prop("string", "output table name"));
         p.set("save", prop("boolean", "save table to store (default true)"));
+        p.set("preview_rows",
+              prop("number", "max rows in csv_preview (default 20)"));
         Json req = Json::arr();
         req.push(Json("graph_id"));
         tools.push(toolDef(
@@ -713,6 +723,10 @@ inline Json toolList()
         p.set("rules_id", prop("string", "optional rules table id "
                                          "(columns: column/field, allowed)"));
         p.set("save", prop("boolean", "save report as a new table"));
+        p.set("ignore_hint_row",
+              prop("boolean",
+                   "skip first row when target.hasHintRow (default true if "
+                   "target has hint row)"));
         p.set("name", prop("string", "report table name"));
         Json req = Json::arr();
         req.push(Json("id"));
@@ -1032,6 +1046,8 @@ inline Json textContent(const std::string& text, bool isError = false)
     return result;
 }
 
+#include "mcp_table_tools.hpp"
+
 // logLevel: 读取 GRAPHMCP_LOG 日志级别
 inline const char* logLevel()
 {
@@ -1318,8 +1334,12 @@ class ToolRunner {
                 return textContent(r.message, true);
         }
         std::string editorPath = ge::resolveEditor(editor, a.str("editorPath"));
-        bool        launched   = ge::openExternal(target, editorPath);
-        Json        out        = Json::obj();
+        // launch=false 或 GRAPHMCP_NO_LAUNCH 时只生成目标，不拉起外部程序
+        bool do_launch = a.boolean("launch", true);
+        bool launched  = false;
+        if (do_launch)
+            launched = ge::openExternal(target, editorPath);
+        Json out = Json::obj();
         out.set("target", target);
         out.set("launched", launched);
         out.set("editor", editor);
@@ -1336,6 +1356,8 @@ class ToolRunner {
         else
             out.set("availableEditors", "");
         out.set("hint",
+                !do_launch ?
+                    "launch skipped; open the target manually" :
                 launched ?
                     (editorPath.empty() ? "opened with system default handler" :
                                           "opened with editor: " + editorPath) :
@@ -2117,398 +2139,46 @@ class ToolRunner {
     // ==========================================================
 
     Json tableCreate(const Json& a)
-    {
-        gt::Table t = gt::Table::fromCsv(a.str("content"));
-        if (!a.str("id").empty())
-            t.id = a.str("id");
-        if (!a.str("name").empty())
-            t.name = a.str("name");
-        int v = tables_.save(t, a.str("note", "created via MCP"));
-        if (v < 0)
-            return textContent("failed to save table", true);
-        Json out = Json::obj();
-        out.set("status", "created");
-        out.set("id", t.id);
-        out.set("name", t.name);
-        out.set("version", (double)v);
-        out.set("columns", (double)t.columns.size());
-        out.set("rows", (double)t.rows.size());
-        return textContent(out.dump(2));
-    }
+    { return tabletools::tableCreate(tables_, a); }
 
     Json tableImport(const Json& a)
-    {
-        gt::Table t = gt::Table::fromCsv(a.str("content"));
-        if (!a.str("id").empty())
-            t.id = a.str("id");
-        if (!a.str("name").empty())
-            t.name = a.str("name");
-        int v = tables_.save(t, a.str("note", "imported via MCP"));
-        if (v < 0)
-            return textContent("failed to save table", true);
-        Json out = Json::obj();
-        out.set("status", "imported");
-        out.set("id", t.id);
-        out.set("version", (double)v);
-        out.set("columns", (double)t.columns.size());
-        out.set("rows", (double)t.rows.size());
-        return textContent(out.dump(2));
-    }
+    { return tabletools::tableImport(tables_, a); }
 
     Json tableExport(const Json& a)
-    {
-        gt::Table   t;
-        std::string err;
-        if (!tables_.load(a.str("id"), t, (int)a.num("version", 0), &err))
-            return textContent(err, true);
-        std::string to   = a.str("to", "csv");
-        std::string text = (to == "model") ? t.toJson().dump(2) : t.toCsv();
-        std::string path = a.str("path");
-        if (!path.empty()) {
-            if (!ge::writeFile(path, text))
-                return textContent("failed to write " + path, true);
-            return textContent("wrote " + path);
-        }
-        return textContent(text);
-    }
+    { return tabletools::tableExport(tables_, a); }
 
     Json tableList(const Json& a)
-    {
-        Json idx = tables_.loadIndex();
-        if (a.str("format", "json") == "table") {
-            std::ostringstream oss;
-            oss << "id\tname\tcolumns\trows\tversions\n";
-            for (auto& e : *idx["tables"].a)
-                oss << e.str("id") << '\t' << e.str("name") << '\t'
-                    << (int)e.num("columns") << '\t' << (int)e.num("rows")
-                    << '\t' << (int)e.num("versions") << '\n';
-            return textContent(oss.str());
-        }
-        return textContent(idx.dump(2));
-    }
+    { return tabletools::tableList(tables_, a); }
 
     Json tableShow(const Json& a)
-    {
-        gt::Table   t;
-        std::string err;
-        if (!tables_.load(a.str("id"), t, (int)a.num("version", 0), &err))
-            return textContent(err, true);
-        Json out = t.toJson();
-        int  lim = (int)a.num("limit", 0);
-        if (lim > 0 && (int)t.rows.size() > lim) {
-            Json rs = Json::arr();
-            for (int i = 0; i < lim; i++) {
-                Json jr = Json::arr();
-                for (size_t c = 0; c < t.columns.size(); c++)
-                    jr.push(Json(t.cell((size_t)i, c)));
-                rs.push(jr);
-            }
-            out.set("rows", rs);
-            out.set("truncated", true);
-            out.set("total_rows", (double)t.rows.size());
-        }
-        return textContent(out.dump(2));
-    }
+    { return tabletools::tableShow(tables_, a); }
 
     Json tableDelete(const Json& a)
-    {
-        if (!a.boolean("force", false))
-            return textContent("pass force=true to delete table", true);
-        std::string err;
-        if (!tables_.remove(a.str("id"), &err))
-            return textContent(err, true);
-        Json out = Json::obj();
-        out.set("status", "deleted");
-        out.set("id", a.str("id"));
-        return textContent(out.dump(2));
-    }
+    { return tabletools::tableDelete(tables_, a); }
 
     Json tableHistory(const Json& a)
-    {
-        return textContent(tables_.history(a.str("id")).dump(2));
-    }
+    { return tabletools::tableHistory(tables_, a); }
 
     Json tableRollback(const Json& a)
-    {
-        int         nv = 0;
-        std::string err;
-        if (!tables_.rollback(a.str("id"), (int)a.num("version"), &nv, &err))
-            return textContent(err, true);
-        Json out = Json::obj();
-        out.set("status", "ok");
-        out.set("new_version", (double)nv);
-        return textContent(out.dump(2));
-    }
-
-    // applyTablePatches: 应用 update 补丁并填充变更摘要
-    void applyTablePatches(gt::Table& t, const Json& a, Json& summary)
-    {
-        int cells = 0, addedRows = 0, deletedRows = 0, addedCols = 0;
-
-        auto parseJsonField = [&](const std::string& key) -> Json {
-            std::string raw = a.str(key);
-            if (raw.empty()) {
-                if (const Json* j = a.find(key))
-                    return *j;
-                return Json();
-            }
-            std::string err;
-            Json        j = Json::parse(raw, &err);
-            if (!err.empty())
-                throw gt::TableError("invalid JSON in " + key + ": " + err);
-            return j;
-        };
-
-        Json setCells = parseJsonField("set_cells");
-        if (setCells.isArr()) {
-            for (auto& item : *setCells.a) {
-                int         row = (int)item.num("row");
-                std::string colName = item.str("column");
-                if (colName.empty())
-                    colName = item.str("col");
-                int col = colName.empty() ? (int)item.num("col", -1) :
-                                            t.colIndex(colName);
-                if (col < 0 && !colName.empty())
-                    throw gt::TableError("unknown column: " + colName);
-                if (col < 0)
-                    col = (int)item.num("col");
-                t.setCell((size_t)row, (size_t)col, item.str("value"));
-                cells++;
-            }
-        }
-
-        Json addRows = parseJsonField("add_rows");
-        if (addRows.isArr()) {
-            for (auto& rowJ : *addRows.a) {
-                std::vector<std::string> row;
-                if (rowJ.isArr()) {
-                    for (auto& c : *rowJ.a)
-                        row.push_back(c.isStr() ? c.s : c.dump());
-                }
-                else if (rowJ.isObj() && rowJ.o) {
-                    row.assign(t.columns.size(), "");
-                    for (auto& kv : *rowJ.o) {
-                        int ci = t.colIndex(kv.first);
-                        if (ci >= 0)
-                            row[(size_t)ci] =
-                                kv.second.isStr() ? kv.second.s : kv.second.dump();
-                    }
-                }
-                t.appendRow(row);
-                addedRows++;
-            }
-        }
-
-        Json delRows = parseJsonField("delete_rows");
-        if (delRows.isArr()) {
-            std::vector<int> idxs;
-            for (auto& v : *delRows.a)
-                idxs.push_back((int)v.as_num());
-            std::sort(idxs.begin(), idxs.end(), std::greater<int>());
-            for (int idx : idxs) {
-                if (idx >= 0 && (size_t)idx < t.rows.size()) {
-                    t.deleteRow((size_t)idx);
-                    deletedRows++;
-                }
-            }
-        }
-
-        Json addCols = parseJsonField("add_columns");
-        if (addCols.isArr()) {
-            for (auto& c : *addCols.a) {
-                std::string name = c.isStr() ? c.s : c.str("name");
-                std::string def  = c.isObj() ? c.str("default") : "";
-                if (name.empty())
-                    continue;
-                t.addColumn(name, def);
-                addedCols++;
-            }
-        }
-
-        Json setCol = parseJsonField("set_column_values");
-        if (setCol.isObj()) {
-            std::string colName = setCol.str("column");
-            int         ci      = t.colIndex(colName);
-            if (ci < 0)
-                throw gt::TableError("unknown column: " + colName);
-            const Json* vals = setCol.find("values");
-            if (vals && vals->isArr()) {
-                for (size_t i = 0; i < vals->a->size(); i++) {
-                    const Json& v = (*vals->a)[i];
-                    t.setCell(i, (size_t)ci, v.isStr() ? v.s : v.dump());
-                    cells++;
-                }
-            }
-        }
-
-        summary.set("set_cells", (double)cells);
-        summary.set("added_rows", (double)addedRows);
-        summary.set("deleted_rows", (double)deletedRows);
-        summary.set("added_columns", (double)addedCols);
-    }
+    { return tabletools::tableRollback(tables_, a); }
 
     Json tableUpdate(const Json& a)
-    {
-        gt::Table   t;
-        std::string err;
-        if (!tables_.load(a.str("id"), t, 0, &err))
-            return textContent(err, true);
-        Json summary = Json::obj();
-        applyTablePatches(t, a, summary);
-        int v = tables_.save(t, a.str("note", "updated via MCP"));
-        if (v < 0)
-            return textContent("failed to save table", true);
-        Json out = Json::obj();
-        out.set("status", "updated");
-        out.set("id", t.id);
-        out.set("version", (double)v);
-        out.set("columns", (double)t.columns.size());
-        out.set("rows", (double)t.rows.size());
-        out.set("changes", summary);
-        return textContent(out.dump(2));
-    }
+    { return tabletools::tableUpdate(tables_, a); }
 
     Json tableDiffTool(const Json& a)
-    {
-        gt::Table   aT, bT;
-        std::string err;
-        std::string content = a.str("content");
-        if (!content.empty()) {
-            if (!tables_.load(a.str("id"), aT, 0, &err))
-                return textContent(err, true);
-            bT = gt::Table::fromCsv(content);
-        }
-        else {
-            int v1 = (int)a.num("v1", 0);
-            int v2 = (int)a.num("v2", 0);
-            if (!tables_.load(a.str("id"), aT, v1, &err))
-                return textContent(err, true);
-            if (!tables_.load(a.str("id"), bT, v2, &err))
-                return textContent(err, true);
-        }
-        return textContent(gt::tableDiff(aT, bT).dump(2));
-    }
+    { return tabletools::tableDiffTool(tables_, a); }
 
     Json tableFromGraphTool(const Json& a)
-    {
-        Graph       g;
-        std::string err;
-        if (!store_.load(a.str("graph_id"), g, 0, &err))
-            return textContent(err, true);
-        gt::Table t = gtb::tableFromGraph(g, a.str("mode", "skeleton"),
-                                          a.boolean("with_hint_row", false));
-        if (!a.str("name").empty())
-            t.name = a.str("name");
-        Json out = Json::obj();
-        out.set("status", "ok");
-        out.set("mode", a.str("mode", "skeleton"));
-        if (a.boolean("save", true)) {
-            int v = tables_.save(t, "from graph " + g.id);
-            if (v < 0)
-                return textContent("failed to save table", true);
-            out.set("id", t.id);
-            out.set("version", (double)v);
-        }
-        out.set("columns", (double)t.columns.size());
-        out.set("rows", (double)t.rows.size());
-        out.set("csv_preview", t.toCsv());
-        return textContent(out.dump(2));
-    }
+    { return tabletools::tableFromGraphTool(store_, tables_, a); }
 
     Json graphFromTableTool(const Json& a)
-    {
-        gt::Table t;
-        if (!a.str("content").empty()) {
-            t = gt::Table::fromCsv(a.str("content"));
-        }
-        else {
-            std::string err;
-            if (!tables_.load(a.str("table_id"), t, 0, &err))
-                return textContent(err.empty() ? "table_id or content required" :
-                                                 err,
-                                   true);
-        }
-        Graph g = gtb::graphFromTable(t, a.str("from_col"), a.str("to_col"),
-                                      a.str("label_col"), a.str("id_col"),
-                                      a.str("parent_col"));
-        if (!a.str("name").empty())
-            g.name = a.str("name");
-        Json out = Json::obj();
-        out.set("status", "ok");
-        if (a.boolean("save", true)) {
-            int v = store_.save(g, "from table " + t.id);
-            if (v < 0)
-                return textContent("failed to save graph", true);
-            out.set("id", g.id);
-            out.set("version", (double)v);
-        }
-        out.set("type", g.type);
-        out.set("nodes", (double)g.nodes.size());
-        out.set("edges", (double)g.edges.size());
-        return textContent(out.dump(2));
-    }
+    { return tabletools::graphFromTableTool(store_, tables_, a); }
 
     Json tableAlignTool(const Json& a)
-    {
-        gt::Table   primary, target;
-        std::string err;
-        if (!tables_.load(a.str("primary_id"), primary, 0, &err))
-            return textContent(err, true);
-        if (!tables_.load(a.str("target_id"), target, 0, &err))
-            return textContent(err, true);
-        Json align = gtb::tableAlign(primary, target, a.str("primary_key"),
-                                     a.str("target_key"));
-        int  v     = tables_.save(target, a.str("note", "aligned via MCP"));
-        if (v < 0)
-            return textContent("failed to save target table", true);
-        Json out = Json::obj();
-        out.set("status", "ok");
-        out.set("target_id", target.id);
-        out.set("version", (double)v);
-        out.set("align", align);
-        return textContent(out.dump(2));
-    }
+    { return tabletools::tableAlignTool(tables_, a); }
 
     Json tableCheckTool(const Json& a)
-    {
-        gt::Table   target;
-        std::string err;
-        if (!tables_.load(a.str("id"), target, 0, &err))
-            return textContent(err, true);
-        Json allowed;
-        std::string allowedRaw = a.str("allowed");
-        if (!allowedRaw.empty()) {
-            std::string perr;
-            allowed = Json::parse(allowedRaw, &perr);
-            if (!perr.empty())
-                return textContent("invalid allowed JSON: " + perr, true);
-        }
-        else if (const Json* j = a.find("allowed")) {
-            allowed = *j;
-        }
-        gt::Table rules;
-        const gt::Table* rulesPtr = nullptr;
-        if (!a.str("rules_id").empty()) {
-            if (!tables_.load(a.str("rules_id"), rules, 0, &err))
-                return textContent(err, true);
-            rulesPtr = &rules;
-        }
-        gt::Table report = gtb::tableCheck(target, allowed, rulesPtr);
-        if (!a.str("name").empty())
-            report.name = a.str("name");
-        Json out = Json::obj();
-        out.set("status", "ok");
-        out.set("violations", (double)report.rows.size());
-        out.set("report_csv", report.toCsv());
-        if (a.boolean("save", false)) {
-            int v = tables_.save(report, "check report for " + target.id);
-            if (v < 0)
-                return textContent("failed to save report", true);
-            out.set("report_id", report.id);
-            out.set("version", (double)v);
-        }
-        return textContent(out.dump(2));
-    }
+    { return tabletools::tableCheckTool(tables_, a); }
 };
 
 // ---- JSON-RPC 通信处理 ----

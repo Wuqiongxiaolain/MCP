@@ -16,8 +16,11 @@
 #include "exporters.hpp"
 #include "parsers.hpp"
 #include "table_model.hpp"
+#include <cctype>
 #include <map>
+#include <set>
 #include <sstream>
+#include <vector>
 
 namespace gtx {
 
@@ -27,14 +30,45 @@ using gj::Json;
 
 namespace detail {
 
-// cellText: 取节点直接文本；无则空串
-inline std::string cellText(const gp::detail::XmlNode& n)
+// isSafeXmlName: 列名/标签名是否可安全用作本项目迷你 XML 的元素名
+// 拒绝空白与 <>/&"'= ；允许中文、? 等（与 enemy_sample 一致）
+inline bool isSafeXmlName(const std::string& s)
 {
-    return n.text;
+    if (s.empty())
+        return false;
+    for (unsigned char c : s) {
+        if (std::isspace(c))
+            return false;
+        if (c == '<' || c == '>' || c == '/' || c == '&' || c == '"' ||
+            c == '\'' || c == '=')
+            return false;
+    }
+    return true;
 }
 
-// collectRowFields: 从 <row> 收集 列名→值（属性先，同名子元素覆盖；一层嵌套→父.子）
-// 关键步骤：属性写入 -> 子元素扁平/一层拍扁 -> 同名覆盖
+// requireSafeXmlName: 不安全则拒绝
+inline void requireSafeXmlName(const std::string& name, const char* what)
+{
+    if (!isSafeXmlName(name))
+        throw TableError(std::string("table xml: unsafe ") + what +
+                         " for XML tag: \"" + name + "\"");
+}
+
+// splitNestedCol: 恰有一个 '.' 则拆成 parent/child；否则视为扁列
+inline bool splitNestedCol(const std::string& col, std::string& parent,
+                           std::string& child)
+{
+    size_t dot = col.find('.');
+    if (dot == std::string::npos || dot == 0 || dot + 1 >= col.size())
+        return false;
+    if (col.find('.', dot + 1) != std::string::npos)
+        return false;
+    parent = col.substr(0, dot);
+    child  = col.substr(dot + 1);
+    return true;
+}
+
+// collectRowFields: 从 <row> 收集 列名→值（属性先按出现序，同名子元素覆盖；一层嵌套→父.子）
 inline void collectRowFields(const gp::detail::XmlNode& row,
                              std::map<std::string, std::string>& fields,
                              std::vector<std::string>* order)
@@ -48,29 +82,30 @@ inline void collectRowFields(const gp::detail::XmlNode& row,
         order->push_back(key);
     };
 
-    for (auto& kv : row.attrs) {
-        fields[kv.first] = kv.second;
-        noteKey(kv.first);
+    // 属性：按 attr_order（文档出现序），而非 map 字典序
+    for (auto& aname : row.attr_order) {
+        auto it = row.attrs.find(aname);
+        if (it == row.attrs.end())
+            continue;
+        fields[aname] = it->second;
+        noteKey(aname);
     }
 
     for (auto& c : row.children) {
         if (c.children.empty()) {
-            fields[c.tag] = cellText(c);
+            fields[c.tag] = c.text;
             noteKey(c.tag);
             continue;
         }
-        // 一层嵌套：子节点必须是叶子，否则过深
         for (auto& gc : c.children) {
             if (!gc.children.empty())
                 throw TableError(
                     "table xml: nested deeper than one level under <" + c.tag +
                     ">");
             std::string key = c.tag + "." + gc.tag;
-            fields[key]     = cellText(gc);
+            fields[key]     = gc.text;
             noteKey(key);
         }
-        // 父节点自身文本若存在且无叶子映射需求，忽略（拍扁以子孙为准）
-        (void)c.text;
     }
 }
 
@@ -89,13 +124,35 @@ inline void gatherRows(const gp::detail::XmlNode& root,
     }
 }
 
+// appendColumnUnique: 追加列名；重复则跳过并写入 warning
+inline void appendColumnUnique(Table& t, const std::string& name,
+                               std::vector<std::string>* warnings)
+{
+    for (auto& c : t.columns) {
+        if (c == name) {
+            if (warnings)
+                warnings->push_back("duplicate column ignored: " + name);
+            return;
+        }
+    }
+    t.columns.push_back(name);
+}
+
 }  // namespace detail
 
 // fromXml: 模式 A 表 XML → Table
-// 参数 text: 表 XML 文本；根须为 <table>
-inline Table fromXml(const std::string& text)
+// 参数 text: 表 XML；warnings: 可选，接收去重等非致命告警
+inline Table fromXml(const std::string& text,
+                     std::vector<std::string>* warnings = nullptr)
 {
-    gp::detail::XmlNode root = gp::detail::parseXmlDoc(text);
+    gp::detail::XmlNode root;
+    try {
+        root = gp::detail::parseXmlDoc(text);
+    }
+    catch (const gp::ParseError& e) {
+        throw TableError(std::string("table xml: ") + e.what());
+    }
+
     if (root.tag != "table")
         throw TableError("table xml: root element must be <table>, got <" +
                          root.tag + ">");
@@ -105,12 +162,9 @@ inline Table fromXml(const std::string& text)
         t.id = root.attrs.at("id");
     if (root.attrs.count("name"))
         t.name = root.attrs.at("name");
-    if (root.attrs.count("hasHintRow")) {
-        std::string v = gm::toLower(root.attrs.at("hasHintRow"));
-        t.hasHintRow  = (v == "1" || v == "true" || v == "yes");
-    }
+    if (root.attrs.count("hasHintRow"))
+        t.hasHintRow = ge::parseTruthy(root.attrs.at("hasHintRow"));
 
-    // 显式列区
     for (auto& c : root.children) {
         if (c.tag != "columns")
             continue;
@@ -120,22 +174,40 @@ inline Table fromXml(const std::string& text)
             std::string name = col.text;
             if (name.empty() && col.attrs.count("name"))
                 name = col.attrs.at("name");
-            if (!name.empty())
-                t.columns.push_back(name);
+            if (name.empty())
+                continue;
+            std::string p, ch;
+            if (detail::splitNestedCol(name, p, ch)) {
+                detail::requireSafeXmlName(p, "nested parent name");
+                detail::requireSafeXmlName(ch, "nested child name");
+            }
+            else {
+                detail::requireSafeXmlName(name, "column name");
+            }
+            detail::appendColumnUnique(t, name, warnings);
         }
     }
 
     std::vector<const gp::detail::XmlNode*> rows;
     detail::gatherRows(root, rows);
 
-    // 无 <columns>：按首次出现顺序并集
     if (t.columns.empty()) {
         std::vector<std::string> order;
         for (auto* rp : rows) {
             std::map<std::string, std::string> fields;
             detail::collectRowFields(*rp, fields, &order);
         }
-        t.columns = order;
+        for (auto& name : order) {
+            std::string p, ch;
+            if (detail::splitNestedCol(name, p, ch)) {
+                detail::requireSafeXmlName(p, "nested parent name");
+                detail::requireSafeXmlName(ch, "nested child name");
+            }
+            else {
+                detail::requireSafeXmlName(name, "column name");
+            }
+            detail::appendColumnUnique(t, name, warnings);
+        }
     }
 
     if (t.columns.empty())
@@ -156,9 +228,30 @@ inline Table fromXml(const std::string& text)
     return t;
 }
 
-// toXml: Table → 规范模式 A 表 XML（矩形空单元格也输出空标签）
+// toXml: Table → 规范模式 A；嵌套列按父标签聚合成一个父元素
 inline std::string toXml(const Table& t)
 {
+    // 预检列名，并检测叶子列与嵌套父名冲突
+    std::set<std::string> nested_parents;
+    for (auto& col : t.columns) {
+        std::string p, ch;
+        if (detail::splitNestedCol(col, p, ch)) {
+            detail::requireSafeXmlName(p, "nested parent name");
+            detail::requireSafeXmlName(ch, "nested child name");
+            nested_parents.insert(p);
+        }
+        else {
+            detail::requireSafeXmlName(col, "column name");
+        }
+    }
+    for (auto& col : t.columns) {
+        std::string p, ch;
+        if (!detail::splitNestedCol(col, p, ch) && nested_parents.count(col))
+            throw TableError(
+                "table xml: column \"" + col +
+                "\" conflicts with nested columns under the same parent");
+    }
+
     std::ostringstream os;
     os << "<table";
     if (!t.id.empty())
@@ -171,22 +264,32 @@ inline std::string toXml(const Table& t)
         os << "    <col>" << ge::xmlTextEscape(c) << "</col>\n";
     os << "  </columns>\n";
     os << "  <rows>\n";
+
     for (auto& r : t.rows) {
         os << "    <row>\n";
+        std::set<std::string> emitted_parents;
         for (size_t i = 0; i < t.columns.size(); i++) {
-            std::string col = t.columns[i];
-            // 含 '.' 的列写回一层嵌套
-            size_t dot = col.find('.');
-            std::string val = i < r.size() ? r[i] : "";
-            if (dot != std::string::npos && col.find('.', dot + 1) == std::string::npos) {
-                std::string parent = col.substr(0, dot);
-                std::string child  = col.substr(dot + 1);
-                os << "      <" << parent << "><" << child << ">"
-                   << ge::xmlTextEscape(val) << "</" << child << "></" << parent
-                   << ">\n";
+            const std::string& col = t.columns[i];
+            std::string        parent, child;
+            if (detail::splitNestedCol(col, parent, child)) {
+                if (emitted_parents.count(parent))
+                    continue;
+                emitted_parents.insert(parent);
+                os << "      <" << parent << ">\n";
+                // 按列序写出该父下全部子列
+                for (size_t j = 0; j < t.columns.size(); j++) {
+                    std::string p2, c2;
+                    if (!detail::splitNestedCol(t.columns[j], p2, c2) ||
+                        p2 != parent)
+                        continue;
+                    std::string val = j < r.size() ? r[j] : "";
+                    os << "        <" << c2 << ">" << ge::xmlTextEscape(val)
+                       << "</" << c2 << ">\n";
+                }
+                os << "      </" << parent << ">\n";
             }
             else {
-                // 列名作标签：若含非法空白则仍按原名写出（与 fromXml 对称）
+                std::string val = i < r.size() ? r[i] : "";
                 os << "      <" << col << ">" << ge::xmlTextEscape(val) << "</"
                    << col << ">\n";
             }
@@ -198,10 +301,11 @@ inline std::string toXml(const Table& t)
     return os.str();
 }
 
-// parseTableContent: 按 format 选择解析器；默认 csv（保持现网行为）
-// 参数 format: csv | xml | model（json 同 model）
+// parseTableContent: 按 format 选择解析器；默认 csv
+// 参数 warnings: 仅 xml 路径可能写入去重告警
 inline Table parseTableContent(const std::string& content,
-                               const std::string& format = "csv")
+                               const std::string& format = "csv",
+                               std::vector<std::string>* warnings = nullptr)
 {
     std::string fmt = gm::toLower(format);
     if (fmt.empty())
@@ -209,7 +313,7 @@ inline Table parseTableContent(const std::string& content,
     if (fmt == "csv")
         return Table::fromCsv(content);
     if (fmt == "xml")
-        return fromXml(content);
+        return fromXml(content, warnings);
     if (fmt == "model" || fmt == "json") {
         std::string err;
         Json        j = Json::parse(content, &err);
@@ -218,6 +322,22 @@ inline Table parseTableContent(const std::string& content,
         return Table::fromJson(j);
     }
     throw TableError("unsupported table format: " + format);
+}
+
+// exportTableText: 按 to 导出；未知 to 报错（不静默回退 csv）
+inline std::string exportTableText(const Table& t, const std::string& to)
+{
+    std::string fmt = gm::toLower(to);
+    if (fmt.empty())
+        fmt = "csv";
+    if (fmt == "csv")
+        return t.toCsv();
+    if (fmt == "model" || fmt == "json")
+        return t.toJson().dump(2);
+    if (fmt == "xml")
+        return toXml(t);
+    throw TableError("unsupported table export format: " + to +
+                     " (expected csv|model|xml)");
 }
 
 }  // namespace gtx

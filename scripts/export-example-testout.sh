@@ -64,6 +64,14 @@ for inp in examples/example_input/*; do
         continue
     fi
 
+    # 通用表 CSV：不做盲目 graph convert（见 scripts/export-table-examples.sh）
+    if [ "$name" = "enemy_sample.csv" ] || [ "$name" = "skill_relations.csv" ]; then
+        for f in "${FORMATS[@]}"; do
+            record_row "$name" "$f" SKIP "-" "generic-table; use export-table-examples.sh → example_output"
+        done
+        continue
+    fi
+
     for i in "${!FORMATS[@]}"; do
         fmt="${FORMATS[$i]}"
         ext="${EXTS[$i]}"

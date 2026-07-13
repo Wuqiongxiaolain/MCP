@@ -1793,18 +1793,102 @@ static void testTableXml()
     CHECK(t.cell(1, 0) == "2");
     CHECK(t.cell(1, 2) == "");  // 缺列补空
 
-    // 一层嵌套 → 父.子；属性被同名子元素覆盖
+    // 一层嵌套 → 父.子；属性被同名子元素覆盖；属性出现序（z 在 a 前）
     gt::Table nest = gtx::fromXml(
-        "<table><columns><col>id</col><col>动画.生成</col><col>名</col>"
-        "</columns>"
-        "<row 名=\"attr\" id=\"a\"><名>elem</名>"
-        "<动画><生成>x</生成></动画></row></table>");
+        "<table><columns><col>id</col><col>动画.生成</col><col>动画.受击</col>"
+        "<col>名</col></columns>"
+        "<row 名=\"attr\" id=\"a\" z=\"1\"><名>elem</名>"
+        "<动画><生成>x</生成><受击>y</受击></动画></row></table>");
     CHECK(nest.cell(0, 0) == "a");
     CHECK(nest.cell(0, 1) == "x");
-    CHECK(nest.cell(0, 2) == "elem");
+    CHECK(nest.cell(0, 2) == "y");
+    CHECK(nest.cell(0, 3) == "elem");
+
+    // toXml 按父标签聚合
+    std::string agg = gtx::toXml(nest);
+    CHECK(agg.find("<动画>") != std::string::npos);
+    CHECK(agg.find("<生成>x</生成>") != std::string::npos);
+    CHECK(agg.find("<受击>y</受击>") != std::string::npos);
+    // 同一父只出现一次开标签（粗检：第二个 <动画> 应不存在于聚合后）
+    {
+        size_t first = agg.find("<动画>");
+        CHECK(first != std::string::npos);
+        size_t second = agg.find("<动画>", first + 1);
+        CHECK(second == std::string::npos);
+    }
+
+    // 无 columns 时属性按出现序（非字典序）：z 应在 a 前
+    {
+        gt::Table inferred = gtx::fromXml(
+            "<table><row z=\"1\" a=\"2\"/></table>");
+        CHECK(inferred.columns.size() == 2);
+        CHECK(inferred.columns[0] == "z");
+        CHECK(inferred.columns[1] == "a");
+    }
+
+    // 重复列名去重 + warning
+    {
+        std::vector<std::string> warns;
+        gt::Table dup = gtx::fromXml(
+            "<table><columns><col>a</col><col>a</col><col>b</col></columns>"
+            "<row><a>1</a><b>2</b></row></table>",
+            &warns);
+        CHECK(dup.columns.size() == 2);
+        CHECK(dup.columns[0] == "a");
+        CHECK(dup.columns[1] == "b");
+        CHECK(!warns.empty());
+        CHECK(warns[0].find("duplicate") != std::string::npos);
+    }
+
+    // 不安全列名拒绝
+    {
+        bool bad = false;
+        try {
+            gtx::fromXml(
+                "<table><columns><col>a b</col></columns><row/></table>");
+        }
+        catch (const gt::TableError&) {
+            bad = true;
+        }
+        CHECK(bad);
+    }
+
+    // 未知 format / to 报错
+    {
+        bool bad = false;
+        try {
+            gtx::parseTableContent("a\n1\n", "yaml");
+        }
+        catch (const gt::TableError& e) {
+            bad = true;
+            CHECK(std::string(e.what()).find("unsupported") != std::string::npos);
+        }
+        CHECK(bad);
+        bad = false;
+        try {
+            gtx::exportTableText(nest, "foo");
+        }
+        catch (const gt::TableError&) {
+            bad = true;
+        }
+        CHECK(bad);
+    }
+
+    // 畸形 XML → TableError（包装 ParseError）
+    {
+        bool bad = false;
+        try {
+            gtx::fromXml("not-xml");
+        }
+        catch (const gt::TableError& e) {
+            bad = true;
+            CHECK(std::string(e.what()).find("table xml:") != std::string::npos);
+        }
+        CHECK(bad);
+    }
 
     // XML ↔ JSON ↔ XML 往返
-    Json     j  = nest.toJson();
+    Json      j  = nest.toJson();
     gt::Table j2 = gt::Table::fromJson(j);
     CHECK(j2.cell(0, 1) == "x");
     std::string xml2 = gtx::toXml(j2);
@@ -1812,7 +1896,23 @@ static void testTableXml()
     CHECK(back.columns.size() == nest.columns.size());
     CHECK(back.cell(0, 0) == "a");
     CHECK(back.cell(0, 1) == "x");
-    CHECK(back.cell(0, 2) == "elem");
+    CHECK(back.cell(0, 2) == "y");
+    CHECK(back.cell(0, 3) == "elem");
+
+    // 叶子列与嵌套父名冲突
+    {
+        gt::Table conflict;
+        conflict.columns = {"动画", "动画.生成"};
+        conflict.rows    = {{"leaf", "x"}};
+        bool bad         = false;
+        try {
+            gtx::toXml(conflict);
+        }
+        catch (const gt::TableError&) {
+            bad = true;
+        }
+        CHECK(bad);
+    }
 
     // 更深嵌套应报错
     bool threw = false;
@@ -1881,6 +1981,11 @@ static void testTableXml()
             Json::parse(em.find("content")->a->at(0).str("text"), &err);
         CHECK(err.empty());
         CHECK(model.find("columns") != nullptr);
+
+        // 未知 to 应报错
+        ex.set("to", "foo");
+        Json ef = runner.call("table_export", ex);
+        CHECK(ef.boolean("isError", false));
     }
     ge::removeDirectory("test-table-xml-mcp-tmp");
 }

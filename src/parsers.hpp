@@ -3019,17 +3019,18 @@ inline std::string detectFormat(const std::string& text)
             continue;
         }
         firstContent = false;
-        if (startsWith(s, "graph ") || startsWith(s, "flowchart") ||
-            startsWith(s, "mindmap") || startsWith(s, "erdiagram") ||
-            startsWith(s, "sequencediagram") || startsWith(s, "classdiagram") ||
-            startsWith(s, "statediagram") || startsWith(s, "gantt") ||
-            startsWith(s, "pie ") || startsWith(s, "pie\n") ||
-            startsWith(s, "gitgraph") || startsWith(s, "journey") ||
-            startsWith(s, "timeline") || startsWith(s, "kanban") ||
-            startsWith(s, "quadrantchart") || startsWith(s, "xychart-beta") ||
-            startsWith(s, "architecture-beta") || startsWith(s, "packet-beta") ||
-            startsWith(s, "block-beta") || startsWith(s, "sankey-beta") ||
-            startsWith(s, "requirementdiagram"))
+        std::string sl = toLower(s);
+        if (startsWith(sl, "graph ") || startsWith(sl, "flowchart") ||
+            startsWith(sl, "mindmap") || startsWith(sl, "erdiagram") ||
+            startsWith(sl, "sequencediagram") || startsWith(sl, "classdiagram") ||
+            startsWith(sl, "statediagram") || startsWith(sl, "gantt") ||
+            startsWith(sl, "pie ") || startsWith(sl, "pie\n") ||
+            startsWith(sl, "gitgraph") || startsWith(sl, "journey") ||
+            startsWith(sl, "timeline") || startsWith(sl, "kanban") ||
+            startsWith(sl, "quadrantchart") || startsWith(sl, "xychart-beta") ||
+            startsWith(sl, "architecture-beta") || startsWith(sl, "packet-beta") ||
+            startsWith(sl, "block-beta") || startsWith(sl, "sankey-beta") ||
+            startsWith(sl, "requirementdiagram"))
             return "mermaid";
         break;
     }

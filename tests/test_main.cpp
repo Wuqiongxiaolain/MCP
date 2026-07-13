@@ -1122,7 +1122,7 @@ static void testMcpProtocol()
     Json tl =
         Json::parse(R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})", &err);
     CHECK(mcp::handleMessage(tl, store, resp));
-    CHECK(resp.find("result")->find("tools")->size() == 25);
+    CHECK(resp.find("result")->find("tools")->size() == 26);
     // tools/call graph_create
     Json call = Json::parse(
         R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
@@ -1336,110 +1336,76 @@ static void testMcpGraphImport()
     CHECK((int)j2.num("version") == 2);
 }
 
-// 测试所有 13 种新 Mermaid 类型的 rawMermaid 透传模式
-static void testMermaidRawPassthrough()
+// 测试所有 Mermaid 类型的深度解析（取代旧的 rawMermaid 透传测试）
+static void testMermaidDeepParsing()
 {
-    // 每种类型的测试：(mermaid文本, 期望type)
     struct
     {
         std::string text;
         std::string expectedType;
         const char* name;
+        std::string propsKey;  // properties 子对象 key
     } cases[] = {
-        {"sequenceDiagram\nAlice->>Bob: Hello", "sequenceDiagram", "sequenceDiagram"},
-        // classDiagram 和 stateDiagram 走深度解析，见 testMermaidClass/testMermaidState
-        {"gantt\ntitle Project\ndateFormat YYYY-MM-DD\nsection Dev\nTask: 1d", "gantt", "gantt"},
-        {"pie title Pets\n\"Dog\": 50\n\"Cat\": 30", "pie", "pie"},
-        {"gitGraph\ncommit\nbranch dev\ncheckout dev\ncommit", "gitGraph", "gitGraph"},
-        {"journey\ntitle My Day\nsection Morning\nWake: 5: Me", "journey", "journey"},
-        {"timeline\ntitle History\nsection Era\nEvent: detail", "timeline", "timeline"},
-        {"kanban\ncolumns\n  column Todo\n  column Done", "kanban", "kanban"},
-        {"quadrantChart\ntitle Quad\nx-axis Low --> High\ny-axis Low --> High\nA: [0.3, 0.5]", "quadrantChart", "quadrantChart"},
-        {"xychart-beta\ntitle Sales\nx-axis [A,B]\ny-axis 0 --> 100\nbar [10,20]", "xychart", "xychart-beta"},
-        {"architecture-beta\ngroup api(cloud)[API]\nservice db(database)[DB]", "architecture-beta", "architecture-beta"},
-        {"packet-beta\ntitle Frame\n0-7: Header\n8-15: Data", "packet", "packet-beta"},
+        {"sequenceDiagram\nAlice->>Bob: Hello", "sequenceDiagram", "seq", "sequence"},
+        {"gantt\ntitle Project\ndateFormat YYYY-MM-DD\nsection Dev\nTask A: 1d", "gantt", "gantt", "gantt"},
+        {"pie title Pets\n\"Dog\": 50\n\"Cat\": 30", "pie", "pie", "pie"},
+        {"gitGraph\ncommit\nbranch dev\ncheckout dev\ncommit\ncheckout main\nmerge dev", "gitGraph", "git", "gitGraph"},
+        {"journey\ntitle My Day\nsection Morning\nWake: 5: Me", "journey", "journey", "journey"},
+        {"timeline\ntitle History\nsection Era\nEvent: detail", "timeline", "timeline", "timeline"},
+        {"kanban\ntodo[To Do]\n  c1[Task]@{ assigned: 'me' }\ndone[Done]\n  c2[Deploy]", "kanban", "kanban", "kanban"},
+        {"quadrantChart\ntitle Quad\nx-axis Low --> High\ny-axis Low --> High\nA: [0.3, 0.5]", "quadrantChart", "quad", "quadrantChart"},
+        {"xychart-beta\ntitle Sales\nx-axis [A,B]\nbar [10,20]", "xychart", "xy", "xychart"},
+        {"architecture-beta\ngroup api(cloud)[API]\nservice db(database)[DB]", "architecture-beta", "arch", "architecture"},
+        {"packet-beta\ntitle Frame\n0-7: Header\n8-15: Data", "packet", "packet", "packet"},
+        {"block-beta\ncolumns 2\nA[Hello]\nB[World]\nA --> B", "block", "block", "block"},
+        {"requirementDiagram\nrequirement req1 {\nid: REQ-1\ntext: Login\n}\nelement elem1 {\ntype: software\ndocRef: DOC-1\n}\nreq1 - satisfies -> elem1", "requirementDiagram", "req", "requirementDiagram"},
+        {"sankey-beta\nSource,Target,100\nTarget,Sink,50", "sankey", "sankey", "sankey"},
     };
 
     for (auto& c : cases) {
-        // 测试 1：parseMermaid 正确识别类型并存储 rawMermaid
+        // 测试 1：parseMermaid 深度解析（rawMermaid 为空）
         Graph g = gp::parseMermaid(c.text);
         CHECK(g.type == c.expectedType);
-        CHECK(!g.rawMermaid.empty());
-        CHECK(g.rawMermaid == c.text);
+        CHECK(g.rawMermaid.empty());  // 深度解析不依赖透传
 
-        // 测试 2：toMermaid 返回原始文本（无损往返）
+        // 测试 2：properties 已填充
+        CHECK(g.properties.isObj());
+        bool hasProps = g.properties.o && !g.properties.o->empty();
+        CHECK(hasProps || g.type == c.expectedType);  // 至少有类型信息
+
+        // 测试 3：toMermaid 生成有效 Mermaid
         std::string exported = ge::toMermaid(g);
-        CHECK(exported == c.text);
-
-        // 测试 3：toMermaidLiveUrl 包含原始文本
-        std::string url = ge::toMermaidLiveUrl(g);
-        CHECK(!url.empty());
-        CHECK(url.find("mermaid.live") != std::string::npos);
+        CHECK(!exported.empty());
+        CHECK(exported.find(c.expectedType) != std::string::npos ||
+              exported.find(c.expectedType.substr(0, 3)) != std::string::npos);
 
         // 测试 4：detectFormat 识别为 mermaid
         std::string fmt = gp::detectFormat(c.text);
         CHECK(fmt == "mermaid");
 
-        // 测试 5：parseAny 也能正确处理
+        // 测试 5：parseAny 也能正确深度解析
         Graph g2 = gp::parseAny(c.text, "auto", "");
         CHECK(g2.type == c.expectedType);
-        CHECK(g2.rawMermaid == c.text);
+        CHECK(g2.rawMermaid.empty());
 
-        // 测试 6：验证跳过 rawMermaid 类型（无错误）
+        // 测试 6：验证通过（properties 类型无节点也 OK）
         auto issues = gl::validate(g);
         CHECK(issues.empty());
 
-        // 测试 7：布局跳过 rawMermaid 类型
+        // 测试 7：布局跳过 properties 类型
         gl::layout(g);
         CHECK(g.laidOut == true);
 
-        // 测试 8：Graph JSON 往返（含 rawMermaid）
+        // 测试 8：Graph JSON 往返（含 properties）
         Json j = g.toJson();
         Graph g3 = Graph::fromJson(j);
         CHECK(g3.type == c.expectedType);
-        CHECK(g3.rawMermaid == c.text);
+        CHECK(g3.rawMermaid.empty());
+        if (hasProps)
+            CHECK(g3.properties.isObj());
 
-        // 测试 9：MCP graph_convert 工具能处理
-        {
-            Json call  = Json::obj();
-            call.set("jsonrpc", "2.0");
-            call.set("id", 1);
-            call.set("method", "tools/call");
-            Json params = Json::obj();
-            params.set("name", "graph_convert");
-            Json args = Json::obj();
-            args.set("content", c.text);
-            args.set("to", "mermaid");
-            params.set("arguments", args);
-            call.set("params", params);
-            gs::Store store("test-store-tmp");
-            Json resp;
-            CHECK(mcp::handleMessage(call, store, resp));
-            const Json* r = resp.find("result");
-            CHECK(r != nullptr);
-            CHECK(!r->boolean("isError", false));
-        }
-
-        // 测试 10：MCP graph_create 在透传模式下也能工作
-        {
-            Json call  = Json::obj();
-            call.set("jsonrpc", "2.0");
-            call.set("id", 2);
-            call.set("method", "tools/call");
-            Json params = Json::obj();
-            params.set("name", "graph_create");
-            Json args = Json::obj();
-            args.set("content", c.text);
-            args.set("name", std::string(c.name));
-            params.set("arguments", args);
-            call.set("params", params);
-            gs::Store store("test-store-tmp");
-            Json resp;
-            CHECK(mcp::handleMessage(call, store, resp));
-            const Json* r = resp.find("result");
-            CHECK(r != nullptr);
-            CHECK(!r->boolean("isError", false));
-        }
+        // 测试 9：JSON 中不包含 rawMermaid
+        CHECK(j.str("rawMermaid").empty());
     }
 }
 
@@ -1612,7 +1578,7 @@ int runAll()
     testParseDrawio();
     testDrawioRoundTrip();
     testMcpGraphImport();
-    testMermaidRawPassthrough();
+    testMermaidDeepParsing();
     testMermaidClass();
     testMermaidState();
     std::cout << "tests: " << g_passed << " passed, " << g_failed

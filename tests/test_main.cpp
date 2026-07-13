@@ -1,5 +1,5 @@
 // test_main.cpp - assertion-based unit tests for graphmcp core modules
-#include "../src/exporters.hpp"
+// 依赖 mcp.hpp 间接引入 exporters / table 工具头文件
 #include "../src/mcp.hpp"
 #include "../src/parsers.hpp"
 #include "../src/storage.hpp"
@@ -7,6 +7,7 @@
 #include "../src/table_model.hpp"
 #include "../src/table_storage.hpp"
 #include <cstdlib>
+#include <exception>
 #include <iostream>
 
 static int g_failed = 0;
@@ -1457,6 +1458,30 @@ static void testTableMcpTools()
     Json dupRes = runner.call("table_create", dup);
     CHECK(dupRes.boolean("isError", false));
 
+    // 向后兼容：LEGACY_UPSERT 允许同 id 覆盖
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT", "1");
+#else
+    setenv("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT", "1", 1);
+#endif
+    Json legacyCreate = runner.call("table_create", dup);
+    CHECK(!legacyCreate.boolean("isError", false));
+    Json legacyBody =
+        Json::parse(legacyCreate.find("content")->a->at(0).str("text"), &err);
+    CHECK(legacyBody.find("compat_warnings") != nullptr);
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT", "0");
+#else
+    setenv("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT", "0", 1);
+#endif
+
+    // 恢复边表内容供后续用例
+    Json restore = Json::obj();
+    restore.set("id", tid);
+    restore.set("content", "from,to,label\nA,B,go\n");
+    restore.set("force", true);
+    CHECK(!runner.call("table_create", restore).boolean("isError", false));
+
     Json u = Json::obj();
     u.set("id", tid);
     u.set("add_rows", R"([["B","C","next"]])");
@@ -1469,6 +1494,16 @@ static void testTableMcpTools()
     badUpdate.set("set_cells", R"([{"row":0,"value":"x"}])");
     Json badRes = runner.call("table_update", badUpdate);
     CHECK(badRes.boolean("isError", false));
+
+    // 向后兼容：旧字段 col 仍可用
+    Json colUpdate = Json::obj();
+    colUpdate.set("id", tid);
+    colUpdate.set("set_cells", R"([{"row":0,"col":"from","value":"AA"}])");
+    Json colRes = runner.call("table_update", colUpdate);
+    CHECK(!colRes.boolean("isError", false));
+    Json colBody =
+        Json::parse(colRes.find("content")->a->at(0).str("text"), &err);
+    CHECK(colBody.find("compat_warnings") != nullptr);
 
     Json gf = Json::obj();
     gf.set("table_id", tid);
@@ -1487,6 +1522,70 @@ static void testTableMcpTools()
     CHECK(!tfr.boolean("isError", false));
     Json tfj = Json::parse(tfr.find("content")->a->at(0).str("text"), &err);
     CHECK(tfj.boolean("truncated", false) || (int)tfj.num("rows") <= 1);
+    if (tfj.boolean("truncated", false))
+        CHECK(tfj.str("hint").find("table_export") != std::string::npos);
+
+    // table_check：LEGACY_HINT 使缺省不跳过 hint 行
+    {
+        Json hintCreate = Json::obj();
+        hintCreate.set("content", "层级\n非法提示\n小怪\n");
+        hintCreate.set("name", "hint-check");
+        Json hc = runner.call("table_create", hintCreate);
+        CHECK(!hc.boolean("isError", false));
+        Json hcb =
+            Json::parse(hc.find("content")->a->at(0).str("text"), &err);
+        std::string hid = hcb.str("id");
+        // 标记 hasHintRow：通过 from_graph skeleton 更自然，这里直接 update
+        // 存盘字段——用 table_export model / 再 import 太重，改为底层 store
+        gts::TableStore ts("test-table-mcp-tmp");
+        gt::Table       ht;
+        CHECK(ts.load(hid, ht));
+        ht.hasHintRow = true;
+        CHECK(ts.save(ht, "mark hint") > 0);
+
+        Json allowed = Json::obj();
+        Json vals    = Json::arr();
+        vals.push(Json("小怪"));
+        vals.push(Json("Boss"));
+        allowed.set("层级", vals);
+
+        // 默认（hasHintRow）：跳过首行 → 0 违规
+        Json ck = Json::obj();
+        ck.set("id", hid);
+        ck.set("allowed", allowed.dump());
+        Json ckr = runner.call("table_check", ck);
+        CHECK(!ckr.boolean("isError", false));
+        Json ckj =
+            Json::parse(ckr.find("content")->a->at(0).str("text"), &err);
+        CHECK((int)ckj.num("violations") == 0);
+
+#ifdef _WIN32
+        _putenv_s("GRAPHMCP_TABLE_CHECK_LEGACY_HINT", "1");
+#else
+        setenv("GRAPHMCP_TABLE_CHECK_LEGACY_HINT", "1", 1);
+#endif
+        Json ckr2 = runner.call("table_check", ck);
+        CHECK(!ckr2.boolean("isError", false));
+        Json ckj2 =
+            Json::parse(ckr2.find("content")->a->at(0).str("text"), &err);
+        CHECK((int)ckj2.num("violations") == 1);
+        CHECK(ckj2.find("compat_warnings") != nullptr);
+        CHECK(ckj2.boolean("ignore_hint_row") == false);
+#ifdef _WIN32
+        _putenv_s("GRAPHMCP_TABLE_CHECK_LEGACY_HINT", "0");
+#else
+        setenv("GRAPHMCP_TABLE_CHECK_LEGACY_HINT", "0", 1);
+#endif
+    }
+
+    // writeFileAtomic 轻量回环
+    {
+        std::string p = "test-table-mcp-tmp/atomic-probe.txt";
+        CHECK(ge::writeFileAtomic(p, "hello-atomic"));
+        CHECK(ge::readFile(p) == "hello-atomic");
+        CHECK(ge::writeFileAtomic(p, "hello-atomic-2"));
+        CHECK(ge::readFile(p) == "hello-atomic-2");
+    }
 
     ge::removeDirectory("test-table-mcp-tmp");
 }
@@ -1534,4 +1633,17 @@ int runAll()
 }
 
 int main()
-{ return runAll(); }
+{
+    try {
+        int code = runAll();
+        return code;
+    }
+    catch (const std::exception& e) {
+        std::cerr << "uncaught exception: " << e.what() << "\n";
+        return 1;
+    }
+    catch (...) {
+        std::cerr << "uncaught unknown exception\n";
+        return 1;
+    }
+}

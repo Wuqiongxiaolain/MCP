@@ -256,7 +256,7 @@ CLI：`graphmcp table create|import|export|list|show|update|delete|history|rollb
 | 导出 | `graphmcp export to-svg --id <graph-id> -o output.svg` |
 | 转链接 | `graphmcp convert to-url --file examples/example_input/flowchart.mmd` |
 | 改图并提交 | `graph update …` → `version stage` → `version commit -m "…"` |
-| 建通用表 | `graphmcp table create --file examples/example_input/enemy_sample.csv --name enemies` |
-| 技能表→关系图 | `graphmcp table from-table --file examples/example_input/skill_relations.csv` |
+| 建通用表 | `graphmcp table create --file examples/example_input/enemy_sample.csv --name enemies`（样见 `examples/example_output/enemy_sample.csv_out/`） |
+| 技能表→关系图 | `graphmcp table from-table --file examples/example_input/skill_relations.csv`（样见 `examples/example_output/skill_relations.csv_out/`） |
 | MCP 创建 | `tools/call` → `graph_create`，参数 `content` + `name` |
 | MCP 提交 | `tools/call` → `graph_commit`，参数 `id` + `message` |

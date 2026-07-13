@@ -1462,6 +1462,57 @@ static void testTableStoreAndBridge()
     ge::removeDirectory("test-table-store-tmp");
 }
 
+// 解析 example_input 夹具路径（支持从仓库根或 bin/ 运行）
+static std::string readExampleInput(const std::string& name)
+{
+    const std::string cands[] = {
+        "examples/example_input/" + name,
+        "../examples/example_input/" + name,
+        "../../examples/example_input/" + name,
+    };
+    for (const auto& p : cands) {
+        std::string s = ge::readFile(p);
+        if (!s.empty())
+            return s;
+    }
+    return {};
+}
+
+static void testTableFixtures()
+{
+    // enemy_sample：通用表列与枚举校验
+    std::string enemy_csv = readExampleInput("enemy_sample.csv");
+    CHECK(!enemy_csv.empty());
+    if (!enemy_csv.empty()) {
+        gt::Table enemy = gt::Table::fromCsv(enemy_csv);
+        CHECK(enemy.colIndex("编号") >= 0);
+        CHECK(enemy.colIndex("名称") >= 0);
+        CHECK(enemy.colIndex("层级") >= 0);
+        CHECK(enemy.rows.size() >= 4);
+
+        Json allowed = Json::obj();
+        Json vals    = Json::arr();
+        vals.push(Json("小怪"));
+        vals.push(Json("Boss"));
+        allowed.set("层级", vals);
+        gt::Table report = gtb::tableCheck(enemy, allowed, nullptr, false);
+        CHECK(report.rows.size() == 0);
+    }
+
+    // skill_relations：边表可投影为 flowchart
+    std::string skill_csv = readExampleInput("skill_relations.csv");
+    CHECK(!skill_csv.empty());
+    if (!skill_csv.empty()) {
+        gt::Table skill = gt::Table::fromCsv(skill_csv);
+        Graph     g     = gtb::graphFromTable(skill);
+        CHECK(g.type == "flowchart");
+        CHECK(g.edges.size() == skill.rows.size());
+        CHECK(g.nodes.size() >= 2);
+        // 端点去重后节点数应不超过 2*边数，且不少于去重端点下界
+        CHECK(g.nodes.size() <= skill.rows.size() * 2);
+    }
+}
+
 static void testTableMcpTools()
 {
 #ifdef _WIN32
@@ -1612,6 +1663,112 @@ static void testTableMcpTools()
         CHECK(ge::readFile(p) == "hello-atomic-2");
     }
 
+    // table_import：同 id upsert 成功
+    {
+        Json imp = Json::obj();
+        imp.set("id", tid);
+        imp.set("content", "from,to,label\nX,Y,z\n");
+        imp.set("name", "edges-imported");
+        Json ir = runner.call("table_import", imp);
+        CHECK(!ir.boolean("isError", false));
+        Json ib =
+            Json::parse(ir.find("content")->a->at(0).str("text"), &err);
+        CHECK(ib.str("status") == "imported");
+        CHECK(ib.str("id") == tid);
+        CHECK((int)ib.num("version") >= 2);
+    }
+
+    // table_export：to=csv|model
+    {
+        Json ex = Json::obj();
+        ex.set("id", tid);
+        ex.set("to", "csv");
+        Json er = runner.call("table_export", ex);
+        CHECK(!er.boolean("isError", false));
+        std::string csv_out = er.find("content")->a->at(0).str("text");
+        CHECK(csv_out.find("from") != std::string::npos);
+        CHECK(csv_out.find("X") != std::string::npos);
+
+        ex.set("to", "model");
+        Json em = runner.call("table_export", ex);
+        CHECK(!em.boolean("isError", false));
+        Json model =
+            Json::parse(em.find("content")->a->at(0).str("text"), &err);
+        CHECK(err.empty());
+        CHECK(model.str("id") == tid);
+        CHECK(model.find("columns") != nullptr);
+    }
+
+    // table_align：主键补行
+    {
+        Json pCreate = Json::obj();
+        pCreate.set("content", "key,name\nA,alpha\nB,beta\nC,gamma\n");
+        pCreate.set("name", "align-primary");
+        Json pr = runner.call("table_create", pCreate);
+        CHECK(!pr.boolean("isError", false));
+        Json pb =
+            Json::parse(pr.find("content")->a->at(0).str("text"), &err);
+        std::string pid = pb.str("id");
+
+        Json tCreate = Json::obj();
+        tCreate.set("content", "key,extra\nA,keep\n");
+        tCreate.set("name", "align-target");
+        Json tr = runner.call("table_create", tCreate);
+        CHECK(!tr.boolean("isError", false));
+        Json tb =
+            Json::parse(tr.find("content")->a->at(0).str("text"), &err);
+        std::string tgt = tb.str("id");
+
+        Json al = Json::obj();
+        al.set("primary_id", pid);
+        al.set("target_id", tgt);
+        al.set("primary_key", "key");
+        al.set("target_key", "key");
+        Json ar = runner.call("table_align", al);
+        CHECK(!ar.boolean("isError", false));
+        Json ab =
+            Json::parse(ar.find("content")->a->at(0).str("text"), &err);
+        CHECK(ab.str("status") == "ok");
+        CHECK((int)ab.find("align")->num("added_rows") == 2);
+    }
+
+    // table_show：limit 截断
+    {
+        Json multi = Json::obj();
+        multi.set("content", "c\n1\n2\n3\n4\n5\n");
+        multi.set("name", "show-limit");
+        Json mr = runner.call("table_create", multi);
+        CHECK(!mr.boolean("isError", false));
+        Json mb =
+            Json::parse(mr.find("content")->a->at(0).str("text"), &err);
+        std::string mid = mb.str("id");
+
+        Json sh = Json::obj();
+        sh.set("id", mid);
+        sh.set("limit", 2);
+        Json sr = runner.call("table_show", sh);
+        CHECK(!sr.boolean("isError", false));
+        Json sb =
+            Json::parse(sr.find("content")->a->at(0).str("text"), &err);
+        CHECK(sb.boolean("truncated", false));
+        CHECK((int)sb.num("total_rows") == 5);
+        CHECK(sb.find("rows")->size() == 2);
+    }
+
+    // table_delete：无 force 失败，有 force 成功
+    {
+        Json del = Json::obj();
+        del.set("id", tid);
+        Json d1 = runner.call("table_delete", del);
+        CHECK(d1.boolean("isError", false));
+        del.set("force", true);
+        Json d2 = runner.call("table_delete", del);
+        CHECK(!d2.boolean("isError", false));
+        Json db =
+            Json::parse(d2.find("content")->a->at(0).str("text"), &err);
+        CHECK(db.str("status") == "deleted");
+    }
+
     ge::removeDirectory("test-table-mcp-tmp");
 }
 
@@ -1645,6 +1802,7 @@ int runAll()
     testMcpProtocol();
     testTableModel();
     testTableStoreAndBridge();
+    testTableFixtures();
     testTableMcpTools();
     testMcpExtended();
     testMcpToolsRemaining();

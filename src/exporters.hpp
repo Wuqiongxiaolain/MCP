@@ -1522,7 +1522,12 @@ inline std::string toMermaid(const Graph& g)
                                         for (auto& kv : *card.o) {
                                             if (kv.first == "id" || kv.first == "title") continue;
                                             if (!firstKv) os << ", ";
-                                            os << kv.first << ": '" << kv.second.s << "'";
+                                            os << kv.first << ": '";
+                                            if (kv.second.isStr()) os << kv.second.s;
+                                            else if (kv.second.isNum()) os << kv.second.as_num();
+                                            else if (kv.second.isBool()) os << (kv.second.b ? "true" : "false");
+                                            else os << kv.second.dump();
+                                            os << "'";
                                             firstKv = false;
                                         }
                                         os << " }";

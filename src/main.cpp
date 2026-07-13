@@ -866,7 +866,11 @@ int cmdTable(Args& a, gs::Store& store)
             usage("missing --file/--content");
             return 1;
         }
-        gt::Table t = gtx::parseTableContent(content, a.get("format", "csv"));
+        std::vector<std::string> warnings;
+        gt::Table t = gtx::parseTableContent(content, a.get("format", "csv"),
+                                             &warnings);
+        for (auto& w : warnings)
+            std::cerr << "warning: " << w << "\n";
         if (a.has("id"))
             t.id = a.get("id");
         if (a.has("name"))
@@ -913,12 +917,13 @@ int cmdTable(Args& a, gs::Store& store)
         }
         std::string to = a.get("to", "csv");
         std::string text;
-        if (to == "model")
-            text = t.toJson().dump(2);
-        else if (to == "xml")
-            text = gtx::toXml(t);
-        else
-            text = t.toCsv();
+        try {
+            text = gtx::exportTableText(t, to);
+        }
+        catch (const gt::TableError& e) {
+            std::cerr << "error: " << e.what() << "\n";
+            return 1;
+        }
         if (a.has("output")) {
             if (!ge::writeFile(a.get("output"), text)) {
                 std::cerr << "error: failed to write " << a.get("output")

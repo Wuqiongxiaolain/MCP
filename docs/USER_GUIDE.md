@@ -602,7 +602,7 @@ graphmcp table create --file examples/example_input/enemy_sample.xml --format xm
 graphmcp table export <table-id> --to xml -o enemies.xml
 ```
 
-方言要点：根属性可带 `id`/`name`/`hasHintRow`；`<columns>/<col>` 定列；`<row>` 用**子元素名或属性名**作列名填值；允许一层嵌套拍扁为 `父.子`；同名时子元素覆盖属性。
+方言要点：根属性可带 `id`/`name`/`hasHintRow`；`<columns>/<col>` 定列；`<row>` 用**子元素名或属性名**作列名填值；允许一层嵌套拍扁为 `父.子`（`toXml` 按父标签聚合写出）；同名时子元素覆盖属性。列名须可安全用作 XML 标签（禁止空白与 `<>/&"'=`），否则导入/导出拒绝；重复列名会去重并 warning。未知 `format`/`to` 会报错（不静默回退）。
 
 ```xml
 <table name="enemies" hasHintRow="false">

@@ -955,7 +955,7 @@ paths:
     post:
       operationId: table_diff
       summary: table_diff
-      description: "Diff two table versions, or latest vs provided CSV content."
+      description: "Diff two table versions, or latest vs provided table content (CSV / table XML / model)."
       requestBody:
         required: true
         content:
@@ -974,7 +974,10 @@ paths:
                   description: second version (0=latest)
                 content:
                   type: string
-                  description: optional CSV to diff against latest
+                  description: optional CSV / table XML / model JSON to diff against latest
+                format:
+                  type: string
+                  description: csv|xml|model for content (default csv)
               required:
                 - id
       responses:
@@ -1019,7 +1022,7 @@ paths:
     post:
       operationId: graph_from_table
       summary: graph_from_table
-      description: Build a graph from edge/hierarchy CSV columns (lossy; other columns ignored).
+      description: Build a graph from edge/hierarchy table columns (lossy; other columns ignored). content may be CSV / table XML / model.
       requestBody:
         required: true
         content:
@@ -1032,7 +1035,10 @@ paths:
                   description: source table id
                 content:
                   type: string
-                  description: optional CSV instead of table_id
+                  description: optional CSV / table XML / model JSON instead of table_id
+                format:
+                  type: string
+                  description: csv|xml|model for content (default csv)
                 from_col:
                   type: string
                   description: edge list from column

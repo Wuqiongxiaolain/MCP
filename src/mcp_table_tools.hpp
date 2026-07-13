@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <functional>
 #include <sstream>
+#include <vector>
 
 namespace tabletools {
 
@@ -66,8 +67,10 @@ inline void appendCompatWarning(Json& out, const std::string& msg)
 
 inline Json tableCreate(gts::TableStore& tables, const Json& a)
 {
+    std::vector<std::string> warnings;
     gt::Table t =
-        gtx::parseTableContent(a.str("content"), a.str("format", "csv"));
+        gtx::parseTableContent(a.str("content"), a.str("format", "csv"),
+                               &warnings);
     if (!a.str("id").empty())
         t.id = a.str("id");
     if (!a.str("name").empty())
@@ -105,13 +108,17 @@ inline Json tableCreate(gts::TableStore& tables, const Json& a)
             out,
             "GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT enabled; prefer force=true "
             "or table_import");
+    for (auto& w : warnings)
+        appendCompatWarning(out, w);
     return textContent(out.dump(2));
 }
 
 inline Json tableImport(gts::TableStore& tables, const Json& a)
 {
+    std::vector<std::string> warnings;
     gt::Table t =
-        gtx::parseTableContent(a.str("content"), a.str("format", "csv"));
+        gtx::parseTableContent(a.str("content"), a.str("format", "csv"),
+                               &warnings);
     if (!a.str("id").empty())
         t.id = a.str("id");
     if (!a.str("name").empty())
@@ -126,6 +133,8 @@ inline Json tableImport(gts::TableStore& tables, const Json& a)
     out.set("version", (double)v);
     out.set("columns", (double)t.columns.size());
     out.set("rows", (double)t.rows.size());
+    for (auto& w : warnings)
+        appendCompatWarning(out, w);
     return textContent(out.dump(2));
 }
 
@@ -137,12 +146,12 @@ inline Json tableExport(gts::TableStore& tables, const Json& a)
         return textContent(err, true);
     std::string to = a.str("to", "csv");
     std::string text;
-    if (to == "model")
-        text = t.toJson().dump(2);
-    else if (to == "xml")
-        text = gtx::toXml(t);
-    else
-        text = t.toCsv();
+    try {
+        text = gtx::exportTableText(t, to);
+    }
+    catch (const gt::TableError& e) {
+        return textContent(e.what(), true);
+    }
     std::string path = a.str("path");
     if (!path.empty()) {
         if (!ge::writeFile(path, text))

@@ -662,12 +662,17 @@ inline Json toolList()
         p.set("id", prop("string", "table id"));
         p.set("v1", prop("number", "first version (0=latest)"));
         p.set("v2", prop("number", "second version (0=latest)"));
-        p.set("content", prop("string", "optional CSV to diff against latest"));
+        p.set("content",
+              prop("string",
+                   "optional CSV / table XML / model JSON to diff against "
+                   "latest"));
+        p.set("format",
+              prop("string", "csv|xml|model for content (default csv)"));
         Json req = Json::arr();
         req.push(Json("id"));
         tools.push(toolDef(
             "table_diff",
-            "Diff two table versions, or latest vs provided CSV content.", p,
+            "Diff two table versions, or latest vs provided table content.", p,
             req));
     }
     {
@@ -696,7 +701,11 @@ inline Json toolList()
     {
         Json p = Json::obj();
         p.set("table_id", prop("string", "source table id"));
-        p.set("content", prop("string", "optional CSV instead of table_id"));
+        p.set("content",
+              prop("string",
+                   "optional CSV / table XML / model JSON instead of table_id"));
+        p.set("format",
+              prop("string", "csv|xml|model for content (default csv)"));
         p.set("from_col", prop("string", "edge list from column"));
         p.set("to_col", prop("string", "edge list to column"));
         p.set("label_col", prop("string", "optional label column"));
@@ -706,8 +715,8 @@ inline Json toolList()
         p.set("save", prop("boolean", "save graph (default true)"));
         tools.push(toolDef(
             "graph_from_table",
-            "Build a graph from edge/hierarchy CSV columns (lossy; other "
-            "columns ignored).",
+            "Build a graph from edge/hierarchy table columns (lossy; other "
+            "columns ignored). content may be CSV / table XML / model.",
             p, Json::arr()));
     }
     {

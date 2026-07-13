@@ -54,16 +54,30 @@ class TableStore {
         return j;
     }
 
-    void saveIndex(const Json& idx) const
-    { ge::writeFile(tablesRoot() + "/index.json", idx.dump(2)); }
+    bool saveIndex(const Json& idx) const
+    { return ge::writeFile(tablesRoot() + "/index.json", idx.dump(2)); }
+
+    bool exists(const std::string& id) const
+    {
+        if (!isValidTableId(id))
+            return false;
+        Json idx = loadIndex();
+        for (auto& item : *idx["tables"].a)
+            if (item.str("id") == id)
+                return true;
+        return false;
+    }
 
     // save: 写 latest + 新版本快照；返回版本号，失败返回 -1
-    int save(Table& t, const std::string& note = "")
+    int save(Table& t, const std::string& note = "", std::string* err = nullptr)
     {
         if (t.id.empty())
             t.id = gm::genId("t");
-        if (!isValidTableId(t.id))
+        if (!isValidTableId(t.id)) {
+            if (err)
+                *err = "invalid table id";
             return -1;
+        }
         if (t.name.empty())
             t.name = t.id;
         t.normalize();
@@ -84,16 +98,29 @@ class TableStore {
             version = (int)entry->num("versions") + 1;
 
         Json model = t.toJson();
-        ge::writeFile(dir + "/latest.json", model.dump(2));
+        if (!ge::writeFile(dir + "/latest.json", model.dump(2))) {
+            if (err)
+                *err = "failed to write latest.json";
+            return -1;
+        }
 
         Json snap = Json::obj();
         snap.set("version", version);
         snap.set("savedAt", gs::nowIso());
         snap.set("note", note);
         snap.set("model", model);
-        ge::writeFile(dir + "/versions/v" + std::to_string(version) + ".json",
-                      snap.dump(2));
-        ge::writeFile(dir + "/HEAD", std::to_string(version));
+        if (!ge::writeFile(dir + "/versions/v" + std::to_string(version) +
+                               ".json",
+                           snap.dump(2))) {
+            if (err)
+                *err = "failed to write version snapshot";
+            return -1;
+        }
+        if (!ge::writeFile(dir + "/HEAD", std::to_string(version))) {
+            if (err)
+                *err = "failed to write HEAD";
+            return -1;
+        }
 
         if (entry) {
             entry->set("name", t.name);
@@ -113,7 +140,11 @@ class TableStore {
             e.set("updatedAt", gs::nowIso());
             idx["tables"].push(e);
         }
-        saveIndex(idx);
+        if (!saveIndex(idx)) {
+            if (err)
+                *err = "failed to write tables index";
+            return -1;
+        }
         return version;
     }
 
@@ -235,7 +266,11 @@ class TableStore {
             if (item.str("id") != id)
                 neu.push(item);
         idx.set("tables", neu);
-        saveIndex(idx);
+        if (!saveIndex(idx)) {
+            if (err)
+                *err = "failed to write tables index";
+            return false;
+        }
         return true;
     }
 

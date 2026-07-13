@@ -5,7 +5,6 @@
 #include "table_model.hpp"
 #include <map>
 #include <set>
-#include <sstream>
 
 namespace gtb {
 
@@ -61,8 +60,10 @@ inline Table tableFromGraphSkeleton(const Graph& g, bool with_hint_row)
     }
     if (t.columns.empty())
         throw TableError("skeleton: no usable node labels");
-    if (with_hint_row)
+    if (with_hint_row) {
         t.appendRow(hints);
+        t.hasHintRow = true;
+    }
     return t;
 }
 
@@ -191,14 +192,24 @@ inline Graph graphFromTable(const Table&       t,
         return graphFromTableHierarchyMapped(
             t, id_col, label_col.empty() ? "label" : label_col, parent_col);
 
-    // 自动：复用 parseCSV（将表再序列化为 CSV）
-    try {
-        return gp::parseCSV(t.toCsv());
+    int cFrom =
+        t.colIndex("from") >= 0 ? t.colIndex("from") : t.colIndex("source");
+    int cTo = t.colIndex("to") >= 0 ? t.colIndex("to") : t.colIndex("target");
+    if (cFrom >= 0 && cTo >= 0) {
+        std::string fromName =
+            t.colIndex("from") >= 0 ? "from" : "source";
+        std::string toName = t.colIndex("to") >= 0 ? "to" : "target";
+        std::string lblName = t.colIndex("label") >= 0 ? "label" : "";
+        return graphFromTableMapped(t, fromName, toName, lblName);
     }
-    catch (const gp::ParseError& e) {
-        throw TableError(std::string("graph_from_table: ") + e.what() +
-                         "; provide from_col/to_col or id_col/parent_col");
+    if (t.colIndex("id") >= 0) {
+        std::string lbl = t.colIndex("label") >= 0 ? "label" : "";
+        std::string par = t.colIndex("parent") >= 0 ? "parent" : "";
+        return graphFromTableHierarchyMapped(t, "id", lbl, par);
     }
+    throw TableError("graph_from_table: table must contain edge columns "
+                     "(from/to or source/target) or hierarchy columns "
+                     "(id,label,parent); or provide explicit mapping");
 }
 
 // ---- table_align ----
@@ -254,7 +265,8 @@ inline Json tableAlign(const Table&       primary,
 // allowed: { "列名": ["v1","v2",...] } 或规则表（列 column / allowed，allowed 用 | 分隔）
 inline Table tableCheck(const Table&       target,
                         const Json&        allowedObj,
-                        const Table*       rulesTable = nullptr)
+                        const Table*       rulesTable = nullptr,
+                        bool               ignore_hint_row = false)
 {
     std::map<std::string, std::set<std::string>> allowed;
     if (allowedObj.isObj() && allowedObj.o) {
@@ -318,7 +330,10 @@ inline Table tableCheck(const Table&       target,
     Table report;
     report.name = "check_report";
     report.columns = {"row", "field", "actual", "expected", "suggestion"};
-    for (size_t r = 0; r < target.rows.size(); r++) {
+    size_t start_row = (ignore_hint_row && target.hasHintRow && !target.rows.empty())
+                           ? 1
+                           : 0;
+    for (size_t r = start_row; r < target.rows.size(); r++) {
         for (size_t c = 0; c < target.columns.size(); c++) {
             auto it = allowed.find(toLower(target.columns[c]));
             if (it == allowed.end() || it->second.empty())

@@ -1,6 +1,7 @@
 // table_model.hpp - 通用 CSV 记录表（与 Graph 并列的一等对象）
 // 权威交换格式为 CSV；仓库内以 JSON（columns + rows）持久化。
 #pragma once
+#include "csv_util.hpp"
 #include "model.hpp"
 #include <algorithm>
 #include <stdexcept>
@@ -18,69 +19,15 @@ struct TableError : std::runtime_error
     explicit TableError(const std::string& m) : std::runtime_error(m) {}
 };
 
-// splitCsvLine: 解析单行 CSV（双引号与 "" 转义）
-inline std::vector<std::string> splitCsvLine(const std::string& line)
-{
-    std::vector<std::string> out;
-    std::string              cur;
-    bool                     inQ = false;
-    for (size_t i = 0; i < line.size(); i++) {
-        char c = line[i];
-        if (inQ) {
-            if (c == '"') {
-                if (i + 1 < line.size() && line[i + 1] == '"') {
-                    cur += '"';
-                    i++;
-                }
-                else
-                    inQ = false;
-            }
-            else
-                cur += c;
-        }
-        else {
-            if (c == '"')
-                inQ = true;
-            else if (c == ',') {
-                out.push_back(trim(cur));
-                cur.clear();
-            }
-            else
-                cur += c;
-        }
-    }
-    out.push_back(trim(cur));
-    return out;
-}
-
-// escapeCsvField: 序列化单个字段（含逗号/引号/换行时加引号）
-inline std::string escapeCsvField(const std::string& s)
-{
-    bool need = false;
-    for (char c : s) {
-        if (c == ',' || c == '"' || c == '\n' || c == '\r') {
-            need = true;
-            break;
-        }
-    }
-    if (!need)
-        return s;
-    std::string out = "\"";
-    for (char c : s) {
-        if (c == '"')
-            out += "\"\"";
-        else
-            out += c;
-    }
-    out += "\"";
-    return out;
-}
+using gcsv::escapeCsvField;
+using gcsv::splitCsvLine;
 
 // Table: 通用记录矩阵（列名 + 矩形行）
 struct Table
 {
     std::string                            id;
     std::string                            name;
+    bool                                   hasHintRow = false;
     std::vector<std::string>               columns;
     std::vector<std::vector<std::string>>  rows;
 
@@ -226,7 +173,14 @@ struct Table
         if (lines.empty())
             throw TableError("empty csv input");
         Table t;
-        t.columns = splitCsvLine(lines[0]);
+        std::string header = lines[0];
+        // Excel“CSV UTF-8”常带 BOM，需剥离避免首列匹配失败
+        if (header.size() >= 3 && (unsigned char)header[0] == 0xEF &&
+            (unsigned char)header[1] == 0xBB &&
+            (unsigned char)header[2] == 0xBF) {
+            header = header.substr(3);
+        }
+        t.columns = splitCsvLine(header);
         if (t.columns.empty())
             throw TableError("csv has no columns");
         for (size_t li = 1; li < lines.size(); li++) {
@@ -243,6 +197,7 @@ struct Table
         Json j = Json::obj();
         j.set("id", id);
         j.set("name", name);
+        j.set("hasHintRow", hasHintRow);
         Json cols = Json::arr();
         for (auto& c : columns)
             cols.push(Json(c));
@@ -263,6 +218,7 @@ struct Table
         Table t;
         t.id   = j.str("id");
         t.name = j.str("name");
+        t.hasHintRow = j.boolean("hasHintRow", false);
         if (const Json* cols = j.find("columns")) {
             if (cols->isArr())
                 for (auto& c : *cols->a)

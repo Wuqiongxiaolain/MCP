@@ -5,6 +5,7 @@
 #include "csv_util.hpp"
 #include "model.hpp"
 #include <cctype>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <stdexcept>
@@ -142,14 +143,32 @@ inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines,
     g.type = "flowchart";
     std::vector<std::string>                                   groupStack;
     std::map<std::string, std::pair<std::string, std::string>> classDefs;
+    // pendingLinkStyles: 边可能尚未全部创建时先缓存，结束时按索引回写
+    std::vector<std::pair<size_t, std::string>> pendingLinkStyles;
     auto parseStyleColors =
         [](const std::string& s) -> std::pair<std::string, std::string> {
         std::string fill, stroke;
-        auto        extract = [&](const std::string& key) -> std::string {
+        // extract: 支持 #hex / 命名色，以及 rgb()/rgba()/hsl()/hsla() 括号值
+        auto extract = [&](const std::string& key) -> std::string {
             size_t p = s.find(key + ":");
             if (p == std::string::npos)
                 return "";
             p += key.size() + 1;
+            while (p < s.size() && (s[p] == ' ' || s[p] == '\t'))
+                p++;
+            auto startsFunc = [&](const char* name) {
+                size_t n = std::strlen(name);
+                return p + n <= s.size() && s.compare(p, n, name) == 0;
+            };
+            if (startsFunc("rgb(") || startsFunc("rgba(") ||
+                startsFunc("hsl(") || startsFunc("hsla(")) {
+                size_t open  = s.find('(', p);
+                size_t close = (open == std::string::npos) ?
+                                   std::string::npos :
+                                   s.find(')', open + 1);
+                if (close != std::string::npos)
+                    return s.substr(p, close - p + 1);
+            }
             size_t e = s.find_first_of(",; \t\r\n", p);
             if (e == std::string::npos)
                 return s.substr(p);
@@ -165,8 +184,23 @@ inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines,
         std::string line = trim(lines[li]);
         if (line.empty() || startsWith(line, "%%"))
             continue;
-        if (startsWith(line, "linkStyle"))
+        // linkStyle <index> stroke:#xxx[,...] — 按边索引写 strokeColor
+        if (startsWith(line, "linkStyle")) {
+            std::string rest = trim(line.substr(9));
+            size_t      i    = 0;
+            while (i < rest.size() &&
+                   isdigit((unsigned char)rest[i]))
+                i++;
+            if (i > 0) {
+                size_t      idx   = (size_t)std::strtoul(rest.substr(0, i).c_str(),
+                                                    nullptr, 10);
+                std::string style = trim(rest.substr(i));
+                auto        colors = parseStyleColors(style);
+                if (!colors.second.empty())
+                    pendingLinkStyles.push_back({idx, colors.second});
+            }
             continue;
+        }
         // classDef 定义：存储 className → 颜色对，后续 class 引用时应用
         if (startsWith(line, "classDef ")) {
             std::string rest = trim(line.substr(9));
@@ -291,6 +325,11 @@ inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines,
             g.addEdge(prev, id2, elabel, style, arrow);
             prev = id2;
         }
+    }
+    // 回写 linkStyle 缓存的边描边色
+    for (auto& ps : pendingLinkStyles) {
+        if (ps.first < g.edges.size())
+            g.edges[ps.first].strokeColor = ps.second;
     }
     return g;
 }
@@ -3150,7 +3189,10 @@ inline Graph parseDrawio(const std::string& text)
         n.h     = cell.h;
         if (!attrs.empty())
             n.attrs = attrs;
-        n.fillColor   = extractStyleVal(cell.style, "fillColor");
+        // group 的 fillColor=none 表示透明/默认，不写入字面量 "none"
+        n.fillColor = isGroup ? "" : extractStyleVal(cell.style, "fillColor");
+        if (n.fillColor == "none")
+            n.fillColor.clear();
         n.strokeColor = extractStyleVal(cell.style, "strokeColor");
         if (!cell.parent.empty() && cell.parent != "1" && cell.parent != "0")
             n.parent = cell.parent;
@@ -3235,6 +3277,13 @@ inline Graph parseExcalidraw(const std::string& text)
             n.y     = el.num("y");
             n.w     = el.num("width");
             n.h     = el.num("height");
+            // 结构化导入：读取填充/描边色（transparent/空视为默认）
+            n.fillColor = el.str("backgroundColor");
+            if (n.fillColor == "transparent" || n.fillColor == "none")
+                n.fillColor.clear();
+            n.strokeColor = el.str("strokeColor");
+            if (n.strokeColor == "transparent" || n.strokeColor == "none")
+                n.strokeColor.clear();
             g.nodes.push_back(n);
         }
         else if (ty == "arrow") {
@@ -3263,6 +3312,10 @@ inline Graph parseExcalidraw(const std::string& text)
                 else if (hasStart && !hasEnd)
                     std::swap(from, to);
                 g.addEdge(from, to, label, style, arrow);
+                std::string edgeStroke = el.str("strokeColor");
+                if (!edgeStroke.empty() && edgeStroke != "transparent" &&
+                    edgeStroke != "none")
+                    g.edges.back().strokeColor = edgeStroke;
             }
         }
     }

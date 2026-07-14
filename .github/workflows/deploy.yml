@@ -142,6 +142,44 @@ jobs:
       contents: write
 
     steps:
+      - name: 检出代码（读取 annotated tag message）
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+          fetch-tags: true
+
+      - name: 组装 Release 导语（tag message + 制品说明）
+        run: |
+          set -euo pipefail
+          NOTE_FILE=release-notes.md
+          : > "$NOTE_FILE"
+
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            # annotated tag：%(contents) = 主题 + 正文；轻量 tag 为空
+            git tag -l --format='%(contents)' "${{ github.ref_name }}" > "$NOTE_FILE"
+          fi
+
+          if [ ! -s "$NOTE_FILE" ]; then
+            printf '%s\n' \
+              "graphmcp ${{ github.ref_name }}" \
+              "" \
+              "（无 annotated tag message。发版请使用 git tag -a 并填写说明。）" \
+              > "$NOTE_FILE"
+          fi
+
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "制品由 CD 自动构建上传。"
+            echo "- Tag：\`${{ github.ref_name }}\`"
+            echo "- Commit：\`${{ github.sha }}\`"
+            echo "- 平台：Linux / Windows / macOS"
+            echo ""
+            echo "下方为 GitHub 自动生成的变更摘要与 Full Changelog 对比链接。"
+          } >> "$NOTE_FILE"
+
       - name: 下载全部平台制品
         uses: actions/download-artifact@v4
         with:
@@ -155,12 +193,8 @@ jobs:
           tag_name: ${{ github.ref_name }}
           target_commitish: ${{ github.sha }}
           name: graphmcp ${{ github.ref_name }}
+          # tag message（body_path）在前，自动 notes（含 Full Changelog）接在后面
           generate_release_notes: true
+          body_path: release-notes.md
           files: release-assets/*
           fail_on_unmatched_files: true
-          append_body: true
-          body: |
-            本次为 Tag 触发的多平台自动制品发布（CD）。
-            - 触发 Tag：`${{ github.ref_name }}`
-            - 提交：`${{ github.sha }}`
-            - 平台：Linux / Windows / macOS

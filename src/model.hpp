@@ -50,11 +50,11 @@ struct Graph
     std::string       type = "flowchart";
     std::vector<Node> nodes;
     std::vector<Edge> edges;
-    std::vector<Json> elements;  // 原始白板元素（类似 excalidraw）
-    Json files   = Json::obj();  // Excalidraw 顶层 files（image 附件）
-    bool laidOut = false;
-    int  edgeCounter_ = 0;       // 自增边 ID 计数器
-    int  nodeCounter_ = 0;       // 自增节点 ID 计数器
+    std::vector<Json> elements;       // 原始白板元素（类似 excalidraw）
+    Json files        = Json::obj();  // Excalidraw 顶层 files（image 附件）
+    bool laidOut      = false;
+    int  edgeCounter_ = 0;  // 自增边 ID 计数器
+    int  nodeCounter_ = 0;  // 自增节点 ID 计数器
 
     // 通过节点 id 查找可写节点指针；nid = node id
     Node* findNode(const std::string& nid)
@@ -174,10 +174,10 @@ struct Graph
     static Graph fromJson(const Json& j)
     {
         Graph g;
-        g.id      = j.str("id");
-        g.name    = j.str("name");
-        g.type    = j.str("type", "flowchart");
-        g.laidOut = j.boolean("laidOut", false);
+        g.id           = j.str("id");
+        g.name         = j.str("name");
+        g.type         = j.str("type", "flowchart");
+        g.laidOut      = j.boolean("laidOut", false);
         g.edgeCounter_ = (int)j.num("edgeCounter", 0);
         g.nodeCounter_ = (int)j.num("nodeCounter", 0);
         if (const Json* ns = j.find("nodes")) {
@@ -277,14 +277,15 @@ inline std::string genId(const std::string& prefix = "g")
 {
     static const char* al = "0123456789abcdefghijklmnopqrstuvwxyz";
     // 线程安全的随机引擎，以 time + rd 混合播种
-    static std::mt19937 rng([]() {
+    static std::mt19937                       rng([]() {
         std::random_device rd;
-        unsigned seed = (unsigned)time(nullptr);
-        for (int i = 0; i < 4; i++) seed ^= (unsigned)rd() << (i * 8);
+        unsigned           seed = (unsigned)time(nullptr);
+        for (int i = 0; i < 4; i++)
+            seed ^= (unsigned)rd() << (i * 8);
         return seed;
     }());
     static std::uniform_int_distribution<int> dist(0, 35);
-    unsigned long long v  = (unsigned long long)time(nullptr);
+    unsigned long long v = (unsigned long long)time(nullptr);
     std::string        s;
     while (v) {
         s += al[v % 36];

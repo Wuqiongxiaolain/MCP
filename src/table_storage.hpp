@@ -29,12 +29,14 @@ class TableStore {
         gs::makeDir(tablesRoot());
     }
 
-    const std::string& root() const { return root_; }
+    const std::string& root() const
+    { return root_; }
 
     static bool isValidTableId(const std::string& id)
     { return gv::isValidId(id); }
 
-    std::string tablesRoot() const { return root_ + "/tables"; }
+    std::string tablesRoot() const
+    { return root_ + "/tables"; }
 
     Json loadIndex() const
     {
@@ -225,8 +227,8 @@ class TableStore {
             const Json* m = j.find("model");
             if (m) {
                 e.set("columns",
-                      (double)(m->find("columns") ? m->find("columns")->size()
-                                                  : 0));
+                      (double)(m->find("columns") ? m->find("columns")->size() :
+                                                    0));
                 e.set("rows",
                       (double)(m->find("rows") ? m->find("rows")->size() : 0));
             }

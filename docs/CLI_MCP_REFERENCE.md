@@ -1,6 +1,6 @@
 # CLI & MCP 指令参考
 
-> latest update: v0.1.1, 2026-07-10
+> latest update: v0.1.1, 2026-07-14
 
 > 命令行与 MCP 工具速查（版本以根目录 VERSION 为准）  
 > 操作教程与场景说明见 [USER_GUIDE.md](USER_GUIDE.md)。
@@ -163,7 +163,7 @@
 
 ---
 
-## 三、MCP 工具（39 个）
+## 三、MCP 工具（46 个）
 
 参数与 CLI 对应；通过 `tools/call` 调用。
 
@@ -188,6 +188,7 @@
 | `graph_history` | 版本历史 | `id` |
 | `graph_diff` | 两版本对比 | `id`, `v1`, `v2` |
 | `graph_status` | 工作树状态 | `id` |
+| `graph_property` | 读写图级 properties（结构化 Mermaid 扩展数据） | `id`, `action` |
 
 ### 图编辑（Draft）
 

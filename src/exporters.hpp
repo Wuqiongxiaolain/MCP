@@ -1992,35 +1992,7 @@ inline std::string toMermaid(const Graph& g)
         return os.str();
     }
     // flowchart / architecture / orgchart / whiteboard 统一导出为 flowchart TD
-    // 输出颜色 classDef 和 style 指令（保留模型中存储的颜色信息）
-    {
-        std::map<std::string, int> colorClass;  // "fill:stroke" → classIdx
-        int                        classIdx = 0;
-        for (auto& n : g.nodes) {
-            if (n.fillColor.empty() && n.strokeColor.empty())
-                continue;
-            std::string key = n.fillColor + ":" + n.strokeColor;
-            if (!colorClass.count(key)) {
-                colorClass[key] = ++classIdx;
-                os << "classDef c" << classIdx << " ";
-                if (!n.fillColor.empty())
-                    os << "fill:" << n.fillColor;
-                if (!n.strokeColor.empty()) {
-                    if (!n.fillColor.empty())
-                        os << ",";
-                    os << "stroke:" << n.strokeColor;
-                }
-                os << "\n";
-            }
-        }
-        for (auto& n : g.nodes) {
-            if (n.fillColor.empty() && n.strokeColor.empty())
-                continue;
-            std::string key = n.fillColor + ":" + n.strokeColor;
-            os << "class " << sanitizeMermaidId(n.id) << " c" << colorClass[key]
-               << "\n";
-        }
-    }
+    // 顺序：图声明 → 节点/边 → classDef/class/linkStyle（保证再导入可被解析）
     os << "flowchart TD\n";
     std::map<std::string, std::vector<const Node*>> byGroup;
     for (auto& n : g.nodes) {
@@ -2072,7 +2044,6 @@ inline std::string toMermaid(const Graph& g)
         for (auto* n : kv.second)
             emitNode(n, 4);
     }
-    int ei = 0;
     for (auto& e : g.edges) {
         os << "    " << sanitizeMermaidId(e.from);
         if (e.style == "dashed")
@@ -2088,14 +2059,41 @@ inline std::string toMermaid(const Graph& g)
         if (!e.label.empty())
             os << "|" << e.label << "|";
         os << " " << sanitizeMermaidId(e.to) << "\n";
-        ++ei;
+    }
+    // 输出节点颜色 classDef / class（必须在 flowchart 声明之后）
+    {
+        std::map<std::string, int> colorClass;  // "fill:stroke" → classIdx
+        int                        classIdx = 0;
+        for (auto& n : g.nodes) {
+            if (n.fillColor.empty() && n.strokeColor.empty())
+                continue;
+            std::string key = n.fillColor + ":" + n.strokeColor;
+            if (!colorClass.count(key)) {
+                colorClass[key] = ++classIdx;
+                os << "classDef c" << classIdx << " ";
+                if (!n.fillColor.empty())
+                    os << "fill:" << n.fillColor;
+                if (!n.strokeColor.empty()) {
+                    if (!n.fillColor.empty())
+                        os << ",";
+                    os << "stroke:" << n.strokeColor;
+                }
+                os << "\n";
+            }
+        }
+        for (auto& n : g.nodes) {
+            if (n.fillColor.empty() && n.strokeColor.empty())
+                continue;
+            std::string key = n.fillColor + ":" + n.strokeColor;
+            os << "class " << sanitizeMermaidId(n.id) << " c" << colorClass[key]
+               << "\n";
+        }
     }
     // 输出边的颜色（Mermaid linkStyle 按 0 起编号）
-    ei = 0;
-    for (auto& e : g.edges) {
-        if (!e.strokeColor.empty())
-            os << "linkStyle " << ei << " stroke:" << e.strokeColor << "\n";
-        ++ei;
+    for (size_t ei = 0; ei < g.edges.size(); ++ei) {
+        if (!g.edges[ei].strokeColor.empty())
+            os << "linkStyle " << ei << " stroke:" << g.edges[ei].strokeColor
+               << "\n";
     }
     return os.str();
 }
@@ -2120,9 +2118,15 @@ inline std::string drawioStyle(const Node& n)
                std::string(n.shape == "stadium" ? "50" : "10") + ";" + base;
     if (n.shape == "hexagon")
         return "shape=hexagon;" + base;
-    if (n.shape == "group")
-        return "rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor="
-               "none;dashed=1;";
+    if (n.shape == "group") {
+        // group 固定透明填充 + 虚线；自定义描边通过 extra 拼接
+        std::string gs =
+            "rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor="
+            "none;dashed=1;";
+        if (!n.strokeColor.empty())
+            gs += "strokeColor=" + n.strokeColor + ";";
+        return gs;
+    }
     if (!n.attrs.empty())
         return "shape=table;startSize=30;container=1;collapsible=0;" + base;
     return "rounded=0;" + base;
@@ -2465,7 +2469,7 @@ inline std::string toSVG(Graph g)
         clip(bx, by, b->w, b->h, ax, ay, x2, y2);
         os << "  <line x1=\"" << x1 << "\" y1=\"" << y1 << "\" x2=\"" << x2
            << "\" y2=\"" << y2 << "\" stroke=\""
-           << (e.strokeColor.empty() ? "#333" : e.strokeColor)
+           << xmlEscape(e.strokeColor.empty() ? "#333" : e.strokeColor)
            << "\" stroke-width=\"" << (e.style == "thick" ? 3 : 1.5) << "\"";
         if (e.style == "dashed")
             os << " stroke-dasharray=\"6,4\"";
@@ -2482,11 +2486,12 @@ inline std::string toSVG(Graph g)
     }
     // 再绘制节点
     for (auto& n : g.nodes) {
+        // fc/sc: 空串回退默认色，写入属性前统一 xmlEscape
         auto fc = [&](const char* def) {
-            return n.fillColor.empty() ? def : n.fillColor;
+            return xmlEscape(n.fillColor.empty() ? def : n.fillColor);
         };
         auto sc = [&](const char* def) {
-            return n.strokeColor.empty() ? def : n.strokeColor;
+            return xmlEscape(n.strokeColor.empty() ? def : n.strokeColor);
         };
         if (n.shape == "group") {
             os << "  <rect x=\"" << n.x << "\" y=\"" << n.y << "\" width=\""

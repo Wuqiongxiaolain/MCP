@@ -190,7 +190,8 @@ int usage(const std::string& hint = "", int exitCode = 1)
            "  validate  {graph|input}\n"
            "  store     {list|show|load|delete}\n"
            "  table     {create|import|export|list|show|update|delete|history|"
-           "rollback|from-graph|from-table|align|check}\n"
+           "rollback|from-graph|from-table|align|check|rules-from-graph|"
+           "fix-enums|derive|transform-column|sample-rows|propose-rows}\n"
            "  version   {status|draft|stage|commit|log|show|diff|checkout}\n"
            "  graph     {show|update|insert|delete}\n"
            "  cursor    {open|get|next|prev|close}\n"
@@ -1021,6 +1022,11 @@ int cmdTable(Args& a, gs::Store& store)
                 t.setCell((size_t)row, (size_t)ci, val);
             }
         }
+        if (a.has("dry-run")) {
+            std::cout << "dry_run table " << t.id << " cols=" << t.columns.size()
+                      << " rows=" << t.rows.size() << "\n";
+            return 0;
+        }
         std::string err2;
         int v = tables.save(t, a.get("note", "updated via CLI"), &err2);
         if (v < 0) {
@@ -1173,6 +1179,261 @@ int cmdTable(Args& a, gs::Store& store)
             }
             std::cout << "# saved report " << report.id << " v" << v << "\n";
         }
+        return 0;
+    }
+
+    if (a.subcommand == "rules-from-graph") {
+        std::string gid = a.get("graph-id");
+        if (gid.empty())
+            gid = a.has("graph") ? a.get("graph") : id;
+        if (gid.empty()) {
+            usage("table rules-from-graph --graph-id <id>");
+            return 1;
+        }
+        Graph       g;
+        std::string err;
+        if (!store.load(gid, g, 0, &err)) {
+            std::cerr << "error: " << err << "\n";
+            return 5;
+        }
+        gt::Table t = gtb::tableRulesFromGraph(g);
+        if (a.has("name"))
+            t.name = a.get("name");
+        if (a.has("id"))
+            t.id = a.get("id");
+        std::string saveErr;
+        int         v = tables.save(t, "rules from graph " + gid, &saveErr);
+        if (v < 0) {
+            std::cerr << "error: " << (saveErr.empty() ? "save failed" : saveErr)
+                      << "\n";
+            return 5;
+        }
+        std::cout << "table " << t.id << " v" << v << "\n";
+        std::cout << t.toCsv();
+        return 0;
+    }
+
+    if (a.subcommand == "fix-enums") {
+        if (id.empty()) {
+            usage("table fix-enums <id> --rules-id ...");
+            return 1;
+        }
+        gt::Table   target;
+        std::string err;
+        if (!tables.load(id, target, 0, &err)) {
+            std::cerr << "error: " << err << "\n";
+            return 5;
+        }
+        Json allowed;
+        if (a.has("allowed")) {
+            std::string perr;
+            allowed = Json::parse(a.get("allowed"), &perr);
+            if (!perr.empty()) {
+                std::cerr << "error: " << perr << "\n";
+                return 1;
+            }
+        }
+        gt::Table        rules;
+        const gt::Table* rp = nullptr;
+        std::string      rulesId = a.get("rules-id");
+        if (rulesId.empty())
+            rulesId = a.get("rules");
+        if (!rulesId.empty()) {
+            if (!tables.load(rulesId, rules, 0, &err)) {
+                std::cerr << "error: " << err << "\n";
+                return 5;
+            }
+            rp = &rules;
+        }
+        bool ignore_hint_row = target.hasHintRow;
+        if (a.has("ignore-hint-row"))
+            ignore_hint_row = ge::parseTruthy(a.get("ignore-hint-row", "true"));
+        gtb::FixEnumsResult fix =
+            gtb::tableFixEnums(target, allowed, rp, ignore_hint_row);
+        std::string saveErr;
+        int         v = tables.save(target, "fix enums via CLI", &saveErr);
+        if (v < 0) {
+            std::cerr << "error: " << (saveErr.empty() ? "save failed" : saveErr)
+                      << "\n";
+            return 5;
+        }
+        std::cout << "fixed=" << fix.fixed_count
+                  << " skipped=" << fix.skipped_count << " table " << target.id
+                  << " v" << v << "\n";
+        if (fix.skipped_count > 0) {
+            int sv = tables.save(fix.skipped, "fix enums skipped", &saveErr);
+            if (sv >= 0)
+                std::cout << "skipped_report " << fix.skipped.id << " v" << sv
+                          << "\n";
+            std::cout << fix.skipped.toCsv();
+        }
+        return 0;
+    }
+
+    if (a.subcommand == "derive") {
+        std::string sid = a.get("source-id");
+        if (sid.empty())
+            sid = id;
+        if (sid.empty()) {
+            usage("table derive --source-id <id> --mode animation_checklist");
+            return 1;
+        }
+        gt::Table   src;
+        std::string err;
+        if (!tables.load(sid, src, 0, &err)) {
+            std::cerr << "error: " << err << "\n";
+            return 5;
+        }
+        try {
+            gt::Table t =
+                gtb::tableDerive(src, a.get("mode", "animation_checklist"));
+            if (a.has("name"))
+                t.name = a.get("name");
+            std::string saveErr;
+            int v = tables.save(t, "derive via CLI", &saveErr);
+            if (v < 0) {
+                std::cerr << "error: "
+                          << (saveErr.empty() ? "save failed" : saveErr) << "\n";
+                return 5;
+            }
+            std::cout << "table " << t.id << " v" << v << "\n";
+            std::cout << t.toCsv();
+        }
+        catch (const gt::TableError& e) {
+            std::cerr << "error: " << e.what() << "\n";
+            return 1;
+        }
+        return 0;
+    }
+
+    if (a.subcommand == "transform-column") {
+        if (id.empty()) {
+            usage("table transform-column <id> --source-column ... "
+                  "--target-column ... --transform slug");
+            return 1;
+        }
+        gt::Table   t;
+        std::string err;
+        if (!tables.load(id, t, 0, &err)) {
+            std::cerr << "error: " << err << "\n";
+            return 5;
+        }
+        std::string transform = a.get("transform", "slug");
+        if (gm::toLower(transform) != "slug") {
+            std::cerr << "error: unsupported transform\n";
+            return 1;
+        }
+        try {
+            gtb::tableTransformColumnSlug(t, a.get("source-column"),
+                                          a.get("target-column"));
+        }
+        catch (const gt::TableError& e) {
+            std::cerr << "error: " << e.what() << "\n";
+            return 1;
+        }
+        std::string saveErr;
+        int         v = tables.save(t, "transform column", &saveErr);
+        if (v < 0) {
+            std::cerr << "error: " << (saveErr.empty() ? "save failed" : saveErr)
+                      << "\n";
+            return 5;
+        }
+        std::cout << "table " << t.id << " v" << v << "\n";
+        return 0;
+    }
+
+    if (a.subcommand == "sample-rows") {
+        if (id.empty()) {
+            usage("table sample-rows <id> --count 1 [--rules-id ...]");
+            return 1;
+        }
+        gt::Table   t;
+        std::string err;
+        if (!tables.load(id, t, 0, &err)) {
+            std::cerr << "error: " << err << "\n";
+            return 5;
+        }
+        gt::Table        rules;
+        const gt::Table* rp = nullptr;
+        std::string      rulesId = a.get("rules-id");
+        if (rulesId.empty())
+            rulesId = a.get("rules");
+        if (!rulesId.empty()) {
+            if (!tables.load(rulesId, rules, 0, &err)) {
+                std::cerr << "error: " << err << "\n";
+                return 5;
+            }
+            rp = &rules;
+        }
+        int count = atoi(a.get("count", "1").c_str());
+        try {
+            gtb::tableSampleRows(t, count, rp);
+        }
+        catch (const gt::TableError& e) {
+            std::cerr << "error: " << e.what() << "\n";
+            return 1;
+        }
+        std::string saveErr;
+        int         v = tables.save(t, "sample rows", &saveErr);
+        if (v < 0) {
+            std::cerr << "error: " << (saveErr.empty() ? "save failed" : saveErr)
+                      << "\n";
+            return 5;
+        }
+        std::cout << "placeholder=true table " << t.id << " v" << v
+                  << " rows=" << t.rows.size() << "\n";
+        return 0;
+    }
+
+    if (a.subcommand == "propose-rows") {
+        if (id.empty()) {
+            usage("table propose-rows <id> --rows '[{...}]'");
+            return 1;
+        }
+        gt::Table   t;
+        std::string err;
+        if (!tables.load(id, t, 0, &err)) {
+            std::cerr << "error: " << err << "\n";
+            return 5;
+        }
+        if (!a.has("rows")) {
+            usage("table propose-rows <id> --rows '[{...}]'");
+            return 1;
+        }
+        std::string perr;
+        Json        rows = Json::parse(a.get("rows"), &perr);
+        if (!perr.empty()) {
+            std::cerr << "error: " << perr << "\n";
+            return 1;
+        }
+        gt::Table        rules;
+        const gt::Table* rp = nullptr;
+        std::string      rulesId = a.get("rules-id");
+        if (rulesId.empty())
+            rulesId = a.get("rules");
+        if (!rulesId.empty()) {
+            if (!tables.load(rulesId, rules, 0, &err)) {
+                std::cerr << "error: " << err << "\n";
+                return 5;
+            }
+            rp = &rules;
+        }
+        try {
+            gtb::tableProposeRows(t, rows, rp);
+        }
+        catch (const gt::TableError& e) {
+            std::cerr << "error: " << e.what() << "\n";
+            return 1;
+        }
+        std::string saveErr;
+        int         v = tables.save(t, "propose rows", &saveErr);
+        if (v < 0) {
+            std::cerr << "error: " << (saveErr.empty() ? "save failed" : saveErr)
+                      << "\n";
+            return 5;
+        }
+        std::cout << "table " << t.id << " v" << v << " rows=" << t.rows.size()
+                  << "\n";
         return 0;
     }
 

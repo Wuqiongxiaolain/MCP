@@ -3,8 +3,10 @@
 #include "model.hpp"
 #include "parsers.hpp"
 #include "table_model.hpp"
+#include <cctype>
 #include <map>
 #include <set>
+#include <sstream>
 
 namespace gtb {
 
@@ -18,30 +20,61 @@ using gt::TableError;
 
 // ---- table_from_graph ----
 
-// skeleton: 用叶子节点 label 作表头；可选第二行写子节点文案作说明
+// skeleton: 优先用「子节点全为叶子」的父节点作列，子节点文案作枚举说明；
+// 若无此类父节点则回退为叶子作列（无枚举）
 inline Table tableFromGraphSkeleton(const Graph& g, bool with_hint_row)
 {
     Table t;
     t.name = g.name.empty() ? g.id : g.name;
-    std::set<std::string> parents;
-    for (auto& n : g.nodes)
-        if (!n.parent.empty())
-            parents.insert(n.parent);
-    std::vector<const Node*> leaves;
+
+    std::map<std::string, std::vector<const Node*>> kids;
+    std::set<std::string>                          hasKids;
     for (auto& n : g.nodes) {
         if (n.shape == "group")
             continue;
-        if (!parents.count(n.id))
-            leaves.push_back(&n);
+        if (n.parent.empty())
+            continue;
+        kids[n.parent].push_back(&n);
+        hasKids.insert(n.parent);
     }
-    if (leaves.empty()) {
-        for (auto& n : g.nodes)
-            if (n.shape != "group")
-                leaves.push_back(&n);
+
+    // 列候选：至少有一个子节点，且所有子节点自身不再有子节点
+    std::vector<const Node*> columns;
+    for (auto& n : g.nodes) {
+        if (n.shape == "group")
+            continue;
+        auto it = kids.find(n.id);
+        if (it == kids.end() || it->second.empty())
+            continue;
+        bool all_leaves = true;
+        for (auto* c : it->second) {
+            if (hasKids.count(c->id)) {
+                all_leaves = false;
+                break;
+            }
+        }
+        if (all_leaves)
+            columns.push_back(&n);
     }
+
+    // 回退：无枚举父节点时，用叶子 label 作列
+    if (columns.empty()) {
+        for (auto& n : g.nodes) {
+            if (n.shape == "group")
+                continue;
+            if (!hasKids.count(n.id))
+                columns.push_back(&n);
+        }
+        if (columns.empty()) {
+            for (auto& n : g.nodes)
+                if (n.shape != "group")
+                    columns.push_back(&n);
+        }
+    }
+
     std::set<std::string>    seen;
     std::vector<std::string> hints;
-    for (auto* n : leaves) {
+    for (auto* n : columns) {
         std::string col = n->label.empty() ? n->id : n->label;
         std::string key = toLower(col);
         if (seen.count(key))
@@ -49,12 +82,13 @@ inline Table tableFromGraphSkeleton(const Graph& g, bool with_hint_row)
         seen.insert(key);
         t.columns.push_back(col);
         std::string hint;
-        for (auto& c : g.nodes) {
-            if (c.parent != n->id)
-                continue;
-            if (!hint.empty())
-                hint += "|";
-            hint += c.label.empty() ? c.id : c.label;
+        auto        it = kids.find(n->id);
+        if (it != kids.end()) {
+            for (auto* c : it->second) {
+                if (!hint.empty())
+                    hint += "|";
+                hint += c->label.empty() ? c->id : c->label;
+            }
         }
         hints.push_back(hint);
     }
@@ -356,6 +390,289 @@ inline Table tableCheck(const Table&       target,
         }
     }
     return report;
+}
+
+// ---- table_rules_from_graph ----
+
+// tableRulesFromGraph: 叶子节点→column，子节点文案→allowed|hint（与 skeleton 启发式一致）
+inline Table tableRulesFromGraph(const Graph& g)
+{
+    Table skel = tableFromGraphSkeleton(g, true);
+    Table rules;
+    rules.name = (g.name.empty() ? g.id : g.name) + "-rules";
+    rules.columns = {"column", "allowed", "hint"};
+    if (skel.hasHintRow && !skel.rows.empty()) {
+        for (size_t c = 0; c < skel.columns.size(); c++) {
+            std::string allowed = skel.cell(0, c);
+            rules.appendRow({skel.columns[c], allowed, allowed});
+        }
+    }
+    else {
+        for (auto& col : skel.columns)
+            rules.appendRow({col, "", ""});
+    }
+    if (rules.rows.empty())
+        throw TableError("table_rules_from_graph: no columns produced");
+    return rules;
+}
+
+// ---- table_fix_enums ----
+
+// FixEnumsResult: 自动修复结果（跳过清单 + 计数）
+struct FixEnumsResult
+{
+    Table skipped;
+    int   fixed_count   = 0;
+    int   skipped_count = 0;
+};
+
+// tableFixEnums: 按 tableCheck 报告写回 suggestion；空 suggestion 记入 skipped
+inline FixEnumsResult tableFixEnums(Table&       target,
+                                    const Json&  allowedObj,
+                                    const Table* rulesTable,
+                                    bool         ignore_hint_row)
+{
+    Table report =
+        tableCheck(target, allowedObj, rulesTable, ignore_hint_row);
+    FixEnumsResult out;
+    out.skipped.name = "fix_enums_skipped";
+    out.skipped.columns = {"row",    "field",      "actual",
+                           "expected", "suggestion", "reason"};
+    for (size_t i = 0; i < report.rows.size(); i++) {
+        std::string rowStr = report.cell(i, 0);
+        std::string field  = report.cell(i, 1);
+        std::string actual = report.cell(i, 2);
+        std::string expect = report.cell(i, 3);
+        std::string sugg   = report.cell(i, 4);
+        if (sugg.empty()) {
+            out.skipped.appendRow(
+                {rowStr, field, actual, expect, sugg, "empty_suggestion"});
+            out.skipped_count++;
+            continue;
+        }
+        int row = 0;
+        try {
+            row = std::stoi(rowStr) - 1;
+        }
+        catch (...) {
+            out.skipped.appendRow(
+                {rowStr, field, actual, expect, sugg, "bad_row_index"});
+            out.skipped_count++;
+            continue;
+        }
+        int col = target.colIndex(field);
+        if (row < 0 || col < 0) {
+            out.skipped.appendRow(
+                {rowStr, field, actual, expect, sugg, "row_or_field_missing"});
+            out.skipped_count++;
+            continue;
+        }
+        target.setCell((size_t)row, (size_t)col, sugg);
+        out.fixed_count++;
+    }
+    return out;
+}
+
+// ---- table_derive ----
+
+// tableDeriveAnimationChecklist: 列名含「动画」且值为 √ → 清单行
+inline Table tableDeriveAnimationChecklist(const Table& src)
+{
+    Table out;
+    out.name = (src.name.empty() ? src.id : src.name) + "-anim-checklist";
+    out.columns = {"编号", "名称", "动画字段", "需求"};
+    int idCol   = src.colIndex("编号");
+    int nameCol = src.colIndex("名称");
+    size_t start =
+        (src.hasHintRow && !src.rows.empty()) ? (size_t)1 : (size_t)0;
+    for (size_t r = start; r < src.rows.size(); r++) {
+        std::string id   = idCol >= 0 ? src.cell(r, (size_t)idCol) : "";
+        std::string name = nameCol >= 0 ? src.cell(r, (size_t)nameCol) : "";
+        for (size_t c = 0; c < src.columns.size(); c++) {
+            const std::string& col = src.columns[c];
+            if (col.find("动画") == std::string::npos)
+                continue;
+            std::string val = trim(src.cell(r, c));
+            if (val != "√")
+                continue;
+            out.appendRow({id, name, col, val});
+        }
+    }
+    return out;
+}
+
+// tableDerive: 按 mode 派生新表
+inline Table tableDerive(const Table& src, const std::string& mode)
+{
+    std::string m = toLower(mode);
+    if (m == "animation_checklist")
+        return tableDeriveAnimationChecklist(src);
+    throw TableError(
+        "unknown table_derive mode (supported: animation_checklist)");
+}
+
+// ---- table_transform_column ----
+
+// slugify: 确定性稳定键（ASCII）；空则 col_<index>
+inline std::string slugify(const std::string& raw, size_t fallback_index)
+{
+    std::string s = trim(raw);
+    std::string out;
+    out.reserve(s.size());
+    bool prevUnderscore = false;
+    for (unsigned char ch : s) {
+        if (std::isspace(ch)) {
+            if (!prevUnderscore && !out.empty()) {
+                out.push_back('_');
+                prevUnderscore = true;
+            }
+            continue;
+        }
+        if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
+            (ch >= '0' && ch <= '9') || ch == '_') {
+            out.push_back((char)ch);
+            prevUnderscore = (ch == '_');
+            continue;
+        }
+        // 非 ASCII / 其它符号跳过
+    }
+    while (!out.empty() && out.back() == '_')
+        out.pop_back();
+    if (out.empty())
+        return "col_" + std::to_string(fallback_index);
+    return out;
+}
+
+// tableTransformColumnSlug: source→target；target 不存在则添加
+inline void tableTransformColumnSlug(Table&             t,
+                                     const std::string& source_column,
+                                     const std::string& target_column)
+{
+    int si = t.colIndex(source_column);
+    if (si < 0)
+        throw TableError("source column not found: " + source_column);
+    if (t.colIndex(target_column) < 0)
+        t.addColumn(target_column);
+    int ti = t.colIndex(target_column);
+    for (size_t r = 0; r < t.rows.size(); r++)
+        t.setCell(r, (size_t)ti, slugify(t.cell(r, (size_t)si), r));
+}
+
+// ---- table_sample_rows / propose helpers ----
+
+// firstAllowedFromPipe: "a|b|c" → "a"
+inline std::string firstAllowedFromPipe(const std::string& all)
+{
+    size_t p = all.find('|');
+    if (p == std::string::npos)
+        return trim(all);
+    return trim(all.substr(0, p));
+}
+
+// loadAllowedMapFromRules: 规则表 → 列名小写 → allowed 原文（| 分隔）
+inline std::map<std::string, std::string> loadAllowedMapFromRules(
+    const Table& rules)
+{
+    std::map<std::string, std::string> m;
+    int cCol = rules.colIndex("column");
+    if (cCol < 0)
+        cCol = rules.colIndex("field");
+    int cAll = rules.colIndex("allowed");
+    if (cCol < 0 || cAll < 0)
+        return m;
+    for (size_t r = 0; r < rules.rows.size(); r++) {
+        std::string col = rules.cell(r, (size_t)cCol);
+        std::string all = rules.cell(r, (size_t)cAll);
+        if (!col.empty())
+            m[toLower(col)] = all;
+    }
+    return m;
+}
+
+// tableSampleRows: 追加 count 行占位样例（枚举首值 / 动画默认 x / 文本 TODO）
+inline void tableSampleRows(Table&             t,
+                            int                count,
+                            const Table*       rulesTable)
+{
+    if (count <= 0)
+        throw TableError("table_sample_rows: count must be > 0");
+    std::map<std::string, std::string> allowed;
+    if (rulesTable)
+        allowed = loadAllowedMapFromRules(*rulesTable);
+    else if (t.hasHintRow && !t.rows.empty()) {
+        for (size_t c = 0; c < t.columns.size(); c++)
+            allowed[toLower(t.columns[c])] = t.cell(0, c);
+    }
+    for (int n = 0; n < count; n++) {
+        std::vector<std::string> row(t.columns.size(), "");
+        for (size_t c = 0; c < t.columns.size(); c++) {
+            auto it = allowed.find(toLower(t.columns[c]));
+            if (it != allowed.end() && !it->second.empty()) {
+                row[c] = firstAllowedFromPipe(it->second);
+                continue;
+            }
+            if (t.columns[c].find("动画") != std::string::npos) {
+                row[c] = "x";
+                continue;
+            }
+            row[c] = "TODO";
+        }
+        t.appendRow(row);
+    }
+}
+
+// tableProposeRows: 对象行写入；可选 rules 枚举校验（非法整批拒绝）
+inline void tableProposeRows(Table& t, const Json& rowsArr, const Table* rulesTable)
+{
+    if (!rowsArr.isArr())
+        throw TableError("table_propose_rows: rows must be a JSON array");
+    std::map<std::string, std::set<std::string>> allowed;
+    if (rulesTable) {
+        auto raw = loadAllowedMapFromRules(*rulesTable);
+        for (auto& kv : raw) {
+            std::set<std::string> vals;
+            std::string           s     = kv.second;
+            size_t                start = 0;
+            while (start <= s.size()) {
+                size_t p = s.find('|', start);
+                if (p == std::string::npos) {
+                    std::string part = trim(s.substr(start));
+                    if (!part.empty())
+                        vals.insert(part);
+                    break;
+                }
+                std::string part = trim(s.substr(start, p - start));
+                if (!part.empty())
+                    vals.insert(part);
+                start = p + 1;
+            }
+            allowed[kv.first] = std::move(vals);
+        }
+    }
+    std::vector<std::vector<std::string>> pending;
+    for (auto& rowJ : *rowsArr.a) {
+        if (!rowJ.isObj() || !rowJ.o)
+            throw TableError("table_propose_rows: each row must be an object");
+        std::vector<std::string> row(t.columns.size(), "");
+        for (auto& kv : *rowJ.o) {
+            int ci = t.colIndex(kv.first);
+            if (ci < 0)
+                continue;
+            std::string val =
+                kv.second.isStr() ? kv.second.s : kv.second.dump();
+            if (!val.empty() && !allowed.empty()) {
+                auto it = allowed.find(toLower(t.columns[(size_t)ci]));
+                if (it != allowed.end() && !it->second.empty() &&
+                    !it->second.count(val))
+                    throw TableError("table_propose_rows: illegal value for " +
+                                     t.columns[(size_t)ci] + ": " + val);
+            }
+            row[(size_t)ci] = val;
+        }
+        pending.push_back(std::move(row));
+    }
+    for (auto& row : pending)
+        t.appendRow(row);
 }
 
 }  // namespace gtb

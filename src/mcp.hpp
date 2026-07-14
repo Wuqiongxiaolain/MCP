@@ -70,7 +70,7 @@ inline Json toolDef(const std::string& name,
     return t;
 }
 
-// toolList: 返回服务暴露的全部工具清单（24 个工具）
+// toolList: 返回服务暴露的全部工具清单（以本函数为 OpenAPI 唯一 schema 源）
 inline Json toolList()
 {
     Json tools = Json::arr();
@@ -649,12 +649,20 @@ inline Json toolList()
               prop("string", "JSON array of {name,default?} objects"));
         p.set("set_column_values",
               prop("string", "JSON {column, values:[...]} fill column"));
+        p.set("dry_run",
+              prop("boolean",
+                   "if true, compute changes without saving (default false)"));
+        p.set("detail",
+              prop("boolean",
+                   "if true, include per-cell before/after in details "
+                   "(default false)"));
         Json req = Json::arr();
         req.push(Json("id"));
         tools.push(toolDef(
             "table_update",
             "Apply batch patches to a table and save a new version; returns "
-            "an audit summary of changes.",
+            "an audit summary of changes. Use dry_run to preview; detail for "
+            "per-cell before/after.",
             p, req));
     }
     {
@@ -758,6 +766,112 @@ inline Json toolList()
             "table_check",
             "Validate table cells against allowed enums; returns a violation "
             "report table (row,field,actual,expected,suggestion).",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("graph_id", prop("string", "source mindmap/graph id"));
+        p.set("name", prop("string", "rules table name"));
+        p.set("id", prop("string", "optional rules table id"));
+        p.set("save", prop("boolean", "save rules table (default true)"));
+        Json req = Json::arr();
+        req.push(Json("graph_id"));
+        tools.push(toolDef(
+            "table_rules_from_graph",
+            "Extract enum rules table (column,allowed,hint) from mindmap "
+            "skeleton heuristics (leaves=columns, children=allowed).",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "target table id"));
+        p.set("allowed",
+              prop("string",
+                   "JSON object {column:[values]|\"a|b\"} of allowed enums"));
+        p.set("rules_id", prop("string", "optional rules table id"));
+        p.set("ignore_hint_row",
+              prop("boolean", "skip first row when target.hasHintRow"));
+        p.set("save", prop("boolean", "save fixed table (default true)"));
+        p.set("save_skipped",
+              prop("boolean",
+                   "save skipped violations report (default true)"));
+        p.set("note", prop("string", "version note"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        tools.push(toolDef(
+            "table_fix_enums",
+            "Auto-fix enum violations using table_check suggestions; empty "
+            "suggestion rows go to skipped report with reason.",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("source_id", prop("string", "source table id"));
+        p.set("mode",
+              prop("string",
+                   "derive mode (only animation_checklist in v1)"));
+        p.set("name", prop("string", "output table name"));
+        p.set("id", prop("string", "optional output table id"));
+        p.set("save", prop("boolean", "save derived table (default true)"));
+        Json req = Json::arr();
+        req.push(Json("source_id"));
+        tools.push(toolDef(
+            "table_derive",
+            "Derive a new table from source. animation_checklist: columns "
+            "containing 动画 with cell value √ become checklist rows.",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "table id"));
+        p.set("source_column", prop("string", "source column name"));
+        p.set("target_column", prop("string", "target column (created if missing)"));
+        p.set("transform", prop("string", "transform type (only slug in v1)"));
+        p.set("save", prop("boolean", "save table (default true)"));
+        p.set("note", prop("string", "version note"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("source_column"));
+        req.push(Json("target_column"));
+        tools.push(toolDef(
+            "table_transform_column",
+            "Transform a column into another (slug: deterministic ASCII key).",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "table id"));
+        p.set("count", prop("number", "number of sample rows (default 1)"));
+        p.set("rules_id", prop("string", "optional rules table for enums"));
+        p.set("save", prop("boolean", "save table (default true)"));
+        p.set("note", prop("string", "version note"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        tools.push(toolDef(
+            "table_sample_rows",
+            "Append conservative placeholder rows (enum first allowed / 动画 "
+            "default x / other TODO). Response sets placeholder=true.",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "table id"));
+        p.set("rows",
+              prop("string",
+                   "JSON array of objects keyed by column name"));
+        p.set("rules_id",
+              prop("string",
+                   "optional rules: non-empty cells validated; batch rejected "
+                   "on illegal enum"));
+        p.set("save", prop("boolean", "save table (default true)"));
+        p.set("note", prop("string", "version note"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("rows"));
+        tools.push(toolDef(
+            "table_propose_rows",
+            "Append structured object rows aligned to columns; optional enum "
+            "validation via rules_id (no NL parsing).",
             p, req));
     }
 
@@ -1246,6 +1360,18 @@ class ToolRunner {
                 return tableAlignTool(args);
             if (name == "table_check")
                 return tableCheckTool(args);
+            if (name == "table_rules_from_graph")
+                return tableRulesFromGraphTool(args);
+            if (name == "table_fix_enums")
+                return tableFixEnumsTool(args);
+            if (name == "table_derive")
+                return tableDeriveTool(args);
+            if (name == "table_transform_column")
+                return tableTransformColumnTool(args);
+            if (name == "table_sample_rows")
+                return tableSampleRowsTool(args);
+            if (name == "table_propose_rows")
+                return tableProposeRowsTool(args);
             return textContent("unknown tool: " + name, true);
         }
         catch (const std::exception& e) {
@@ -2201,6 +2327,24 @@ class ToolRunner {
 
     Json tableCheckTool(const Json& a)
     { return tabletools::tableCheckTool(tables_, a); }
+
+    Json tableRulesFromGraphTool(const Json& a)
+    { return tabletools::tableRulesFromGraphTool(store_, tables_, a); }
+
+    Json tableFixEnumsTool(const Json& a)
+    { return tabletools::tableFixEnumsTool(tables_, a); }
+
+    Json tableDeriveTool(const Json& a)
+    { return tabletools::tableDeriveTool(tables_, a); }
+
+    Json tableTransformColumnTool(const Json& a)
+    { return tabletools::tableTransformColumnTool(tables_, a); }
+
+    Json tableSampleRowsTool(const Json& a)
+    { return tabletools::tableSampleRowsTool(tables_, a); }
+
+    Json tableProposeRowsTool(const Json& a)
+    { return tabletools::tableProposeRowsTool(tables_, a); }
 };
 
 // ---- JSON-RPC 通信处理 ----

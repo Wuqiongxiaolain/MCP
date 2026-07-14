@@ -73,7 +73,7 @@ jobs:
         run: |
           mkdir -p dist
           cp bin/graphmcp dist/
-          cp README.md dist/
+          cp README.md VERSION dist/
           tar czf "graphmcp-${GITHUB_RUN_NUMBER}.tar.gz" -C dist .
 
       - name: 上传制品

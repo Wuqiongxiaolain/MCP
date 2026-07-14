@@ -1026,9 +1026,15 @@ int cmdTable(Args& a, gs::Store& store)
                 return 1;
             }
             if (a.has("dry-run")) {
+                // 新增开始：dry-run 时同步打印兼容告警，与 MCP 响应对齐
                 std::cout << "dry_run true\n" << summary.dump(2) << "\n";
                 if (detail)
                     std::cout << details.dump(2) << "\n";
+                if (const Json* cw = compat.find("compat_warnings")) {
+                    if (cw->isArr() && cw->size() > 0)
+                        std::cout << "compat_warnings\n" << cw->dump(2) << "\n";
+                }
+                // 新增结束
                 return 0;
             }
             std::string saveErr;
@@ -1299,8 +1305,13 @@ int cmdTable(Args& a, gs::Store& store)
             }
             rp = &rules;
         }
-        if (rulesId.empty() && !a.has("allowed")) {
-            std::cerr << "error: --rules-id or --allowed required\n";
+        // 与 MCP 一致：allowed 须为非空对象，或提供 rules-id
+        bool has_allowed =
+            a.has("allowed") && allowed.isObj() && allowed.o &&
+            !allowed.o->empty();
+        if (rulesId.empty() && !has_allowed) {
+            std::cerr
+                << "error: --rules-id or non-empty --allowed object required\n";
             return 1;
         }
         bool ignore_hint_row = target.hasHintRow;

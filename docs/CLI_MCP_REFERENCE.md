@@ -247,10 +247,10 @@ CLI：`graphmcp table create|import|export|list|show|update|delete|history|rollb
 关键语义约束：
 
 - `table_create` 默认**不覆盖**已存在 id（同 id 需 `force=true`）；`table_import` 保留 upsert。环境变量 `GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT=1`（或 `true`）可临时恢复旧 upsert（响应含 `compat_warnings`）。
-- `table_update.set_cells` 使用 `{row,column,value}` 或 `{row,col_index,value}`；旧字段 `col` 仍接受但已弃用（同文案 warning 去重）。`dry_run=true` 只预览不落盘；`detail=true` 返回逐格 before/after。
+- `table_update.set_cells` 使用 `{row,column,value}` 或 `{row,col_index,value}`；旧字段 `col` 仍接受但已弃用（同文案 warning 去重）。`dry_run=true` 只预览不落盘；`detail=true` 返回逐格 before/after。CLI `table update --dry-run` 在存在兼容告警时会额外打印 `compat_warnings`。
 - `table_from_graph` 返回 `csv_preview` 默认仅前 20 行（截断时带 `truncated`/`hint`）；全量请用 `table_export`。skeleton：优先「子节点全为叶子」的父节点作列、子节点文案作 hint/枚举。
 - `table_rules_from_graph` 与上述 skeleton 启发式一致，产物为规则表供 `table_check` / `table_fix_enums`。
-- `table_fix_enums`：`suggestion` 非空则写回；空则 `reason=empty_suggestion` 记入 skipped（可 `save_skipped`）。
+- `table_fix_enums`：须提供非空 `allowed` 或 `rules_id`（CLI：`--allowed`/`--rules-id`）；`suggestion` 非空则写回；空则 `reason=empty_suggestion` 记入 skipped（可 `save_skipped`）。无写回时不 bump 目标表版本；CLI 可用 `--no-save`。
 - `table_derive` 首版仅 `animation_checklist`；`table_transform_column` 仅 `slug`。
 - `table_sample_rows` 响应含 `placeholder=true`；`table_propose_rows` 可选 `rules_id` 枚举校验（非法整批拒绝）。
 - `table_check` 支持 `ignore_hint_row`；当 `table.hasHintRow=true` 时默认忽略首行说明。`GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1`（或 `true`）可将缺省改为不跳过 hint 行。CLI 可用 `--ignore-hint-row=false` 显式关闭。

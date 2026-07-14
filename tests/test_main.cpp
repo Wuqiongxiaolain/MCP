@@ -1157,11 +1157,30 @@ static void testMcpProtocol()
     Json note = Json::parse(
         R"({"jsonrpc":"2.0","method":"notifications/initialized"})", &err);
     CHECK(!mcp::handleMessage(note, store, resp));
-    // tools/list
+    // tools/list：断言关键工具存在（避免工具数硬编码随功能增减而脆断）
     Json tl =
         Json::parse(R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})", &err);
     CHECK(mcp::handleMessage(tl, store, resp));
-    CHECK(resp.find("result")->find("tools")->size() == 45);
+    const Json* tools = resp.find("result")->find("tools");
+    CHECK(tools != nullptr && tools->isArr());
+    auto has_tool = [&](const std::string& name) {
+        if (!tools || !tools->a)
+            return false;
+        for (auto& t : *tools->a)
+            if (t.str("name") == name)
+                return true;
+        return false;
+    };
+    CHECK(has_tool("graph_create"));
+    CHECK(has_tool("table_check"));
+    CHECK(has_tool("table_rules_from_graph"));
+    CHECK(has_tool("table_fix_enums"));
+    CHECK(has_tool("table_derive"));
+    CHECK(has_tool("table_transform_column"));
+    CHECK(has_tool("table_sample_rows"));
+    CHECK(has_tool("table_propose_rows"));
+    CHECK(has_tool("table_update"));
+    CHECK(tools->size() >= 45);
     // tools/call graph_create
     Json call = Json::parse(
         R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
@@ -1544,15 +1563,45 @@ static void testTableCollabEnhance()
     gt::Table after = gtb::tableCheck(bad, Json(), &rules, false);
     CHECK(after.rows.size() == 0);
 
-    // empty_suggestion → skipped（allowed 成员为空时无 suggestion）
+    // 规则列 allowed 为空：该列不参与校验（不会产生 violation / 也不会假写回）
+    // empty_suggestion 仅在 report 已有行但 suggestion 为空时触发（防御路径）；
+    // 经 tableCheck 正常输出时 suggestion 恒为保序首项，故此处覆盖“空规则不误伤”。
     gt::Table emptyAllowedRules;
     emptyAllowedRules.columns = {"column", "allowed"};
     emptyAllowedRules.appendRow({"层级", ""});
     gt::Table bad2 = gt::Table::fromCsv("层级\n精英\n");
-    // 空 allowed 列：该列不被 check 覆盖 → fixed=0；用独立 check 造 suggestion
-    // 空较难 改为直接断言：无规则时 check 为空报告
-    gt::Table none = gtb::tableCheck(bad2, Json(), nullptr, false);
+    gt::Table none = gtb::tableCheck(bad2, Json(), &emptyAllowedRules, false);
     CHECK(none.rows.size() == 0);
+    gtb::FixEnumsResult noFix =
+        gtb::tableFixEnums(bad2, Json(), &emptyAllowedRules, false);
+    CHECK(noFix.fixed_count == 0);
+    CHECK(noFix.skipped_count == 0);
+    CHECK(bad2.cell(0, 0) == "精英");
+
+    // 无规则/空 allowed：MCP table_fix_enums 应拒绝
+    {
+#ifdef _WIN32
+        _putenv_s("GRAPHMCP_STORE", "test-table-fix-validate-tmp");
+#else
+        setenv("GRAPHMCP_STORE", "test-table-fix-validate-tmp", 1);
+#endif
+        ge::removeDirectory("test-table-fix-validate-tmp");
+        gs::Store       store("test-table-fix-validate-tmp");
+        mcp::ToolRunner runner(store);
+        Json            c = Json::obj();
+        c.set("content", "层级\n精英\n");
+        c.set("name", "need-rules");
+        std::string err;
+        Json        cr = runner.call("table_create", c);
+        Json body =
+            Json::parse(cr.find("content")->a->at(0).str("text"), &err);
+        Json fx = Json::obj();
+        fx.set("id", body.str("id"));
+        fx.set("allowed", "{}");
+        Json fr = runner.call("table_fix_enums", fx);
+        CHECK(fr.boolean("isError", false));
+        ge::removeDirectory("test-table-fix-validate-tmp");
+    }
 
     // 合法行不触发修复
     gt::Table           okTab = gt::Table::fromCsv("层级\n小怪\n");

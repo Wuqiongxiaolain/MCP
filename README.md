@@ -47,6 +47,13 @@ make all && make test
 make docs-api
 ```
 
+### 版本 / 基线 / 发布（GitHub Actions）
+
+- **日常 CI**：只比对 OpenAPI 与性能基线，**不会**自动改仓库 tip。
+- **刷新性能基线**：Actions → `Update bench baseline`（`workflow_dispatch`，须勾选确认；会多 1 个 `[skip ci]` commit）。
+- **写回 VERSION + OpenAPI**：Actions → `Bump version`（传入完整版本号并确认；会多 1 个 commit，**不**自动打 tag）。
+- **发布制品**：人工推送 `v*` annotated tag，触发 CD Release（或 CD 的 `workflow_dispatch` 试运行）。
+
 无第三方依赖：JSON / XML / Base64 均为内置实现。
 
 ---

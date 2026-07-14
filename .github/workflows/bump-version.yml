@@ -1,0 +1,118 @@
+# 按需写回 VERSION + OpenAPI（仅手动触发；不自动打 tag）
+name: Bump version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: >-
+          新版本号（如 v0.2.3 或 0.2.3-beta）。将推送 1 个改写 VERSION + OpenAPI 的额外 commit；
+          不会自动打 git tag，制品发布仍需人工推送 v* tag 触发 CD。
+        type: string
+        required: true
+      confirm:
+        description: >-
+          必须勾选确认：将向目标分支推送 1 个额外 commit（VERSION + docs/api_reference/openapi.yaml）。
+        type: boolean
+        default: false
+      ref:
+        description: 要检出并推回的分支（默认 main）
+        type: string
+        default: main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bump-version-${{ inputs.ref || 'main' }}
+  cancel-in-progress: false
+
+jobs:
+  bump-version:
+    name: 写回版本与 OpenAPI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 确认将产生额外 commit
+        run: |
+          if [ "${{ inputs.confirm }}" != "true" ]; then
+            echo "::error::未勾选 confirm。此操作会向分支 «${{ inputs.ref }}» 推送 1 个改写 VERSION 与 OpenAPI 的额外 commit（不打 tag）。请重新 Run 并勾选确认。"
+            exit 1
+          fi
+          echo "::notice::已确认：将可能推送 1 个 [skip ci] commit 更新版本契约；不会自动创建 git tag / Release。"
+
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 规范化并校验版本号
+        id: ver
+        run: |
+          set -euo pipefail
+          raw="${{ inputs.version }}"
+          raw="$(echo -n "$raw" | tr -d '[:space:]')"
+          if [[ "$raw" != v* ]]; then
+            raw="v${raw}"
+          fi
+
+          # 宽松 semver：vMAJOR.MINOR.PATCH 可选 -prerelease / +build
+          if ! [[ "$raw" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::版本号格式无效: «${raw}»（期望 v0.2.3 或 v0.2.3-beta）"
+            exit 1
+          fi
+
+          current="$(tr -d '[:space:]' < VERSION || true)"
+          if [ "$raw" = "$current" ]; then
+            echo "::error::目标版本与当前 VERSION（${current}）相同，无需写回。"
+            exit 1
+          fi
+
+          git fetch --tags --force
+
+          if git rev-parse -q --verify "refs/tags/${raw}" >/dev/null; then
+            echo "::error::已存在同名 tag «${raw}»，与历史重合，拒绝写回。"
+            exit 1
+          fi
+
+          # 加固：VERSION 文件历史中曾使该版本字符串出现次数变化则拒绝
+          if [ -n "$(git log -S"${raw}" --format=%H -- VERSION)" ]; then
+            echo "::error::VERSION 历史中已出现过 «${raw}»，与历史重合，拒绝写回。"
+            exit 1
+          fi
+
+          echo "version=${raw}" >> "$GITHUB_OUTPUT"
+          echo "current=${current}" >> "$GITHUB_OUTPUT"
+          echo "::notice::版本校验通过：${current} → ${raw}"
+
+      - name: 安装构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ make
+
+      - name: 写入 VERSION 并刷新 OpenAPI
+        run: |
+          set -euo pipefail
+          printf '%s\n' "${{ steps.ver.outputs.version }}" > VERSION
+          make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
+          make docs-api
+          grep -q "version: ${{ steps.ver.outputs.version }}" docs/api_reference/openapi.yaml
+
+      - name: 提交并推送
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add VERSION docs/api_reference/openapi.yaml
+          if git diff --cached --quiet; then
+            echo "::error::无文件变更可提交（异常）。"
+            exit 1
+          fi
+
+          git commit -m "chore(release): bump version to ${{ steps.ver.outputs.version }} [skip ci]"
+          git push origin "HEAD:${{ inputs.ref }}"
+          echo "::notice::已推送版本 commit 到 ${{ inputs.ref }}。请人工打 annotated tag（如 ${{ steps.ver.outputs.version }}）后再触发 CD 发布制品。"

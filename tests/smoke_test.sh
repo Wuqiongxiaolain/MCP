@@ -27,7 +27,7 @@ FAILED=0
 SVG_FALLBACK=0
 
 cleanup() {
-    rm -rf "$STORE" smoke-*.svg smoke-*.drawio smoke-*.mmd smoke-*.json smoke-*.png smoke-*.pdf smoke-*.excalidraw smoke-fix-* smoke-broken.xml 2>/dev/null || true
+    rm -rf "$STORE" smoke-*.svg smoke-*.drawio smoke-*.mmd smoke-colors.mmd smoke-*.json smoke-*.png smoke-*.pdf smoke-*.excalidraw smoke-fix-* smoke-broken.xml 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -113,6 +113,31 @@ run_stdout_contains "from-xml file"       "created graph" create from-xml --file
 run_stdout_contains "from-excalidraw file" "created graph" create from-excalidraw --file examples/example_input/whiteboard_freedraw.excalidraw --name smoke-wb --id smoke-5
 run_stdout_contains "from-mermaid content" "created graph" create from-mermaid --content $'flowchart TD\nA[Test]-->B[Done]' --name smoke-inline --id smoke-6
 run_stdout_contains "from-input auto-detect" "created graph" create from-input --file examples/example_input/flowchart.mmd --id smoke-7
+
+# ─── color + new mermaid types ────────────────────────────────
+echo "[color/mermaid]"
+run_stdout_contains "from-mermaid colors" "created graph" create from-mermaid --file examples/example_input/flowchart_colors.mmd --name smoke-colors --id smoke-color-1
+run_stdout_contains "from-mermaid sequence" "created graph" create from-mermaid --file examples/example_input/sequence.mmd --name smoke-seq --id smoke-seq-1
+run_stdout_contains "from-mermaid class" "created graph" create from-mermaid --file examples/example_input/class.mmd --name smoke-class --id smoke-class-1
+run_stdout_contains "from-mermaid state" "created graph" create from-mermaid --file examples/example_input/state.mmd --name smoke-state --id smoke-state-1
+run_stdout_contains "from-mermaid pie" "created graph" create from-mermaid --file examples/example_input/pie.mmd --name smoke-pie --id smoke-pie-1
+run_ok "colors to-mermaid" convert to-mermaid --file examples/example_input/flowchart_colors.mmd --output smoke-colors.mmd
+# classDef/linkStyle 必须出现在 flowchart 声明之后
+if grep -q "flowchart" smoke-colors.mmd && grep -q "classDef" smoke-colors.mmd && grep -q "linkStyle" smoke-colors.mmd; then
+  FLOW_LINE=$(grep -n "flowchart" smoke-colors.mmd | head -1 | cut -d: -f1)
+  CLASS_LINE=$(grep -n "classDef" smoke-colors.mmd | head -1 | cut -d: -f1)
+  LINK_LINE=$(grep -n "linkStyle" smoke-colors.mmd | head -1 | cut -d: -f1)
+  if [ "$FLOW_LINE" -lt "$CLASS_LINE" ] && [ "$FLOW_LINE" -lt "$LINK_LINE" ]; then
+    pass "colors mermaid order (flowchart before classDef/linkStyle)"
+  else
+    fail "colors mermaid order" "flowchart=$FLOW_LINE classDef=$CLASS_LINE linkStyle=$LINK_LINE"
+  fi
+else
+  fail "colors mermaid export" "missing flowchart/classDef/linkStyle in smoke-colors.mmd"
+fi
+run_stdout_contains "colors model fillColor" "fillColor" convert to-model --file examples/example_input/flowchart_colors.mmd --stdout
+run_fails "colors bad (classDef before flowchart)" convert to-model --file examples/example_input/flowchart_colors_bad.mmd --input-format mermaid --stdout
+run_fails "unknown mermaid type" convert to-model --file examples/example_input/mermaid_unknown_bad.mmd --input-format mermaid --stdout
 
 # ─── store ────────────────────────────────────────────────────
 echo "[store]"

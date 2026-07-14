@@ -325,7 +325,1942 @@ inline Graph parseMermaidER(const std::vector<std::string>& lines, size_t first)
     return g;
 }
 
+// parseMermaidClass: 解析 classDiagram 语法 -> 统一 Graph 模型
+// 关键步骤：解析 class 块提取属性和方法 -> 解析关系箭头（继承/组合/聚合/关联）
+// -> 节点存 attrs，边存关系类型标签
+inline Graph parseMermaidClass(const std::vector<std::string>& lines, size_t first)
+{
+    Graph g;
+    g.type = "classDiagram";
+    std::string curClass;
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%"))
+            continue;
+        // 注解：<<interface>> / <<abstract>>
+        if (startsWith(line, "<<") && line.find(">>") != std::string::npos) {
+            if (!curClass.empty()) {
+                Node* n = g.findNode(curClass);
+                if (n)
+                    n->attrs.push_back(line);
+            }
+            continue;
+        }
+        // class 块起始
+        if (startsWith(line, "class ")) {
+            std::string rest = trim(line.substr(6));
+            // 去掉末尾的 {
+            if (!rest.empty() && rest.back() == '{')
+                rest = trim(rest.substr(0, rest.size() - 1));
+            curClass = rest;
+            g.ensureNode(curClass, curClass).shape = "rect";
+            continue;
+        }
+        // class 块结束
+        if (line == "}") {
+            curClass.clear();
+            continue;
+        }
+        // 成员/方法（在 class 块内）
+        if (!curClass.empty()) {
+            Node& n = g.ensureNode(curClass);
+            n.attrs.push_back(line);
+            continue;
+        }
+        // 关系语句：支持 <|-- *-- o-- --> -- ..> ..|> <-->
+        std::string relLabel;
+        size_t colon = line.find(':');
+        if (colon != std::string::npos) {
+            relLabel = trim(line.substr(colon + 1));
+            if (relLabel.size() >= 2 && relLabel.front() == '"' && relLabel.back() == '"')
+                relLabel = relLabel.substr(1, relLabel.size() - 2);
+            line = trim(line.substr(0, colon));
+        }
+        // 尝试匹配各种关系箭头
+        struct RelArrow { const char* tok; const char* name; };
+        static const RelArrow arrows[] = {
+            {"<|--", "inheritance"},   {"--|>", "inheritance"},
+            {"*--", "composition"},    {"--*", "composition"},
+            {"o--", "aggregation"},    {"--o", "aggregation"},
+            {"<-->", "bidirectional"}, {"-->", "association"},
+            {"--", "link"},
+            {"..|>", "realization"},   {"<|..", "realization"},
+            {"..>", "dependency"},     {"<..", "dependency"},
+            {"..", "dotted"},
+        };
+        for (auto& ar : arrows) {
+            size_t ap = line.find(ar.tok);
+            if (ap != std::string::npos) {
+                std::string left  = trim(line.substr(0, ap));
+                size_t      after = ap + strlen(ar.tok);
+                std::string right = trim(line.substr(after));
+                if (!left.empty() && !right.empty()) {
+                    g.ensureNode(left).shape = "rect";
+                    g.ensureNode(right).shape = "rect";
+                    std::string label = relLabel.empty() ? std::string(ar.name) : relLabel;
+                    g.addEdge(left, right, label, "solid",
+                              std::string(ar.name) == "bidirectional" ? "both" : "arrow");
+                }
+                break;
+            }
+        }
+    }
+    return g;
+}
+
+// parseMermaidState: 解析 stateDiagram-v2 语法 -> 统一 Graph 模型
+// 关键步骤：解析 state 块 -> 处理复合状态 -> 解析转移/守卫/动作
+inline Graph parseMermaidState(const std::vector<std::string>& lines, size_t first)
+{
+    Graph g;
+    g.type = "stateDiagram";
+    std::vector<std::string> stateStack;  // 复合状态嵌套栈
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%"))
+            continue;
+        // 复合状态: state "Name" as id {
+        if (startsWith(line, "state ")) {
+            std::string rest   = trim(line.substr(6));
+            std::string sid, slabel;
+            // 检查是否有 { 结尾
+            bool hasBlock = !rest.empty() && rest.back() == '{';
+            if (hasBlock)
+                rest = trim(rest.substr(0, rest.size() - 1));
+            // 检查 "label" as id 语法
+            size_t asPos = rest.find(" as ");
+            if (asPos != std::string::npos) {
+                slabel = trim(rest.substr(0, asPos));
+                if (slabel.size() >= 2 && slabel.front() == '"' && slabel.back() == '"')
+                    slabel = slabel.substr(1, slabel.size() - 2);
+                sid = trim(rest.substr(asPos + 4));
+            } else {
+                sid = rest;
+                slabel = rest;
+                if (slabel.size() >= 2 && slabel.front() == '"' && slabel.back() == '"')
+                    slabel = slabel.substr(1, slabel.size() - 2);
+            }
+            if (sid.empty()) {
+                sid = "s" + std::to_string(g.nodes.size() + 1);
+            }
+            Node& n = g.ensureNode(sid, slabel);
+            n.shape = hasBlock ? "group" : "round";
+            if (!stateStack.empty())
+                n.parent = stateStack.back();
+            if (hasBlock)
+                stateStack.push_back(sid);
+            continue;
+        }
+        // 复合状态结束
+        if (line == "}" && !stateStack.empty()) {
+            stateStack.pop_back();
+            continue;
+        }
+        // 状态描述（note-like）
+        if (startsWith(line, "note ") || startsWith(line, "--")) {
+            continue;
+        }
+        // 转移: [*] --> state  或  state --> [*]  或  state --> state
+        size_t arrowPos = line.find("-->");
+        if (arrowPos == std::string::npos)
+            arrowPos = line.find("->");
+        if (arrowPos != std::string::npos) {
+            int     alen = (arrowPos + 3 < line.size() && line[arrowPos + 2] == '>') ? 3 : 2;
+            std::string left  = trim(line.substr(0, arrowPos));
+            std::string right = trim(line.substr(arrowPos + alen));
+            std::string elabel;
+            // 提取 : label 部分
+            size_t colonPos = right.find(':');
+            if (colonPos != std::string::npos) {
+                elabel = trim(right.substr(colonPos + 1));
+                right  = trim(right.substr(0, colonPos));
+            }
+            if (elabel.size() >= 2 && elabel.front() == '"' && elabel.back() == '"')
+                elabel = elabel.substr(1, elabel.size() - 2);
+            if (!left.empty() && !right.empty()) {
+                // [*] 是特殊起始/终止状态
+                if (left != "[*]") {
+                    Node& n = g.ensureNode(left);
+                    if (n.shape.empty() || n.shape == "rect")
+                        n.shape = "round";
+                    if (!stateStack.empty() && n.parent.empty())
+                        n.parent = stateStack.back();
+                }
+                if (right != "[*]") {
+                    Node& n = g.ensureNode(right);
+                    if (n.shape.empty() || n.shape == "rect")
+                        n.shape = "round";
+                    if (!stateStack.empty() && n.parent.empty())
+                        n.parent = stateStack.back();
+                }
+                g.addEdge(left, right, elabel, "solid", "arrow");
+            }
+        }
+    }
+    return g;
+}
+
+// parseMermaidRequirement: 解析 requirementDiagram
+// 关键步骤：解析 requirement/element 定义 -> 节点 -> 解析关系 -> edges
+// 同时将完整结构存入 Graph.properties["requirementDiagram"]
+inline Graph parseMermaidRequirement(const std::vector<std::string>& lines,
+                                     size_t                          first)
+{
+    Graph g;
+    g.type = "requirementDiagram";
+
+    Json rd   = Json::obj();
+    Json els  = Json::arr();
+    Json rels = Json::arr();
+
+    std::string curBlockId;       // 当前正在解析的元素 id
+    std::string curBlockType;     // requirement | element 等
+    Json        curBlock = Json::obj();
+
+    auto flushBlock = [&]() {
+        if (!curBlockId.empty()) {
+            curBlock.set("id", curBlockId);
+            curBlock.set("type", curBlockType);
+            els.push(curBlock);
+            curBlockId.clear();
+            curBlock = Json::obj();
+        }
+    };
+
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%"))
+            continue;
+
+        std::string lower = toLower(line);
+
+        // 跳过 diagram 声明行
+        if (startsWith(lower, "requirementdiagram"))
+            continue;
+
+        // 检测关系行：需要包含 " - " 和 " -> "
+        // 形如：req1 - traces -> req2 或  elem1 <- satisfies - req1
+        bool hasArrow = (line.find(" -> ") != std::string::npos ||
+                         line.find(" -&gt; ") != std::string::npos);
+        bool hasDash  = (line.find(" - ") != std::string::npos);
+        if (hasDash && hasArrow) {
+            flushBlock();
+
+            // 解析关系
+            std::string left, right, relType;
+
+            // 检测逆序：dest <- type - src
+            size_t larr = line.find(" <- ");
+            size_t rarr = line.find(" -&gt; ");
+            if (rarr == std::string::npos) rarr = line.find(" -> ");
+            if (larr != std::string::npos) {
+                // 逆序: dest <- relType - src
+                size_t dashAfter = line.find(" - ", larr + 4);
+                if (dashAfter != std::string::npos) {
+                    right = trim(line.substr(0, larr));
+                    relType = trim(line.substr(larr + 4, dashAfter - larr - 4));
+                    left = trim(line.substr(dashAfter + 3));
+                }
+            } else if (rarr != std::string::npos) {
+                // 正序: src - relType -> dest
+                size_t dashBefore = line.rfind(" - ", rarr);
+                if (dashBefore != std::string::npos) {
+                    left = trim(line.substr(0, dashBefore));
+                    relType = trim(line.substr(dashBefore + 3, rarr - dashBefore - 3));
+                    right = trim(line.substr(rarr + 4));
+                }
+            }
+
+            if (!left.empty() && !right.empty() && !relType.empty()) {
+                // 创建节点（如果还不存在）-> 用于 tools 编辑
+                g.ensureNode(left, left);
+                g.ensureNode(right, right);
+
+                // 存入 properties
+                Json rel = Json::obj();
+                rel.set("from", left);
+                rel.set("to", right);
+                rel.set("type", relType);
+                rels.push(rel);
+
+                // 同步到 edges（关系类型存入 label）
+                g.addEdge(left, right, relType, "solid", "arrow");
+            }
+            continue;
+        }
+
+        // 检测 requirement/element 定义行：type name { 或 type name {
+        // requirementDiagram 中 requirement/element 关键字开始一个新块
+        bool isReqDecl = false;
+        std::string blockType;
+        size_t declEnd = 0;
+
+        // 检查所有已知的需求/元素类型关键字
+        static const std::vector<std::string> reqKeywords = {
+            "requirement ", "functionalrequirement ", "performancerequirement ",
+            "interfacerequirement ", "physicalrequirement ", "designconstraint ",
+            "element "
+        };
+        for (auto& kw : reqKeywords) {
+            if (startsWith(lower, kw)) {
+                // 找到原始大小写的关键字
+                size_t kwLen = kw.size();
+                std::string origKw = line.substr(0, kwLen - 1); // 去掉末尾空格
+                blockType = origKw;
+                isReqDecl = true;
+                declEnd = kwLen;
+                break;
+            }
+        }
+
+        if (isReqDecl) {
+            flushBlock();
+            curBlockType = blockType;
+
+            // 提取名称：在关键字之后、{ 之前
+            std::string rest = trim(line.substr(declEnd));
+            size_t brace = rest.find('{');
+            if (brace != std::string::npos) {
+                curBlockId = trim(rest.substr(0, brace));
+            } else {
+                curBlockId = rest; // 可能是无块体的声明
+                if (!curBlockId.empty()) {
+                    // 无块体时立即创建
+                    curBlock.set("id", curBlockId);
+                    curBlock.set("type", curBlockType);
+                    els.push(curBlock);
+                    curBlockId.clear();
+                    curBlock = Json::obj();
+                }
+            }
+            continue;
+        }
+
+        // 块体内部属性行
+        if (!curBlockId.empty()) {
+            if (line == "}") {
+                flushBlock();
+                continue;
+            }
+
+            // 解析属性：key: value 或 key: "value"
+            size_t colon = line.find(':');
+            if (colon != std::string::npos) {
+                std::string key = trim(line.substr(0, colon));
+                std::string val = trim(line.substr(colon + 1));
+                // 去掉引号
+                if (val.size() >= 2 && val.front() == '"' && val.back() == '"')
+                    val = val.substr(1, val.size() - 2);
+                curBlock.set(key, val);
+            }
+        }
+    }
+    flushBlock(); // 处理最后一个块
+
+    rd.set("elements", els);
+    rd.set("relations", rels);
+    g.properties.set("requirementDiagram", rd);
+
+    return g;
+}
+
+// parseMermaidSankey: 解析 sankey-beta 加权流图
+// 关键步骤：逐行解析 CSV "source,target,value" -> flows -> 节点自动推导
+// 同时将完整结构存入 Graph.properties["sankey"]
+inline Graph parseMermaidSankey(const std::vector<std::string>& lines,
+                                size_t                          first)
+{
+    Graph g;
+    g.type = "sankey";
+
+    Json sk    = Json::obj();
+    Json flows = Json::arr();
+    bool showValues = false;
+    std::set<std::string> nodeSet;
+
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%"))
+            continue;
+
+        std::string lower = toLower(line);
+
+        // 跳过 diagram 声明行
+        if (startsWith(lower, "sankey-beta") || startsWith(lower, "sankey"))
+            continue;
+
+        // 配置行
+        if (lower == "showvalues") {
+            showValues = true;
+            continue;
+        }
+        if (startsWith(lower, "linkcolor") || startsWith(lower, "nodealignment"))
+            continue; // 渲染配置，跳过
+
+        // 数据行: source,target,value
+        // 简单分割：按逗号拆分为 3 部分
+        size_t c1 = line.find(',');
+        if (c1 == std::string::npos) continue;
+        size_t c2 = line.find(',', c1 + 1);
+        if (c2 == std::string::npos) {
+            // 可能只有两列？sankey 必须是三列
+            continue;
+        }
+
+        std::string source = trim(line.substr(0, c1));
+        std::string target = trim(line.substr(c1 + 1, c2 - c1 - 1));
+        std::string valStr = trim(line.substr(c2 + 1));
+        double      value  = 0;
+        try { value = std::stod(valStr); } catch (...) { continue; }
+
+        if (source.empty() || target.empty()) continue;
+
+        // 记录节点
+        nodeSet.insert(source);
+        nodeSet.insert(target);
+
+        // 存入 properties
+        Json flow = Json::obj();
+        flow.set("from", source);
+        flow.set("to", target);
+        flow.set("value", value);
+        flows.push(flow);
+
+        // 同步到 Graph（加权边 + 自动节点）
+        g.ensureNode(source, source);
+        g.ensureNode(target, target);
+        // label 存为 value 的字符串形式，方便编辑工具展示
+        g.addEdge(source, target, valStr, "solid", "arrow");
+    }
+
+    sk.set("showValues", showValues);
+    sk.set("flows", flows);
+    g.properties.set("sankey", sk);
+
+    return g;
+}
+
+// parseMermaidSequence: 解析 sequenceDiagram
+// 关键步骤：participant/actor -> 节点, 消息 -> edges, loop/alt 等片段 -> group 节点
+// 将完整结构化数据存入 Graph.properties["sequence"]
+inline Graph parseMermaidSequence(const std::vector<std::string>& lines,
+                                  size_t                          first)
+{
+    Graph g;
+    g.type = "sequenceDiagram";
+
+    Json seq  = Json::obj();
+    Json parts = Json::arr();  // participants
+    Json msgs  = Json::arr();  // messages
+    Json frags = Json::arr();  // fragments (loop/alt/opt/par)
+    Json notes = Json::arr();  // notes
+    bool autonumber = false;
+
+    // 消息箭头类型解析
+    auto parseArrow = [](const std::string& arrow, bool& isAsync,
+                         bool& isReturn, std::string& headEnd) {
+        isAsync  = false;
+        isReturn = false;
+        headEnd  = "arrow";
+        // ->> 同步实心箭头
+        // -->> 异步实心箭头
+        // ->  同步无激活
+        // --> 异步无激活
+        // -x  带叉
+        // --x 带叉虚线
+        // -)  带圆
+        // --) 带圆异步
+        if (arrow.find(">>") != std::string::npos) {
+            isAsync = true; headEnd = "arrow";
+        } else if (arrow.find("->") != std::string::npos) {
+            headEnd = "arrow";
+        } else if (arrow.find("-x") != std::string::npos) {
+            headEnd = "cross";
+        } else if (arrow.find("-)") != std::string::npos) {
+            headEnd = "open";
+        } else {
+            headEnd = "arrow";
+        }
+        if (arrow.find("--") == 0) isReturn = true;
+        if (arrow.find(">>") == arrow.size() - 2) isAsync = true;
+    };
+
+    int seqNum = 0;
+    // 片段栈：存储当前嵌套的 fragment
+    struct FragState {
+        std::string type;
+        std::string label;
+        Json        innerMsgs = Json::arr();
+    };
+    std::vector<FragState> fragStack;
+
+    auto flushFrag = [&](FragState& fs) {
+        Json frag = Json::obj();
+        frag.set("type", fs.type);
+        frag.set("label", fs.label);
+        frag.set("messages", fs.innerMsgs);
+        frags.push(frag);
+    };
+
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%"))
+            continue;
+
+        std::string lower = toLower(line);
+
+        // 跳过 diagram 声明
+        if (startsWith(lower, "sequencediagram"))
+            continue;
+
+        // autonumber
+        if (lower == "autonumber") {
+            autonumber = true;
+            continue;
+        }
+
+        // participant / actor 声明
+        // 格式：participant/actor Name [as Alias]
+        if (startsWith(lower, "participant ") || startsWith(lower, "actor ")) {
+            bool isActor = startsWith(lower, "actor ");
+            std::string rest = trim(line.substr(isActor ? 6 : 12));
+
+            // 解析 "Name as Alias" 或 just "Name"
+            std::string id, label;
+            size_t asPos = toLower(rest).find(" as ");
+            if (asPos != std::string::npos) {
+                label = trim(rest.substr(0, asPos));
+                id    = trim(rest.substr(asPos + 4));
+            } else {
+                id = label = rest;
+            }
+
+            // 去掉引号
+            if (id.size() >= 2 && id.front() == '"' && id.back() == '"')
+                id = id.substr(1, id.size() - 2);
+            if (label.size() >= 2 && label.front() == '"' && label.back() == '"')
+                label = label.substr(1, label.size() - 2);
+
+            Json p = Json::obj();
+            p.set("id", id);
+            p.set("label", label);
+            p.set("type", isActor ? "actor" : "participant");
+            p.set("order", (double)(parts.a ? parts.a->size() : 0));
+            parts.push(p);
+            continue;
+        }
+
+        // Note 声明
+        // Note left of|right of|over id1[,id2]: text
+        if (startsWith(lower, "note ")) {
+            std::string rest = trim(line.substr(5));
+            std::string placement, targets;
+            size_t colonPos = rest.find(':');
+            std::string noteText;
+            if (colonPos != std::string::npos) {
+                noteText = trim(rest.substr(colonPos + 1));
+                rest = trim(rest.substr(0, colonPos));
+            }
+            // "left of Alice", "right of Bob", "over Alice,Bob"
+            size_t ofPos = toLower(rest).find(" of ");
+            if (ofPos != std::string::npos) {
+                placement = trim(rest.substr(0, ofPos));
+                targets   = trim(rest.substr(ofPos + 4));
+            }
+
+            Json nt = Json::obj();
+            nt.set("placement", placement);
+            nt.set("text", noteText);
+            // 多个目标用逗号分隔
+            Json tgtArr = Json::arr();
+            if (!targets.empty()) {
+                size_t pos = 0;
+                while (pos < targets.size()) {
+                    size_t comma = targets.find(',', pos);
+                    std::string t = trim(targets.substr(pos,
+                        comma == std::string::npos ? std::string::npos : comma - pos));
+                    if (!t.empty()) tgtArr.push(Json(t));
+                    if (comma == std::string::npos) break;
+                    pos = comma + 1;
+                }
+            }
+            nt.set("targets", tgtArr);
+            notes.push(nt);
+            continue;
+        }
+
+        // activate / deactivate
+        if (startsWith(lower, "activate ") || startsWith(lower, "deactivate ")) {
+            // 简单跳过：这些会在导出时保留在 rawMermaid 或作为消息属性
+            // 当前只做基本存储
+            continue;
+        }
+
+        // Fragment 开始：loop, alt, opt, par, critical, break, rect
+        bool isFragStart = false;
+        std::string fragType;
+        std::string fragLabel;
+        for (auto& kw : {"loop ", "alt ", "opt ", "par ", "critical ",
+                         "break ", "rect ", "else ", "and ", "option "}) {
+            if (startsWith(lower, kw)) {
+                isFragStart = true;
+                std::string kwStr(kw);
+                fragType = trim(kwStr); // 去掉末尾空格
+                fragLabel = trim(line.substr(strlen(kw) - 1));
+                break;
+            }
+        }
+
+        if (isFragStart) {
+            // 注意：else/and/option 是现有片段的延续
+            if (fragType == "else" || fragType == "and" ||
+                fragType == "option") {
+                // 结束当前子片段，开始新的子片段
+                if (!fragStack.empty()) {
+                    flushFrag(fragStack.back());
+                    fragStack.back().innerMsgs = Json::arr();
+                    fragStack.back().label = fragStack.back().label +
+                        (fragStack.back().label.empty() ? "" : ", ") +
+                        fragType + " " + fragLabel;
+                }
+                continue;
+            }
+            // 新片段
+            FragState fs;
+            fs.type  = fragType;
+            fs.label = fragLabel;
+            fragStack.push_back(fs);
+            continue;
+        }
+
+        // Fragment 结束
+        if (lower == "end") {
+            if (!fragStack.empty()) {
+                // 检查是否是嵌套的 rect/rgb 等
+                if (fragStack.size() > 1) {
+                    FragState inner = fragStack.back();
+                    fragStack.pop_back();
+                    Json frag = Json::obj();
+                    frag.set("type", inner.type);
+                    frag.set("label", inner.label);
+                    frag.set("messages", inner.innerMsgs);
+                    fragStack.back().innerMsgs.push(frag);
+                } else {
+                    FragState fs = fragStack.back();
+                    fragStack.pop_back();
+                    flushFrag(fs);
+                }
+            }
+            continue;
+        }
+
+        // 消息行：检测箭头模式
+        // 模式：Actor Arrow Actor : Label
+        // Arrow: ->>, -->>, ->, -->, -x, --x, -), --)
+        std::string arrowPattern;
+        size_t arrowPos = std::string::npos;
+        // 完整箭头列表：按长度降序排列避免短前缀误匹配长箭头
+        for (auto& pat : {">>", "->", "-x", "-)"}) {
+            // 先尝试双横线版本
+            std::string dbl = std::string("--") + pat;
+            size_t p = line.find(dbl);
+            if (p != std::string::npos) {
+                arrowPos = p;
+                arrowPattern = dbl;
+                break;
+            }
+            // 再尝试单横线版本
+            std::string sgl = std::string("-") + pat;
+            p = line.find(sgl);
+            if (p != std::string::npos) {
+                arrowPos = p;
+                arrowPattern = sgl;
+                break;
+            }
+        }
+
+        if (arrowPos != std::string::npos && !arrowPattern.empty()) {
+            // 提取消息标签（在冒号之后）
+            std::string msgLabel;
+            size_t colonPos = line.find(':', arrowPos + arrowPattern.size());
+            if (colonPos != std::string::npos)
+                msgLabel = trim(line.substr(colonPos + 1));
+
+            // 提取 from 和 to
+            std::string fromId = trim(line.substr(0, arrowPos));
+            std::string toId   = trim(line.substr(
+                arrowPos + arrowPattern.size(),
+                colonPos == std::string::npos
+                    ? std::string::npos
+                    : colonPos - arrowPos - arrowPattern.size()));
+
+            // 去掉引号
+            auto unquote = [](std::string& s) {
+                if (s.size() >= 2 && s.front() == '"' && s.back() == '"')
+                    s = s.substr(1, s.size() - 2);
+            };
+            unquote(fromId);
+            unquote(toId);
+            unquote(msgLabel);
+
+            // 解析箭头语义
+            bool isAsync = false, isReturn = false;
+            std::string headEnd = "arrow";
+            parseArrow(arrowPattern, isAsync, isReturn, headEnd);
+
+            seqNum++;
+            Json msg = Json::obj();
+            msg.set("from", fromId);
+            msg.set("to", toId);
+            msg.set("label", msgLabel);
+            msg.set("type", isAsync ? "async" : (isReturn ? "return" : "sync"));
+            msg.set("seqNum", (double)seqNum);
+            msg.set("headEnd", headEnd);
+            msg.set("isReturn", isReturn);
+
+            if (fragStack.empty()) {
+                msgs.push(msg);
+            } else {
+                fragStack.back().innerMsgs.push(msg);
+            }
+        }
+    }
+    // 处理未关闭的片段
+    while (!fragStack.empty()) {
+        FragState fs = fragStack.back();
+        fragStack.pop_back();
+        if (!fragStack.empty()) {
+            Json frag = Json::obj();
+            frag.set("type", fs.type);
+            frag.set("label", fs.label);
+            frag.set("messages", fs.innerMsgs);
+            fragStack.back().innerMsgs.push(frag);
+        } else {
+            flushFrag(fs);
+        }
+    }
+
+    seq.set("autonumber", autonumber);
+    seq.set("participants", parts);
+    seq.set("messages", msgs);
+    seq.set("fragments", frags);
+    if (notes.a && !notes.a->empty())
+        seq.set("notes", notes);
+    g.properties.set("sequence", seq);
+
+    // 不填充 nodes/edges（序列图不是图模型）
+
+    return g;
+}
+
+// parseMermaidGantt: 解析 gantt 甘特图
+// 关键步骤：section/task -> patterns -> Graph.properties["gantt"]
+inline Graph parseMermaidGantt(const std::vector<std::string>& lines,
+                               size_t                          first)
+{
+    Graph g;
+    g.type = "gantt";
+
+    Json gantt = Json::obj();
+    Json sections = Json::arr();
+    Json curSection = Json::obj();
+    Json curTasks = Json::arr();
+    std::string curSectionName;
+    std::string title, dateFormat = "YYYY-MM-DD";
+
+    auto flushSection = [&]() {
+        if (!curSectionName.empty() || (curTasks.a && curTasks.a->size() > 0)) {
+            curSection.set("name", curSectionName);
+            curSection.set("tasks", curTasks);
+            sections.push(curSection);
+            curSection = Json::obj();
+            curTasks = Json::arr();
+        }
+    };
+
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%"))
+            continue;
+
+        std::string lower = toLower(line);
+
+        // 跳过 diagram 声明
+        if (lower == "gantt")
+            continue;
+
+        // 配置指令
+        if (startsWith(lower, "dateformat ")) {
+            dateFormat = trim(line.substr(11));
+            continue;
+        }
+        if (startsWith(lower, "title ")) {
+            title = trim(line.substr(6));
+            continue;
+        }
+        if (startsWith(lower, "axisformat ") ||
+            startsWith(lower, "excludes ") ||
+            startsWith(lower, "weekend ") ||
+            startsWith(lower, "tickinterval ")) {
+            continue; // 渲染配置，暂不解析
+        }
+
+        // section 行
+        if (startsWith(lower, "section ")) {
+            flushSection();
+            curSectionName = trim(line.substr(8));
+            curTasks = Json::arr();
+            continue;
+        }
+
+        // task 行：label : [tags,] [id,] startSpec, endSpec
+        size_t colon = line.find(':');
+        if (colon != std::string::npos && curSection.o) {
+            std::string label = trim(line.substr(0, colon));
+            std::string rest  = trim(line.substr(colon + 1));
+
+            Json task = Json::obj();
+            task.set("label", label);
+
+            // 分割剩余的逗号分隔字段
+            std::vector<std::string> parts;
+            {
+                size_t pos = 0;
+                while (pos < rest.size()) {
+                    size_t comma = rest.find(',', pos);
+                    std::string part = trim(rest.substr(pos,
+                        comma == std::string::npos ? std::string::npos : comma - pos));
+                    if (!part.empty()) parts.push_back(part);
+                    if (comma == std::string::npos) break;
+                    pos = comma + 1;
+                }
+            }
+
+            size_t pi = 0;
+            // 检测 tags（done, active, crit, milestone）
+            if (pi < parts.size()) {
+                std::string pLower = toLower(parts[pi]);
+                if (pLower == "done" || pLower == "active" ||
+                    pLower == "crit" || pLower == "milestone") {
+                    task.set("status", pLower);
+                    pi++;
+                }
+            }
+            // 检测 id（不是日期格式、不是 after/until、不是 duration）
+            if (pi < parts.size()) {
+                std::string& p = parts[pi];
+                // id 通常是简短单词，不是日期或时间段
+                if (!p.empty() && p.find_first_of("0123456789") == std::string::npos &&
+                    !startsWith(toLower(p), "after ") &&
+                    !startsWith(toLower(p), "until ")) {
+                    task.set("id", p);
+                    pi++;
+                }
+            }
+            // start
+            if (pi < parts.size()) {
+                task.set("start", parts[pi]);
+                pi++;
+            }
+            // end/duration
+            if (pi < parts.size()) {
+                task.set("end", parts[pi]);
+                pi++;
+            }
+            // after/until 依赖
+            for (size_t k = 0; k < parts.size(); k++) {
+                std::string lowerP = toLower(parts[k]);
+                if (startsWith(lowerP, "after ")) {
+                    task.set("after", trim(parts[k].substr(6)));
+                }
+            }
+
+            curTasks.push(task);
+        }
+    }
+    flushSection();
+
+    gantt.set("title", title);
+    gantt.set("dateFormat", dateFormat);
+    gantt.set("sections", sections);
+    g.properties.set("gantt", gantt);
+
+    return g;
+}
+
+// parseMermaidPie: 解析 pie 饼图
+// 关键步骤：title/数据行 -> entries -> Graph.properties["pie"]
+inline Graph parseMermaidPie(const std::vector<std::string>& lines,
+                             size_t                          first)
+{
+    Graph g;
+    g.type = "pie";
+
+    Json pie = Json::obj();
+    Json entries = Json::arr();
+    std::string title;
+    bool showData = false;
+
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%"))
+            continue;
+
+        std::string lower = toLower(line);
+
+        // 跳过 diagram 声明（单纯的 "pie" 行）
+        if (lower == "pie")
+            continue;
+        if (startsWith(lower, "pie title ")) {
+            title = trim(line.substr(10));
+            continue;
+        }
+        if (startsWith(lower, "title ")) {
+            title = trim(line.substr(6));
+            continue;
+        }
+        if (lower == "showdata") {
+            showData = true;
+            continue;
+        }
+
+        // 数据行："Label" : value  或  "Label" : value
+        size_t colon = line.find(':');
+        if (colon != std::string::npos) {
+            std::string label = trim(line.substr(0, colon));
+            std::string valStr = trim(line.substr(colon + 1));
+
+            // 去掉引号
+            if (label.size() >= 2 && label.front() == '"' && label.back() == '"')
+                label = label.substr(1, label.size() - 2);
+
+            double value = 0;
+            try { value = std::stod(valStr); } catch (...) { continue; }
+
+            Json entry = Json::obj();
+            entry.set("label", label);
+            entry.set("value", value);
+            entries.push(entry);
+        }
+    }
+
+    if (!title.empty()) pie.set("title", title);
+    pie.set("showData", showData);
+    pie.set("entries", entries);
+    g.properties.set("pie", pie);
+
+    return g;
+}
+
+// parseMermaidKanban: 解析 kanban 看板
+inline Graph parseMermaidKanban(const std::vector<std::string>& lines,
+                                size_t                          first)
+{
+    Graph g;
+    g.type = "kanban";
+    Json kb = Json::obj();
+    Json cols = Json::arr();
+    Json curCol = Json::obj();
+    Json curCards = Json::arr();
+    std::string curColId, curColTitle;
+
+    auto flushCol = [&]() {
+        if (!curColId.empty()) {
+            curCol.set("id", curColId);
+            curCol.set("title", curColTitle);
+            curCol.set("cards", curCards);
+            cols.push(curCol);
+            curCol = Json::obj();
+            curCards = Json::arr();
+        }
+    };
+
+    // 计算每行的前导空白长度
+    auto indentLen = [](const std::string& s) -> int {
+        int n = 0;
+        for (char c : s) {
+            if (c == ' ') n++;
+            else if (c == '\t') n += 2;
+            else break;
+        }
+        return n;
+    };
+
+    int colIndent = -1;
+
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string rawLine = lines[li];
+        std::string line = trim(rawLine);
+        if (line.empty() || startsWith(line, "%%")) continue;
+        std::string lower = toLower(line);
+        if (lower == "kanban") continue;
+
+        // 配置行
+        if (startsWith(lower, "ticketbaseurl ")) continue;
+
+        // 列定义：id[Title]  或  [Title]
+        size_t brack = line.find('[');
+        size_t closeBrack = line.find(']');
+        int indent = indentLen(rawLine);
+
+        // 列：缩进较浅或有括号且非明显卡片缩进
+        if (brack != std::string::npos && closeBrack != std::string::npos) {
+            if (colIndent < 0) colIndent = indent;
+            bool isCard = (colIndent >= 0 && indent > colIndent);
+
+            if (!isCard) {
+                flushCol();
+                curColId = trim(line.substr(0, brack));
+                curColTitle = line.substr(brack + 1, closeBrack - brack - 1);
+                curCards = Json::arr();
+                colIndent = indent;
+                continue;
+            }
+        }
+
+        // 卡片行
+        if (brack != std::string::npos && closeBrack != std::string::npos) {
+            std::string tline = trim(line);
+            brack = tline.find('[');
+            closeBrack = tline.find(']');
+            if (brack != std::string::npos && closeBrack != std::string::npos) {
+                Json card = Json::obj();
+                std::string cid = trim(tline.substr(0, brack));
+                std::string ctitle = tline.substr(brack + 1, closeBrack - brack - 1);
+                card.set("id", cid);
+                card.set("title", ctitle);
+
+                // 解析元数据：@{ key: 'value', ... }
+                size_t atPos = tline.find("@{");
+                if (atPos != std::string::npos) {
+                    size_t endPos = tline.find('}', atPos);
+                    if (endPos != std::string::npos) {
+                        std::string meta = tline.substr(atPos + 2, endPos - atPos - 2);
+                        // 简单分割逗号分隔的 key: 'value' 对
+                        size_t mp = 0;
+                        while (mp < meta.size()) {
+                            size_t comma = meta.find(',', mp);
+                            std::string pair = trim(meta.substr(mp,
+                                comma == std::string::npos ? std::string::npos : comma - mp));
+                            size_t kvColon = pair.find(':');
+                            if (kvColon != std::string::npos) {
+                                std::string k = trim(pair.substr(0, kvColon));
+                                std::string v = trim(pair.substr(kvColon + 1));
+                                if (v.size() >= 2 && v.front() == '\'' && v.back() == '\'')
+                                    v = v.substr(1, v.size() - 2);
+                                if (v.size() >= 2 && v.front() == '"' && v.back() == '"')
+                                    v = v.substr(1, v.size() - 2);
+                                card.set(k, v);
+                            }
+                            if (comma == std::string::npos) break;
+                            mp = comma + 1;
+                        }
+                    }
+                }
+                curCards.push(card);
+            }
+        }
+    }
+    flushCol();
+    kb.set("columns", cols);
+    g.properties.set("kanban", kb);
+    return g;
+}
+
+// parseMermaidGit: 解析 gitGraph
+inline Graph parseMermaidGit(const std::vector<std::string>& lines,
+                             size_t                          first)
+{
+    Graph g;
+    g.type = "gitGraph";
+    Json gg  = Json::obj();
+    Json commits = Json::arr();
+    Json branches = Json::arr();
+    std::string curBranch = "main";
+    int order = 0;
+    std::set<std::string> branchSet;
+    branchSet.insert("main");
+
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%")) continue;
+        std::string lower = toLower(line);
+        if (lower == "gitgraph") continue;
+
+        // branch 声明
+        if (startsWith(lower, "branch ")) {
+            std::string bn = trim(line.substr(7));
+            curBranch = bn;
+            if (branchSet.insert(bn).second) {
+                Json br = Json::obj();
+                br.set("name", bn);
+                br.set("order", (double)branches.a->size());
+                branches.push(br);
+            }
+            continue;
+        }
+        // checkout
+        if (startsWith(lower, "checkout ")) {
+            curBranch = trim(line.substr(9));
+            if (branchSet.insert(curBranch).second) {
+                Json br = Json::obj();
+                br.set("name", curBranch);
+                br.set("order", (double)branches.a->size());
+                branches.push(br);
+            }
+            continue;
+        }
+        // merge
+        if (startsWith(lower, "merge ")) {
+            std::string rest = trim(line.substr(6));
+            Json cm = Json::obj();
+            cm.set("branch", curBranch);
+            cm.set("type", "MERGE");
+            cm.set("label", rest);
+            cm.set("order", (double)(++order));
+            commits.push(cm);
+            continue;
+        }
+        // cherry-pick
+        if (startsWith(lower, "cherry-pick ")) {
+            std::string rest = trim(line.substr(12));
+            Json cm = Json::obj();
+            cm.set("branch", curBranch);
+            cm.set("type", "CHERRY_PICK");
+            cm.set("label", rest);
+            cm.set("order", (double)(++order));
+            commits.push(cm);
+            continue;
+        }
+        // commit 行：精确匹配 "commit" 开头（避免误匹配 committed 等）
+        if (lower == "commit" || startsWith(lower, "commit ")) {
+            std::string rest = trim(line.substr(6));
+            Json cm = Json::obj();
+            cm.set("branch", curBranch);
+            cm.set("type", "NORMAL");
+            cm.set("order", (double)(++order));
+
+            // 解析可选字段：id:"xxx" tag:"xxx" type:HIGHLIGHT
+            auto extractQuoted = [](const std::string& s, const std::string& key) -> std::string {
+                size_t p = toLower(s).find(key + ":");
+                if (p == std::string::npos) return "";
+                p += key.size() + 1;
+                if (p >= s.size()) return "";
+                if (s[p] == '"') {
+                    size_t e = s.find('"', p + 1);
+                    if (e != std::string::npos) return s.substr(p + 1, e - p - 1);
+                }
+                // unquoted value
+                size_t e = s.find(' ', p);
+                return s.substr(p, e == std::string::npos ? std::string::npos : e - p);
+            };
+
+            std::string cid = extractQuoted(rest, "id");
+            std::string tag = extractQuoted(rest, "tag");
+            if (!cid.empty()) cm.set("id", cid);
+            if (!tag.empty()) cm.set("tag", tag);
+
+            std::string label = rest;
+            // 去掉已解析的 id/tag
+            if (!cid.empty()) {
+                size_t pos = lower.find("id:");
+                if (pos != std::string::npos)
+                    label = trim(rest.substr(0, pos));
+            }
+            cm.set("label", label);
+            commits.push(cm);
+            continue;
+        }
+    }
+
+    gg.set("commits", commits);
+    gg.set("branches", branches);
+    g.properties.set("gitGraph", gg);
+    return g;
+}
+
+// parseMermaidJourney: 解析 journey 用户旅程
+inline Graph parseMermaidJourney(const std::vector<std::string>& lines,
+                                 size_t                          first)
+{
+    Graph g;
+    g.type = "journey";
+    Json jn = Json::obj();
+    Json sections = Json::arr();
+    Json curTasks = Json::arr();
+    std::string curSection, title;
+
+    auto flushSection = [&]() {
+        if (!curSection.empty() || (curTasks.a && curTasks.a->size() > 0)) {
+            Json sec = Json::obj();
+            sec.set("name", curSection);
+            sec.set("tasks", curTasks);
+            sections.push(sec);
+            curTasks = Json::arr();
+        }
+    };
+
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%")) continue;
+        std::string lower = toLower(line);
+        if (lower == "journey") continue;
+
+        if (startsWith(lower, "title ")) {
+            title = trim(line.substr(6));
+            continue;
+        }
+        if (startsWith(lower, "section ")) {
+            flushSection();
+            curSection = trim(line.substr(8));
+            curTasks = Json::arr();
+            continue;
+        }
+
+        // task 行：Task Name: score: actor1, actor2
+        size_t c1 = line.find(':');
+        if (c1 != std::string::npos) {
+            std::string taskName = trim(line.substr(0, c1));
+            std::string rest = trim(line.substr(c1 + 1));
+            size_t c2 = rest.find(':');
+            int score = 0;
+            std::vector<std::string> actors;
+            if (c2 != std::string::npos) {
+                try { score = std::stoi(trim(rest.substr(0, c2))); }
+                catch (...) { score = 0; }
+                std::string actorStr = trim(rest.substr(c2 + 1));
+                // 分割逗号
+                size_t ap = 0;
+                while (ap < actorStr.size()) {
+                    size_t comma = actorStr.find(',', ap);
+                    std::string a = trim(actorStr.substr(ap,
+                        comma == std::string::npos ? std::string::npos : comma - ap));
+                    if (!a.empty()) actors.push_back(a);
+                    if (comma == std::string::npos) break;
+                    ap = comma + 1;
+                }
+            }
+
+            Json task = Json::obj();
+            task.set("label", taskName);
+            task.set("score", (double)score);
+            Json actArr = Json::arr();
+            for (auto& a : actors) actArr.push(Json(a));
+            task.set("actors", actArr);
+            curTasks.push(task);
+        }
+    }
+    flushSection();
+
+    if (!title.empty()) jn.set("title", title);
+    jn.set("sections", sections);
+    g.properties.set("journey", jn);
+    return g;
+}
+
+// parseMermaidTimeline: 解析 timeline 时间线
+inline Graph parseMermaidTimeline(const std::vector<std::string>& lines,
+                                  size_t                          first)
+{
+    Graph g;
+    g.type = "timeline";
+    Json tl = Json::obj();
+    Json sections = Json::arr();
+    Json curEvents = Json::arr();
+    std::string curSection, title;
+
+    auto flushSection = [&]() {
+        if (!curSection.empty() || (curEvents.a && curEvents.a->size() > 0)) {
+            Json sec = Json::obj();
+            sec.set("name", curSection);
+            sec.set("events", curEvents);
+            sections.push(sec);
+            curEvents = Json::arr();
+        }
+    };
+
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%")) continue;
+        std::string lower = toLower(line);
+        if (lower == "timeline") continue;
+
+        if (startsWith(lower, "title ")) {
+            title = trim(line.substr(6));
+            continue;
+        }
+        if (startsWith(lower, "section ")) {
+            flushSection();
+            curSection = trim(line.substr(8));
+            curEvents = Json::arr();
+            continue;
+        }
+
+        // 时间段行：period : event1 [: event2 ...]
+        size_t colon = line.find(':');
+        if (colon != std::string::npos) {
+            Json evt = Json::obj();
+            std::string period = trim(line.substr(0, colon));
+            std::string eventsStr = trim(line.substr(colon + 1));
+
+            evt.set("period", period);
+            Json evtList = Json::arr();
+            // 分割冒号分隔的多个事件
+            size_t ep = 0;
+            while (ep < eventsStr.size()) {
+                size_t nextColon = eventsStr.find(':', ep);
+                // 注意：冒号可能被引号包裹
+                std::string e = trim(eventsStr.substr(ep,
+                    nextColon == std::string::npos ? std::string::npos : nextColon - ep));
+                if (!e.empty()) evtList.push(Json(e));
+                if (nextColon == std::string::npos) break;
+                ep = nextColon + 1;
+            }
+            evt.set("events", evtList);
+            curEvents.push(evt);
+        }
+    }
+    flushSection();
+
+    if (!title.empty()) tl.set("title", title);
+    tl.set("sections", sections);
+    g.properties.set("timeline", tl);
+    return g;
+}
+
+// parseMermaidQuadrant: 解析 quadrantChart
+inline Graph parseMermaidQuadrant(const std::vector<std::string>& lines,
+                                  size_t                          first)
+{
+    Graph g;
+    g.type = "quadrantChart";
+    Json qc = Json::obj();
+    Json points = Json::arr();
+    std::string title, xLeft, xRight, yBottom, yTop, q1, q2, q3, q4;
+
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%")) continue;
+        std::string lower = toLower(line);
+
+        if (startsWith(lower, "quadrantchart")) continue;
+        if (startsWith(lower, "title ")) {
+            title = trim(line.substr(6));
+            continue;
+        }
+        if (startsWith(lower, "x-axis ")) {
+            std::string rest = trim(line.substr(7));
+            size_t arrow = rest.find(" --> ");
+            if (arrow == std::string::npos) arrow = rest.find(" --&gt; ");
+            if (arrow != std::string::npos) {
+                xLeft  = trim(rest.substr(0, arrow));
+                xRight = trim(rest.substr(arrow + (rest.find("--&gt;") != std::string::npos ? 6 : 5)));
+            }
+            continue;
+        }
+        if (startsWith(lower, "y-axis ")) {
+            std::string rest = trim(line.substr(7));
+            size_t arrow = rest.find(" --> ");
+            if (arrow == std::string::npos) arrow = rest.find(" --&gt; ");
+            if (arrow != std::string::npos) {
+                yBottom = trim(rest.substr(0, arrow));
+                yTop    = trim(rest.substr(arrow + (rest.find("--&gt;") != std::string::npos ? 6 : 5)));
+            }
+            continue;
+        }
+        if (startsWith(lower, "quadrant-1 ")) { q1 = trim(line.substr(11)); continue; }
+        if (startsWith(lower, "quadrant-2 ")) { q2 = trim(line.substr(11)); continue; }
+        if (startsWith(lower, "quadrant-3 ")) { q3 = trim(line.substr(11)); continue; }
+        if (startsWith(lower, "quadrant-4 ")) { q4 = trim(line.substr(11)); continue; }
+
+        // 数据点：Name: [x, y]
+        size_t colon = line.find(':');
+        if (colon != std::string::npos) {
+            std::string pname = trim(line.substr(0, colon));
+            std::string coords = trim(line.substr(colon + 1));
+            // 解析 [x, y]
+            size_t lb = coords.find('[');
+            size_t rb = coords.find(']');
+            if (lb != std::string::npos && rb != std::string::npos) {
+                std::string inner = coords.substr(lb + 1, rb - lb - 1);
+                size_t comma = inner.find(',');
+                if (comma != std::string::npos) {
+                    double x = 0, y = 0;
+                    try { x = std::stod(trim(inner.substr(0, comma))); }
+                    catch (...) {}
+                    try { y = std::stod(trim(inner.substr(comma + 1))); }
+                    catch (...) {}
+                    Json pt = Json::obj();
+                    pt.set("label", pname);
+                    pt.set("x", x);
+                    pt.set("y", y);
+                    points.push(pt);
+                }
+            }
+        }
+    }
+
+    if (!title.empty()) qc.set("title", title);
+    qc.set("xLeft", xLeft);
+    qc.set("xRight", xRight);
+    qc.set("yBottom", yBottom);
+    qc.set("yTop", yTop);
+    if (!q1.empty()) qc.set("q1", q1);
+    if (!q2.empty()) qc.set("q2", q2);
+    if (!q3.empty()) qc.set("q3", q3);
+    if (!q4.empty()) qc.set("q4", q4);
+    qc.set("points", points);
+    g.properties.set("quadrantChart", qc);
+    return g;
+}
+
+// parseMermaidXychart: 解析 xychart-beta
+inline Graph parseMermaidXychart(const std::vector<std::string>& lines,
+                                 size_t                          first)
+{
+    Graph g;
+    g.type = "xychart";
+    Json xy = Json::obj();
+    Json series = Json::arr();
+    Json xAxis = Json::obj();
+    Json yAxis = Json::obj();
+    std::string title;
+    bool isHorizontal = false;
+
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%")) continue;
+        std::string lower = toLower(line);
+
+        if (startsWith(lower, "xychart-beta") || lower == "xychart") continue;
+        if (lower == "horizontal") { isHorizontal = true; continue; }
+        if (startsWith(lower, "title ")) {
+            title = trim(line.substr(6));
+            continue;
+        }
+        // x-axis
+        if (startsWith(lower, "x-axis ")) {
+            std::string rest = trim(line.substr(7));
+            // categorical: [cat1, cat2, ...] 或 numeric: label min --> max
+            if (rest.find('[') != std::string::npos) {
+                xAxis.set("type", "categorical");
+                Json cats = Json::arr();
+                size_t lb = rest.find('[');
+                size_t rb = rest.find(']');
+                if (lb != std::string::npos && rb != std::string::npos) {
+                    std::string inner = rest.substr(lb + 1, rb - lb - 1);
+                    size_t cp = 0;
+                    while (cp < inner.size()) {
+                        size_t comma = inner.find(',', cp);
+                        std::string cat = trim(inner.substr(cp,
+                            comma == std::string::npos ? std::string::npos : comma - cp));
+                        if (cat.size() >= 2 && cat.front() == '"' && cat.back() == '"')
+                            cat = cat.substr(1, cat.size() - 2);
+                        if (!cat.empty()) cats.push(Json(cat));
+                        if (comma == std::string::npos) break;
+                        cp = comma + 1;
+                    }
+                }
+                xAxis.set("categories", cats);
+            } else {
+                xAxis.set("type", "numeric");
+                xAxis.set("label", rest);
+            }
+            continue;
+        }
+        // y-axis
+        if (startsWith(lower, "y-axis ")) {
+            std::string rest = trim(line.substr(7));
+            yAxis.set("label", rest);
+            continue;
+        }
+        // bar / line series
+        if (startsWith(lower, "bar ") || startsWith(lower, "line ")) {
+            bool isLine = startsWith(lower, "line ");
+            std::string rest = trim(line.substr(isLine ? 5 : 4));
+            std::string sname;
+            // "name" [values] 或 [values]
+            if (!rest.empty() && rest.front() == '"') {
+                size_t eq = rest.find('"', 1);
+                if (eq != std::string::npos) {
+                    sname = rest.substr(1, eq - 1);
+                    rest = trim(rest.substr(eq + 1));
+                }
+            }
+            Json s = Json::obj();
+            s.set("type", isLine ? "line" : "bar");
+            s.set("label", sname);
+            Json vals = Json::arr();
+            size_t lb = rest.find('[');
+            size_t rb = rest.find(']');
+            if (lb != std::string::npos && rb != std::string::npos) {
+                std::string inner = rest.substr(lb + 1, rb - lb - 1);
+                size_t vp = 0;
+                while (vp < inner.size()) {
+                    size_t comma = inner.find(',', vp);
+                    std::string vs = trim(inner.substr(vp,
+                        comma == std::string::npos ? std::string::npos : comma - vp));
+                    if (!vs.empty()) {
+                        try { vals.push(Json(std::stod(vs))); }
+                        catch (...) {}
+                    }
+                    if (comma == std::string::npos) break;
+                    vp = comma + 1;
+                }
+            }
+            s.set("data", vals);
+            series.push(s);
+            continue;
+        }
+    }
+
+    if (!title.empty()) xy.set("title", title);
+    if (isHorizontal) xy.set("horizontal", true);
+    xy.set("xAxis", xAxis);
+    xy.set("yAxis", yAxis);
+    xy.set("series", series);
+    g.properties.set("xychart", xy);
+    return g;
+}
+
+// parseMermaidBlock: 解析 block-beta
+inline Graph parseMermaidBlock(const std::vector<std::string>& lines,
+                               size_t                          first)
+{
+    Graph g;
+    g.type = "block";
+    Json bl = Json::obj();
+    Json blocks = Json::arr();
+    Json blEdges = Json::arr();
+    int columns = 0;
+    int col = 0, row = 0;
+
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%")) continue;
+        std::string lower = toLower(line);
+        if (startsWith(lower, "block-beta") || lower == "block") continue;
+
+        // columns N
+        if (startsWith(lower, "columns ")) {
+            try { columns = std::stoi(trim(line.substr(8))); }
+            catch (...) {}
+            continue;
+        }
+        // style / classDef / class 指令
+        if (startsWith(lower, "style ") || startsWith(lower, "classdef ") ||
+            startsWith(lower, "class ")) continue;
+
+        // 边：A --> B 或 A --- B 或 A -- "label" --> B
+        if (line.find("--") != std::string::npos &&
+            line.find(':') == std::string::npos) {
+            // 简单边解析
+            bool directed = (line.find("-->") != std::string::npos ||
+                             line.find("--&gt;") != std::string::npos);
+            std::string sep = directed ? "-->" : "---";
+            size_t sepPos = line.find(sep);
+            if (sepPos == std::string::npos) {
+                if (line.find("--&gt;") != std::string::npos) {
+                    sep = "--&gt;"; sepPos = line.find(sep);
+                }
+            }
+            if (sepPos != std::string::npos) {
+                Json e = Json::obj();
+                e.set("from", trim(line.substr(0, sepPos)));
+                e.set("to", trim(line.substr(sepPos + sep.size())));
+                e.set("directed", directed);
+                blEdges.push(e);
+            }
+            continue;
+        }
+
+        // block 定义
+        std::string bid, blabel, shape;
+        size_t brack = line.find('[');
+        size_t paren = line.find('(');
+        size_t brace = line.find('{');
+
+        // 提取 block id（到第一个括号或空格之前）
+        size_t sp = line.find(' ');
+        size_t br = line.find_first_of("[({");
+        size_t end = std::min(sp, br);
+        if (end == std::string::npos) end = std::max(sp, br);
+        if (end != std::string::npos) {
+            bid = trim(line.substr(0, end));
+        } else {
+            bid = line;
+        }
+
+        // 提取形状和标签
+        if (brack != std::string::npos) {
+            size_t cb = line.find(']', brack);
+            if (cb != std::string::npos) blabel = line.substr(brack + 1, cb - brack - 1);
+            shape = "rect";
+        }
+        if (paren != std::string::npos) {
+            size_t cp = line.find(')', paren);
+            shape = "round";
+            if (brack == std::string::npos && cp != std::string::npos)
+                blabel = line.substr(paren + 1, cp - paren - 1);
+        }
+        if (brace != std::string::npos) {
+            size_t cb2 = line.find('}', brace);
+            shape = "diamond";
+            if (brack == std::string::npos && paren == std::string::npos && cb2 != std::string::npos)
+                blabel = line.substr(brace + 1, cb2 - brace - 1);
+        }
+
+        // 检测 colSpan :N
+        int colSpan = 1;
+        size_t csPos = line.find(":N");
+        if (csPos == std::string::npos) csPos = line.rfind(':');
+        if (csPos != std::string::npos && csPos > 0 &&
+            (csPos + 1 < line.size()) && isdigit((unsigned char)line[csPos + 1])) {
+            try { colSpan = std::stoi(line.substr(csPos + 1)); }
+            catch (...) {}
+        }
+
+        Json bk = Json::obj();
+        bk.set("id", bid);
+        bk.set("label", blabel);
+        if (!shape.empty()) bk.set("shape", shape);
+        bk.set("col", (double)col);
+        bk.set("row", (double)row);
+        if (colSpan > 1) bk.set("colSpan", (double)colSpan);
+        blocks.push(bk);
+
+        col += colSpan;
+        if (columns > 0 && col >= columns) { col = 0; row++; }
+    }
+
+    bl.set("columns", (double)columns);
+    bl.set("blocks", blocks);
+    bl.set("edges", blEdges);
+    g.properties.set("block", bl);
+    return g;
+}
+
+// parseMermaidPacket: 解析 packet-beta
+inline Graph parseMermaidPacket(const std::vector<std::string>& lines,
+                                size_t                          first)
+{
+    Graph g;
+    g.type = "packet";
+    Json pk = Json::obj();
+    Json fields = Json::arr();
+    std::string title;
+
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%")) continue;
+        std::string lower = toLower(line);
+        if (startsWith(lower, "packet-beta") || lower == "packet") continue;
+
+        if (startsWith(lower, "title ")) {
+            title = trim(line.substr(6));
+            continue;
+        }
+
+        // 字段行：bit_range: "label"
+        size_t colon = line.find(':');
+        if (colon != std::string::npos) {
+            std::string range = trim(line.substr(0, colon));
+            std::string label = trim(line.substr(colon + 1));
+            if (label.size() >= 2 && label.front() == '"' && label.back() == '"')
+                label = label.substr(1, label.size() - 2);
+
+            Json f = Json::obj();
+            f.set("label", label);
+
+            // 解析位范围：N-M 或 Nbits 或 +N (相对) 或 N
+            if (range.find('-') != std::string::npos && range[0] != '+') {
+                size_t dash = range.find('-');
+                try {
+                    f.set("start", std::stoi(trim(range.substr(0, dash))));
+                    f.set("end", std::stoi(trim(range.substr(dash + 1))));
+                } catch (...) {}
+            } else if (startsWith(range, "+")) {
+                try { f.set("bits", std::stoi(trim(range.substr(1)))); }
+                catch (...) {}
+            } else {
+                // Nbits 或 N
+                size_t bpos = toLower(range).find("bit");
+                std::string num = (bpos != std::string::npos)
+                                  ? range.substr(0, bpos) : range;
+                try { f.set("bits", std::stoi(trim(num))); }
+                catch (...) {}
+            }
+            fields.push(f);
+        }
+    }
+
+    if (!title.empty()) pk.set("title", title);
+    pk.set("fields", fields);
+    g.properties.set("packet", pk);
+    return g;
+}
+
+// parseMermaidArchitecture: 解析 architecture-beta
+// 关键步骤：解析 group/service/junction -> 节点（含 icon/groupId）
+//         解析边（含端口方向）-> edges + properties
+inline Graph parseMermaidArchitecture(const std::vector<std::string>& lines,
+                                      size_t                          first)
+{
+    Graph g;
+    g.type = "architecture-beta";
+
+    Json arch    = Json::obj();
+    Json groups  = Json::arr();
+    Json svcs    = Json::arr();
+    Json juncs   = Json::arr();
+    Json aEdges  = Json::arr();
+
+    // 辅助：从 "(icon)[label]" 或 "[label]" 提取 icon 和 label
+    auto parseIconLabel = [](const std::string& s,
+                             std::string& icon, std::string& label) {
+        icon.clear();
+        label.clear();
+        size_t paren = s.find('(');
+        size_t closeParen = s.find(')');
+        if (paren != std::string::npos && closeParen != std::string::npos) {
+            icon = s.substr(paren + 1, closeParen - paren - 1);
+        }
+        size_t brack = s.find('[');
+        size_t closeBrack = s.find(']');
+        if (brack != std::string::npos && closeBrack != std::string::npos) {
+            label = s.substr(brack + 1, closeBrack - brack - 1);
+        } else {
+            // 没有 [label]，使用括号后的文本作为 label
+            if (closeParen != std::string::npos)
+                label = trim(s.substr(closeParen + 1));
+            else
+                label = trim(s);
+        }
+    };
+
+    for (size_t li = first; li < lines.size(); li++) {
+        std::string line = trim(lines[li]);
+        if (line.empty() || startsWith(line, "%%"))
+            continue;
+
+        std::string lower = toLower(line);
+
+        // 跳过 diagram 声明
+        if (startsWith(lower, "architecture-beta") ||
+            startsWith(lower, "architecture"))
+            continue;
+
+        // group 声明：group id(icon)[label] [in parentId]
+        if (startsWith(lower, "group ")) {
+            std::string rest = trim(line.substr(6));
+            // 提取 id: 第一个单词（在括号之前）
+            size_t spaceOrParen = rest.find_first_of(" (");
+            std::string grpId = (spaceOrParen != std::string::npos)
+                                ? rest.substr(0, spaceOrParen) : rest;
+
+            std::string icon, label;
+            parseIconLabel(rest, icon, label);
+
+            // 检测 "in parentId"
+            std::string parentId;
+            size_t inPos = toLower(rest).find(" in ");
+            if (inPos != std::string::npos) {
+                parentId = trim(rest.substr(inPos + 4));
+            }
+
+            Json grp = Json::obj();
+            grp.set("id", grpId);
+            grp.set("label", label);
+            if (!icon.empty()) grp.set("icon", icon);
+            if (!parentId.empty()) grp.set("groupId", parentId);
+            groups.push(grp);
+
+            // 同步到 Graph
+            Node& n = g.ensureNode(grpId, label.empty() ? grpId : label);
+            n.shape = "group";
+            if (!parentId.empty()) n.parent = parentId;
+            if (!icon.empty()) n.style = icon;  // icon 存入 style
+            continue;
+        }
+
+        // service 声明：service id(icon)[label] [in parentId]
+        if (startsWith(lower, "service ")) {
+            std::string rest = trim(line.substr(8));
+            size_t spaceOrParen = rest.find_first_of(" (");
+            std::string svcId = (spaceOrParen != std::string::npos)
+                                ? rest.substr(0, spaceOrParen) : rest;
+
+            std::string icon, label;
+            parseIconLabel(rest, icon, label);
+
+            std::string parentId;
+            size_t inPos = toLower(rest).find(" in ");
+            if (inPos != std::string::npos)
+                parentId = trim(rest.substr(inPos + 4));
+
+            Json svc = Json::obj();
+            svc.set("id", svcId);
+            svc.set("label", label);
+            if (!icon.empty()) svc.set("icon", icon);
+            if (!parentId.empty()) svc.set("groupId", parentId);
+            svcs.push(svc);
+
+            Node& n = g.ensureNode(svcId, label.empty() ? svcId : label);
+            n.shape = "rect";
+            if (!parentId.empty()) n.parent = parentId;
+            if (!icon.empty()) n.style = icon;
+            continue;
+        }
+
+        // junction 声明：junction id [in parentId]
+        if (startsWith(lower, "junction ")) {
+            std::string rest = trim(line.substr(9));
+            size_t sp = rest.find(' ');
+            std::string jid = (sp != std::string::npos)
+                              ? rest.substr(0, sp) : rest;
+
+            std::string parentId;
+            size_t inPos = toLower(rest).find(" in ");
+            if (inPos != std::string::npos)
+                parentId = trim(rest.substr(inPos + 4));
+
+            Json jn = Json::obj();
+            jn.set("id", jid);
+            if (!parentId.empty()) jn.set("groupId", parentId);
+            juncs.push(jn);
+
+            Node& n = g.ensureNode(jid, jid);
+            n.shape = "circle";
+            if (!parentId.empty()) n.parent = parentId;
+            continue;
+        }
+
+        // 边声明：srcId:port --|--> port:dstId
+        // 格式示例：db:R -- L:auth  或  auth:T --> B:j1
+        if (line.find(':') != std::string::npos &&
+            (line.find("--") != std::string::npos)) {
+
+            bool directed = (line.find("-->") != std::string::npos ||
+                             line.find("--&gt;") != std::string::npos);
+            bool bidi = (line.find("<-->") != std::string::npos ||
+                         line.find("&lt;--&gt;") != std::string::npos);
+
+            // 分割左右两部分
+            std::string sep = directed ? "-->" : (bidi ? "<-->" : "--");
+            size_t sepPos = line.find(sep);
+            if (sepPos == std::string::npos) {
+                // 尝试 --&gt; / &lt;--&gt;
+                if (line.find("--&gt;") != std::string::npos) {
+                    sep = "--&gt;";
+                    sepPos = line.find(sep);
+                } else if (line.find("&lt;--&gt;") != std::string::npos) {
+                    sep = "&lt;--&gt;";
+                    sepPos = line.find(sep);
+                }
+            }
+
+            if (sepPos != std::string::npos) {
+                std::string leftPart  = trim(line.substr(0, sepPos));
+                std::string rightPart = trim(line.substr(sepPos + sep.size()));
+
+                // 解析 leftPart: srcId:port
+                std::string srcId, srcPort;
+                size_t lColon = leftPart.rfind(':');
+                if (lColon != std::string::npos) {
+                    srcPort = trim(leftPart.substr(lColon + 1));
+                    srcId   = trim(leftPart.substr(0, lColon));
+                } else {
+                    srcId = leftPart;
+                }
+
+                // 解析 rightPart: port:dstId
+                std::string dstId, dstPort;
+                size_t rColon = rightPart.find(':');
+                if (rColon != std::string::npos) {
+                    dstPort = trim(rightPart.substr(0, rColon));
+                    dstId   = trim(rightPart.substr(rColon + 1));
+                } else {
+                    dstId = rightPart;
+                }
+
+                if (!srcId.empty() && !dstId.empty()) {
+                    Json ae = Json::obj();
+                    ae.set("from", srcId);
+                    ae.set("to", dstId);
+                    if (!srcPort.empty()) ae.set("fromPort", srcPort);
+                    if (!dstPort.empty()) ae.set("toPort", dstPort);
+                    ae.set("directed", directed || bidi);
+                    if (bidi) ae.set("bidi", true);
+                    aEdges.push(ae);
+
+                    // 同步到 edges
+                    g.ensureNode(srcId, srcId);
+                    g.ensureNode(dstId, dstId);
+                    g.addEdge(srcId, dstId, "",
+                              "solid", (directed || bidi) ? "arrow" : "none",
+                              "none", (directed || bidi) ? "arrow" : "none");
+                }
+            }
+        }
+    }
+
+    arch.set("groups", groups);
+    arch.set("services", svcs);
+    arch.set("junctions", juncs);
+    arch.set("edges", aEdges);
+    g.properties.set("architecture", arch);
+
+    return g;
+}
+
 // parseMermaid: Mermaid 分发入口，根据首个有效指令选择具体子解析器
+// mermaidTypeFromFirstLine: 从首行关键字推断 Mermaid 类型名
+inline std::string mermaidTypeFromFirstLine(const std::string& lowerLine)
+{
+    if (startsWith(lowerLine, "graph") || startsWith(lowerLine, "flowchart"))
+        return "flowchart";
+    if (startsWith(lowerLine, "mindmap"))
+        return "mindmap";
+    if (startsWith(lowerLine, "erdiagram"))
+        return "er";
+    if (startsWith(lowerLine, "sequencediagram"))
+        return "sequenceDiagram";
+    if (startsWith(lowerLine, "classdiagram") || startsWith(lowerLine, "classdiagram-v2"))
+        return "classDiagram";
+    if (startsWith(lowerLine, "statediagram"))
+        return "stateDiagram";
+    if (startsWith(lowerLine, "gantt"))
+        return "gantt";
+    if (startsWith(lowerLine, "pie"))
+        return "pie";
+    if (startsWith(lowerLine, "gitgraph"))
+        return "gitGraph";
+    if (startsWith(lowerLine, "journey"))
+        return "journey";
+    if (startsWith(lowerLine, "timeline"))
+        return "timeline";
+    if (startsWith(lowerLine, "kanban"))
+        return "kanban";
+    if (startsWith(lowerLine, "quadrantchart"))
+        return "quadrantChart";
+    if (startsWith(lowerLine, "xychart-beta"))
+        return "xychart";
+    if (startsWith(lowerLine, "architecture-beta"))
+        return "architecture-beta";
+    if (startsWith(lowerLine, "packet-beta"))
+        return "packet";
+    if (startsWith(lowerLine, "block-beta"))
+        return "block";
+    if (startsWith(lowerLine, "sankey-beta"))
+        return "sankey";
+    if (startsWith(lowerLine, "requirementdiagram"))
+        return "requirement";
+    return "";
+}
+
+// parseMermaid: Mermaid 分发入口，根据首个有效指令选择具体子解析器
+// 对于能深度解析的类型（flowchart/mindmap/er）走专用解析器；
+// 其余类型走 rawMermaid 透传模式，保留原始文本供 Mermaid/URL 导出。
 inline Graph parseMermaid(const std::string& text)
 {
     auto lines = splitLines(text);
@@ -333,12 +2268,61 @@ inline Graph parseMermaid(const std::string& text)
         std::string t = toLower(trim(lines[i]));
         if (t.empty() || startsWith(t, "%%"))
             continue;
+        // 跳过 YAML 前置元数据（--- ... --- 或 --- ... ...）
+        if (trim(lines[i]) == "---") {
+            for (i++; i < lines.size(); i++) {
+                std::string inner = trim(lines[i]);
+                if (inner == "---" || inner == "...")
+                    break;
+            }
+            continue;
+        }
         if (startsWith(t, "graph") || startsWith(t, "flowchart"))
             return parseMermaidFlowchart(lines, i + 1);
         if (startsWith(t, "mindmap"))
             return parseMermaidMindmap(lines, i + 1);
         if (startsWith(t, "erdiagram"))
             return parseMermaidER(lines, i + 1);
+        if (startsWith(t, "classdiagram"))
+            return parseMermaidClass(lines, i + 1);
+        if (startsWith(t, "statediagram"))
+            return parseMermaidState(lines, i + 1);
+        if (startsWith(t, "requirementdiagram"))
+            return parseMermaidRequirement(lines, i + 1);
+        if (startsWith(t, "sankey-beta"))
+            return parseMermaidSankey(lines, i + 1);
+        if (startsWith(t, "sequencediagram"))
+            return parseMermaidSequence(lines, i + 1);
+        if (startsWith(t, "pie"))
+            return parseMermaidPie(lines, i); // 不跳过首行：pie title 可能在同一行
+        if (startsWith(t, "gantt"))
+            return parseMermaidGantt(lines, i + 1);
+        if (startsWith(t, "architecture-beta"))
+            return parseMermaidArchitecture(lines, i + 1);
+        if (startsWith(t, "kanban"))
+            return parseMermaidKanban(lines, i + 1);
+        if (startsWith(t, "gitgraph"))
+            return parseMermaidGit(lines, i + 1);
+        if (startsWith(t, "journey"))
+            return parseMermaidJourney(lines, i + 1);
+        if (startsWith(t, "timeline"))
+            return parseMermaidTimeline(lines, i + 1);
+        if (startsWith(t, "quadrantchart"))
+            return parseMermaidQuadrant(lines, i + 1);
+        if (startsWith(t, "xychart-beta"))
+            return parseMermaidXychart(lines, i + 1);
+        if (startsWith(t, "block-beta"))
+            return parseMermaidBlock(lines, i + 1);
+        if (startsWith(t, "packet-beta"))
+            return parseMermaidPacket(lines, i + 1);
+        // 透传模式：不支持的 Mermaid 类型保存原始文本，不做深度解析
+        std::string detected = mermaidTypeFromFirstLine(t);
+        if (!detected.empty()) {
+            Graph g;
+            g.type       = detected;
+            g.rawMermaid = text;
+            return g;
+        }
         throw ParseError("unsupported mermaid diagram type: " +
                          t.substr(0, 20));
     }
@@ -1008,20 +2992,41 @@ inline std::string detectFormat(const std::string& text)
         }
         return "excalidraw";
     }
-    std::string low = toLower(t);
-    for (auto& l : splitLines(low)) {
-        std::string s = trim(l);
+    auto formatLines = splitLines(t);
+    bool firstContent = true;
+    for (size_t i = 0; i < formatLines.size(); i++) {
+        std::string s = trim(formatLines[i]);
         if (s.empty() || startsWith(s, "%%"))
             continue;
-        if (startsWith(s, "graph ") || startsWith(s, "flowchart") ||
-            startsWith(s, "mindmap") || startsWith(s, "erdiagram"))
+        // 跳过 YAML 前置元数据（--- ... --- 或 --- ... ...）
+        if (firstContent && s == "---") {
+            for (i++; i < formatLines.size(); i++) {
+                std::string inner = trim(formatLines[i]);
+                if (inner == "---" || inner == "...")
+                    break;
+            }
+            continue;
+        }
+        firstContent = false;
+        std::string sl = toLower(s);
+        if (startsWith(sl, "graph ") || startsWith(sl, "flowchart") ||
+            startsWith(sl, "mindmap") || startsWith(sl, "erdiagram") ||
+            startsWith(sl, "sequencediagram") || startsWith(sl, "classdiagram") ||
+            startsWith(sl, "statediagram") || startsWith(sl, "gantt") ||
+            sl == "pie" || startsWith(sl, "pie ") ||
+            startsWith(sl, "gitgraph") || startsWith(sl, "journey") ||
+            startsWith(sl, "timeline") || startsWith(sl, "kanban") ||
+            startsWith(sl, "quadrantchart") || startsWith(sl, "xychart-beta") ||
+            startsWith(sl, "architecture-beta") || startsWith(sl, "packet-beta") ||
+            startsWith(sl, "block-beta") || startsWith(sl, "sankey-beta") ||
+            startsWith(sl, "requirementdiagram"))
             return "mermaid";
         break;
     }
     if (t[0] == '#' || t[0] == '-' || t[0] == '*')
         return "markdown";
     // CSV 启发式判断：首行包含逗号且出现已知表头
-    auto lines = splitLines(low);
+    auto lines = splitLines(t);
     if (!lines.empty() && lines[0].find(',') != std::string::npos) {
         if (lines[0].find("from") != std::string::npos ||
             lines[0].find("source") != std::string::npos ||

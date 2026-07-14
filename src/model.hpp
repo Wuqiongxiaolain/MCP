@@ -18,7 +18,7 @@ using gj::Json;
 // 可选值："flowchart" | "architecture" | "er" | "orgchart" | "mindmap" |
 // "whiteboard"
 
-// Node: 图中的“节点”实体（命名上 n 表示 node，id 为机器唯一标识，label
+// Node: 图中的"节点"实体（命名上 n 表示 node，id 为机器唯一标识，label
 // 为展示名）
 struct Node
 {
@@ -32,14 +32,23 @@ struct Node
     double                   x = 0, y = 0, w = 0, h = 0;
 };
 
-// Edge: 图中的“边/连线”实体（命名上 from/to 表示起点和终点节点 id）
+// Edge: 图中的"边/连线"实体（命名上 from/to 表示起点和终点节点 id）
 struct Edge
 {
     std::string id;
     std::string from, to;
     std::string label;
-    std::string style;  // 线型：solid | dashed | thick
-    std::string arrow;  // 箭头：arrow | none | both
+    std::string style;  // 线型：solid | dashed | dotted | thick
+
+    // 箭头装饰（取代单一 arrow 字段的粗糙分类）
+    // 旧 arrow 字段保留为派生/兼容属性，toJson 和现有代码仍可使用
+    std::string arrow = "arrow";     // arrow | none | both (backward compat)
+    std::string headStart = "none";  // none | arrow | open | cross
+    std::string headEnd   = "arrow"; // none | arrow | open | cross
+
+    // 序列图 / gitGraph 专用
+    int  seqNum  = 0;       // 消息序号
+    bool isAsync = false;   // 异步消息（->>）
 };
 
 // Graph: 统一图模型容器（命名上 g 常用于 Graph 实例）
@@ -48,6 +57,7 @@ struct Graph
     std::string       id;
     std::string       name;
     std::string       type = "flowchart";
+    std::string       rawMermaid;  // 不支持深度解析的 Mermaid 类型原始文本
     std::vector<Node> nodes;
     std::vector<Edge> edges;
     std::vector<Json> elements;       // 原始白板元素（类似 excalidraw）
@@ -55,6 +65,11 @@ struct Graph
     bool laidOut      = false;
     int  edgeCounter_ = 0;  // 自增边 ID 计数器
     int  nodeCounter_ = 0;  // 自增节点 ID 计数器
+
+    // 类型特定的结构化数据（替代 rawMermaid 透传）
+    // 每个深度解析的类型在此存入自己的 JSON 子对象，key 为类型名
+    // 例如：properties.set("pie", pieData)
+    Json properties = Json::obj();
 
     // 通过节点 id 查找可写节点指针；nid = node id
     Node* findNode(const std::string& nid)
@@ -91,21 +106,25 @@ struct Graph
         return nodes.back();
     }
     // addEdge: 追加一条边，自动生成边 id（e1/e2...）
-    // 参数命名：from/to 与节点 id 对齐，label/style/arrow
-    // 分别控制文案、线型、箭头
+    // 参数命名：from/to 与节点 id 对齐，label/style 分别控制文案、线型
+    // headStart/headEnd 控制两端箭头装饰，默认 from 端无箭头、to 端有箭头
     void addEdge(const std::string& from,
                  const std::string& to,
                  const std::string& label = "",
                  const std::string& style = "solid",
-                 const std::string& arrow = "arrow")
+                 const std::string& arrow = "arrow",
+                 const std::string& headStart = "none",
+                 const std::string& headEnd   = "arrow")
     {
         Edge e;
-        e.id    = "e" + std::to_string(++edgeCounter_);
-        e.from  = from;
-        e.to    = to;
-        e.label = label;
-        e.style = style;
-        e.arrow = arrow;
+        e.id        = "e" + std::to_string(++edgeCounter_);
+        e.from      = from;
+        e.to        = to;
+        e.label     = label;
+        e.style     = style;
+        e.arrow     = arrow;
+        e.headStart = headStart;
+        e.headEnd   = headEnd;
         edges.push_back(e);
     }
 
@@ -118,6 +137,8 @@ struct Graph
         j.set("id", id);
         j.set("name", name);
         j.set("type", type);
+        if (!rawMermaid.empty())
+            j.set("rawMermaid", rawMermaid);
         j.set("laidOut", laidOut);
         Json ns = Json::arr();
         for (auto& n : nodes) {
@@ -152,6 +173,15 @@ struct Graph
                 je.set("label", e.label);
             je.set("style", e.style);
             je.set("arrow", e.arrow);
+            // 扩展箭头信息：仅当与默认值不同时才序列化，减少 JSON 冗余
+            if (e.headStart != "none")
+                je.set("headStart", e.headStart);
+            if (e.headEnd != "arrow")
+                je.set("headEnd", e.headEnd);
+            if (e.seqNum != 0)
+                je.set("seqNum", (double)e.seqNum);
+            if (e.isAsync)
+                je.set("isAsync", true);
             es.push(je);
         }
         j.set("edges", es);
@@ -163,6 +193,9 @@ struct Graph
         }
         if (files.isObj())
             j.set("files", files);
+        // 类型特定的结构化数据（替代 rawMermaid 透传）
+        if (properties.isObj() && properties.o && !properties.o->empty())
+            j.set("properties", properties);
         j.set("edgeCounter", (double)edgeCounter_);
         j.set("nodeCounter", (double)nodeCounter_);
         return j;
@@ -174,10 +207,11 @@ struct Graph
     static Graph fromJson(const Json& j)
     {
         Graph g;
-        g.id           = j.str("id");
-        g.name         = j.str("name");
-        g.type         = j.str("type", "flowchart");
-        g.laidOut      = j.boolean("laidOut", false);
+        g.id      = j.str("id");
+        g.name    = j.str("name");
+        g.type       = j.str("type", "flowchart");
+        g.rawMermaid = j.str("rawMermaid");
+        g.laidOut    = j.boolean("laidOut", false);
         g.edgeCounter_ = (int)j.num("edgeCounter", 0);
         g.nodeCounter_ = (int)j.num("nodeCounter", 0);
         if (const Json* ns = j.find("nodes")) {
@@ -212,6 +246,13 @@ struct Graph
                     e.label = je.str("label");
                     e.style = je.str("style", "solid");
                     e.arrow = je.str("arrow", "arrow");
+                    // 扩展箭头信息：读新字段，若不存在则从 arrow 推导
+                    e.headStart = je.str("headStart",
+                        (e.arrow == "both") ? "arrow" : "none");
+                    e.headEnd   = je.str("headEnd",
+                        (e.arrow == "none") ? "none" : "arrow");
+                    e.seqNum  = (int)je.num("seqNum", 0);
+                    e.isAsync = je.boolean("isAsync", false);
                     g.edges.push_back(e);
                 }
         }
@@ -224,13 +265,18 @@ struct Graph
             if (fs->isObj())
                 g.files = *fs;
         }
+        // 类型特定的结构化数据
+        if (const Json* p = j.find("properties")) {
+            if (p->isObj())
+                g.properties = *p;
+        }
         return g;
     }
 };
 
 // ---- 小型通用工具函数 ----
 
-// trim: 去掉字符串首尾空白；命名直观表示“裁剪空白”
+// trim: 去掉字符串首尾空白；命名直观表示"裁剪空白"
 inline std::string trim(const std::string& s)
 {
     size_t b = s.find_first_not_of(" \t\r\n");

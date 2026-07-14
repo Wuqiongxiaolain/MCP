@@ -314,7 +314,7 @@ paths:
     post:
       operationId: graph_show
       summary: graph_show
-      description: "Show graph summary, node details, or edge details. Without node/edge params, returns the full structure (nodes + edges list)."
+      description: "Show graph summary, node details, or edge details. Without node/edge params, returns the full structure (nodes + edges list). Use --path to show only a properties subtree."
       requestBody:
         required: true
         content:
@@ -331,8 +331,45 @@ paths:
                 edge:
                   type: string
                   description: show details for a specific edge id
+                path:
+                  type: string
+                  description: "JSON path into properties to show only a subtree, e.g. sequence.participants"
               required:
                 - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_property:
+    post:
+      operationId: graph_property
+      summary: graph_property
+      description: "Read, set, insert, or delete properties sub-data. Use --action get to read a value at a path. Use --action set to write a value at a path. Use --action insert to push into an array. Use --action delete to remove at a path. Changes go to the draft."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                action:
+                  type: string
+                  description: "action: get|set|insert|delete (default get)"
+                path:
+                  type: string
+                  description: "JSON path into properties, e.g. sequence.participants[0].label or gantt.sections[0].tasks"
+                value:
+                  type: string
+                  description: "New value (for set/insert). JSON string, number, or object string."
+                index:
+                  type: number
+                  description: "Insertion index (default: append to end)"
+              required:
+                - id
+                - action
+                - path
       responses:
         "200":
           description: MCP tools/call 成功返回（content 文本或结构化结果）

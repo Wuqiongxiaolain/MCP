@@ -1428,6 +1428,36 @@ static void testColors()
     CHECK(gEx.findNode("r2")->fillColor.empty());
     CHECK(!gEx.edges.empty());
     CHECK(gEx.edges[0].strokeColor == "#cc0000");
+
+    // linkStyle 逗号列表 / 区间 / default
+    Graph gLs = gp::parseMermaid(
+        "flowchart TD\n"
+        "A-->B\n"
+        "B-->C\n"
+        "C-->D\n"
+        "linkStyle 0,2 stroke:#aa0000\n"
+        "linkStyle 1-1 stroke:#bb0000\n");
+    CHECK(gLs.edges.size() == 3);
+    CHECK(gLs.edges[0].strokeColor == "#aa0000");
+    CHECK(gLs.edges[1].strokeColor == "#bb0000");
+    CHECK(gLs.edges[2].strokeColor == "#aa0000");
+    Graph gDef = gp::parseMermaid(
+        "flowchart TD\n"
+        "A-->B\n"
+        "B-->C\n"
+        "linkStyle default stroke:#00cc00\n");
+    CHECK(gDef.edges.size() == 2);
+    CHECK(gDef.edges[0].strokeColor == "#00cc00");
+    CHECK(gDef.edges[1].strokeColor == "#00cc00");
+
+    // UTF-8 BOM 不应阻断 Mermaid 关键字识别
+    std::string bom =
+        std::string("\xEF\xBB\xBF") + "flowchart TD\nA[Start]-->B[End]\n";
+    CHECK(gp::detectFormat(bom) == "mermaid");
+    Graph gBom = gp::parseMermaid(bom);
+    CHECK(gBom.findNode("A") != nullptr);
+    CHECK(gBom.findNode("B") != nullptr);
+
 }
 
 static void testParseDrawio()

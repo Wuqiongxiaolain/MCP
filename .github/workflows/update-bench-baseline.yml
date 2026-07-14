@@ -1,0 +1,71 @@
+# 按需刷新性能基线并写回仓库（仅手动触发）
+name: Update bench baseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: >-
+          必须勾选确认：将向目标分支推送 1 个额外 commit
+          （更新 tests/bench_baseline.json）。日常 push 不会自动刷新基线。
+        type: boolean
+        default: false
+      ref:
+        description: 要检出并推回的分支（默认 main）
+        type: string
+        default: main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-bench-baseline-${{ inputs.ref || 'main' }}
+  cancel-in-progress: false
+
+jobs:
+  update-baseline:
+    name: 刷新并推送性能基线
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 确认将产生额外 commit
+        run: |
+          if [ "${{ inputs.confirm }}" != "true" ]; then
+            echo "::error::未勾选 confirm。此操作会向分支 «${{ inputs.ref }}» 推送 1 个包含 tests/bench_baseline.json 的额外 commit。请重新 Run 并勾选确认。"
+            exit 1
+          fi
+          echo "::notice::已确认：将可能推送 1 个 [skip ci] commit 更新性能基线（ubuntu-latest 环境，适合作为 CI 比对尺子）。"
+
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 安装构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ make python3
+
+      - name: 编译
+        run: make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
+
+      - name: 刷新基线
+        run: make bench-baseline CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
+
+      - name: 提交并推送（若有变更）
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet -- tests/bench_baseline.json; then
+            echo "baseline unchanged，无需 commit"
+            exit 0
+          fi
+
+          git add tests/bench_baseline.json
+          git commit -m "ci: update performance baseline [skip ci]"
+          git push origin "HEAD:${{ inputs.ref }}"
+          echo "::notice::已推送性能基线 commit 到 ${{ inputs.ref }}（含 [skip ci]，不会再跑完整 CI）。"

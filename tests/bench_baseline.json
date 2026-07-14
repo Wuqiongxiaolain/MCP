@@ -1,5 +1,5 @@
 {
-  "_note": "性能基准基线文件。由开发者在 PR 内用 make bench-baseline 更新并提交；日常 CI 仅做比对，不自动回写。",
+  "_note": "性能基准基线文件。日常 CI 仅做比对。更新方式：Actions 手动运行 Update bench baseline（须确认会多 1 个 commit），或在 PR 内 make bench-baseline 后提交。",
   "_updated": "placeholder",
   "benchmarks": []
 }

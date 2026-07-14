@@ -1,0 +1,4 @@
+row,field,actual,expected,suggestion
+1,层级,精英,Boss|小怪,Boss
+3,碰撞伤害,yes,x|√,x
+4,层级,BOSS,Boss|小怪,Boss

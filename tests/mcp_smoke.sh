@@ -123,7 +123,25 @@ fi
 
 rpc_call '{"jsonrpc":"2.0","id":3,"method":"tools/list"}'
 TOOLS_LEN="$(jq -r '.result.tools | length' "$TMP_RESP")"
-check_eq "tools/list" "$TOOLS_LEN" "39" "tools.length=$TOOLS_LEN"
+# 不写死精确工具数：扩展 API 时避免 CI 频繁误断；改为下限 + 关键工具名存在
+if [ "${TOOLS_LEN:-0}" -ge 45 ]; then
+    MISSING=""
+    for t in graph_create table_check table_rules_from_graph table_fix_enums \
+             table_derive table_transform_column table_sample_rows \
+             table_propose_rows table_update; do
+        if ! jq -e --arg n "$t" '.result.tools[] | select(.name == $n)' \
+            "$TMP_RESP" >/dev/null 2>&1; then
+            MISSING="$MISSING $t"
+        fi
+    done
+    if [ -z "$MISSING" ]; then
+        pass "tools/list" "tools.length=$TOOLS_LEN (key tools present)"
+    else
+        fail "tools/list" "missing tools:$MISSING (length=$TOOLS_LEN)"
+    fi
+else
+    fail "tools/list" "expected tools.length >= 45, got '$TOOLS_LEN'"
+fi
 
 rpc_call '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"graph_create","arguments":{"content":"flowchart TD\nA[Start]-->B[Done]","name":"mcp-smoke"}}}'
 CREATE_TEXT="$(extract_text)"

@@ -24,125 +24,128 @@
 
 namespace gtx {
 
+using gj::Json;
 using gt::Table;
 using gt::TableError;
-using gj::Json;
 
 namespace detail {
 
-// isSafeXmlName: 列名/标签名是否可安全用作本项目迷你 XML 的元素名
-// 拒绝空白与 <>/&"'= ；允许中文、? 等（与 enemy_sample 一致）
-inline bool isSafeXmlName(const std::string& s)
-{
-    if (s.empty())
-        return false;
-    for (unsigned char c : s) {
-        if (std::isspace(c))
+    // isSafeXmlName: 列名/标签名是否可安全用作本项目迷你 XML 的元素名
+    // 拒绝空白与 <>/&"'= ；允许中文、? 等（与 enemy_sample 一致）
+    inline bool isSafeXmlName(const std::string& s)
+    {
+        if (s.empty())
             return false;
-        if (c == '<' || c == '>' || c == '/' || c == '&' || c == '"' ||
-            c == '\'' || c == '=')
-            return false;
+        for (unsigned char c : s) {
+            if (std::isspace(c))
+                return false;
+            if (c == '<' || c == '>' || c == '/' || c == '&' || c == '"' ||
+                c == '\'' || c == '=')
+                return false;
+        }
+        return true;
     }
-    return true;
-}
 
-// requireSafeXmlName: 不安全则拒绝
-inline void requireSafeXmlName(const std::string& name, const char* what)
-{
-    if (!isSafeXmlName(name))
-        throw TableError(std::string("table xml: unsafe ") + what +
-                         " for XML tag: \"" + name + "\"");
-}
+    // requireSafeXmlName: 不安全则拒绝
+    inline void requireSafeXmlName(const std::string& name, const char* what)
+    {
+        if (!isSafeXmlName(name))
+            throw TableError(std::string("table xml: unsafe ") + what +
+                             " for XML tag: \"" + name + "\"");
+    }
 
-// splitNestedCol: 恰有一个 '.' 则拆成 parent/child；否则视为扁列
-inline bool splitNestedCol(const std::string& col, std::string& parent,
-                           std::string& child)
-{
-    size_t dot = col.find('.');
-    if (dot == std::string::npos || dot == 0 || dot + 1 >= col.size())
-        return false;
-    if (col.find('.', dot + 1) != std::string::npos)
-        return false;
-    parent = col.substr(0, dot);
-    child  = col.substr(dot + 1);
-    return true;
-}
+    // splitNestedCol: 恰有一个 '.' 则拆成 parent/child；否则视为扁列
+    inline bool splitNestedCol(const std::string& col,
+                               std::string&       parent,
+                               std::string&       child)
+    {
+        size_t dot = col.find('.');
+        if (dot == std::string::npos || dot == 0 || dot + 1 >= col.size())
+            return false;
+        if (col.find('.', dot + 1) != std::string::npos)
+            return false;
+        parent = col.substr(0, dot);
+        child  = col.substr(dot + 1);
+        return true;
+    }
 
-// collectRowFields: 从 <row> 收集 列名→值（属性先按出现序，同名子元素覆盖；一层嵌套→父.子）
-inline void collectRowFields(const gp::detail::XmlNode& row,
-                             std::map<std::string, std::string>& fields,
-                             std::vector<std::string>* order)
-{
-    auto noteKey = [&](const std::string& key) {
-        if (!order)
-            return;
-        for (auto& k : *order)
-            if (k == key)
+    // collectRowFields: 从 <row> 收集
+    // 列名→值（属性先按出现序，同名子元素覆盖；一层嵌套→父.子）
+    inline void collectRowFields(const gp::detail::XmlNode&          row,
+                                 std::map<std::string, std::string>& fields,
+                                 std::vector<std::string>*           order)
+    {
+        auto noteKey = [&](const std::string& key) {
+            if (!order)
                 return;
-        order->push_back(key);
-    };
+            for (auto& k : *order)
+                if (k == key)
+                    return;
+            order->push_back(key);
+        };
 
-    // 属性：按 attr_order（文档出现序），而非 map 字典序
-    for (auto& aname : row.attr_order) {
-        auto it = row.attrs.find(aname);
-        if (it == row.attrs.end())
-            continue;
-        fields[aname] = it->second;
-        noteKey(aname);
-    }
-
-    for (auto& c : row.children) {
-        if (c.children.empty()) {
-            fields[c.tag] = c.text;
-            noteKey(c.tag);
-            continue;
+        // 属性：按 attr_order（文档出现序），而非 map 字典序
+        for (auto& aname : row.attr_order) {
+            auto it = row.attrs.find(aname);
+            if (it == row.attrs.end())
+                continue;
+            fields[aname] = it->second;
+            noteKey(aname);
         }
-        for (auto& gc : c.children) {
-            if (!gc.children.empty())
-                throw TableError(
-                    "table xml: nested deeper than one level under <" + c.tag +
-                    ">");
-            std::string key = c.tag + "." + gc.tag;
-            fields[key]     = gc.text;
-            noteKey(key);
-        }
-    }
-}
 
-// gatherRows: 收集根下所有 <row>（含嵌套在 <rows> 内）
-inline void gatherRows(const gp::detail::XmlNode& root,
-                       std::vector<const gp::detail::XmlNode*>& out)
-{
-    for (auto& c : root.children) {
-        if (c.tag == "row")
-            out.push_back(&c);
-        else if (c.tag == "rows") {
-            for (auto& r : c.children)
-                if (r.tag == "row")
-                    out.push_back(&r);
+        for (auto& c : row.children) {
+            if (c.children.empty()) {
+                fields[c.tag] = c.text;
+                noteKey(c.tag);
+                continue;
+            }
+            for (auto& gc : c.children) {
+                if (!gc.children.empty())
+                    throw TableError(
+                        "table xml: nested deeper than one level under <" +
+                        c.tag + ">");
+                std::string key = c.tag + "." + gc.tag;
+                fields[key]     = gc.text;
+                noteKey(key);
+            }
         }
     }
-}
 
-// appendColumnUnique: 追加列名；重复则跳过并写入 warning
-inline void appendColumnUnique(Table& t, const std::string& name,
-                               std::vector<std::string>* warnings)
-{
-    for (auto& c : t.columns) {
-        if (c == name) {
-            if (warnings)
-                warnings->push_back("duplicate column ignored: " + name);
-            return;
+    // gatherRows: 收集根下所有 <row>（含嵌套在 <rows> 内）
+    inline void gatherRows(const gp::detail::XmlNode&               root,
+                           std::vector<const gp::detail::XmlNode*>& out)
+    {
+        for (auto& c : root.children) {
+            if (c.tag == "row")
+                out.push_back(&c);
+            else if (c.tag == "rows") {
+                for (auto& r : c.children)
+                    if (r.tag == "row")
+                        out.push_back(&r);
+            }
         }
     }
-    t.columns.push_back(name);
-}
+
+    // appendColumnUnique: 追加列名；重复则跳过并写入 warning
+    inline void appendColumnUnique(Table&                    t,
+                                   const std::string&        name,
+                                   std::vector<std::string>* warnings)
+    {
+        for (auto& c : t.columns) {
+            if (c == name) {
+                if (warnings)
+                    warnings->push_back("duplicate column ignored: " + name);
+                return;
+            }
+        }
+        t.columns.push_back(name);
+    }
 
 }  // namespace detail
 
 // fromXml: 模式 A 表 XML → Table
 // 参数 text: 表 XML；warnings: 可选，接收去重等非致命告警
-inline Table fromXml(const std::string& text,
+inline Table fromXml(const std::string&        text,
                      std::vector<std::string>* warnings = nullptr)
 {
     gp::detail::XmlNode root;
@@ -303,8 +306,8 @@ inline std::string toXml(const Table& t)
 
 // parseTableContent: 按 format 选择解析器；默认 csv
 // 参数 warnings: 仅 xml 路径可能写入去重告警
-inline Table parseTableContent(const std::string& content,
-                               const std::string& format = "csv",
+inline Table parseTableContent(const std::string&        content,
+                               const std::string&        format   = "csv",
                                std::vector<std::string>* warnings = nullptr)
 {
     std::string fmt = gm::toLower(format);

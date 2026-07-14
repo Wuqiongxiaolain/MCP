@@ -1,7 +1,7 @@
 openapi: "3.0.3"
 info:
   title: graphmcp MCP API
-  version: v0.1.1
+  version: v0.2.0
   description: graphmcp MCP tools/call 契约（非 HTTP REST）。实际传输：JSON-RPC 2.0 over stdio（graphmcp serve）。本文档由 graphmcp dump-tools 从 toolList() 自动生成。
 servers:
   - url: "mcp://graphmcp"

@@ -326,8 +326,8 @@ static void benchMcpTools()
     // tools/list
     bench("mcp_tools_list", 200, {},
           [&store]() {
-              std::string resp;
-              Json        req = Json::parse(
+              Json resp;
+              Json req = Json::parse(
                   R"({"jsonrpc":"2.0","id":1,"method":"tools/list"})", nullptr);
               mcp::handleMessage(req, store, resp);
           });
@@ -335,8 +335,8 @@ static void benchMcpTools()
     // graph_create (flowchart, small)
     bench("mcp_graph_create", 100, {},
           [&store]() {
-              std::string resp;
-              Json        req = Json::parse(
+              Json resp;
+              Json req = Json::parse(
                   R"({"jsonrpc":"2.0","id":2,"method":"tools/call",
               "params":{"name":"graph_create","arguments":{
               "content":"flowchart TD\nA-->B\nB-->C","name":"bench"}}})",

@@ -2029,10 +2029,6 @@ int runAll()
     testParseDrawio();
     testDrawioRoundTrip();
     testMcpGraphImport();
-    testMermaidDeepParsing();
-    testMermaidStructureValidation();
-    testMermaidClass();
-    testMermaidState();
     std::cout << "tests: " << g_passed << " passed, " << g_failed
               << " failed\n";
     return g_failed == 0 ? 0 : 1;

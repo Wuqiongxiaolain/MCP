@@ -40,7 +40,6 @@ struct Edge
     std::string id;
     std::string from, to;
     std::string label;
-<<<<<<< HEAD
     std::string style;  // 线型：solid | dashed | dotted | thick
 
     // 箭头装饰（取代单一 arrow 字段的粗糙分类）
@@ -48,15 +47,11 @@ struct Edge
     std::string arrow     = "arrow";  // arrow | none | both (backward compat)
     std::string headStart = "none";   // none | arrow | open | cross
     std::string headEnd   = "arrow";  // none | arrow | open | cross
+    std::string strokeColor;          // 描边色 (如 "#333"；空串使用默认)
 
     // 序列图 / gitGraph 专用
     int  seqNum  = 0;      // 消息序号
     bool isAsync = false;  // 异步消息（->>）
-=======
-    std::string style;        // 线型：solid | dashed | thick
-    std::string arrow;        // 箭头：arrow | none | both
-    std::string strokeColor;  // 描边色 (如 "#333"；空串使用默认)
->>>>>>> 25c1e2e (feat(color): 图颜色支持 — Node/Edge 填色+描边全链路)
 };
 
 // Graph: 统一图模型容器（命名上 g 常用于 Graph 实例）
@@ -185,7 +180,6 @@ struct Graph
                 je.set("label", e.label);
             je.set("style", e.style);
             je.set("arrow", e.arrow);
-<<<<<<< HEAD
             // 扩展箭头信息：仅当与默认值不同时才序列化，减少 JSON 冗余
             if (e.headStart != "none")
                 je.set("headStart", e.headStart);
@@ -195,10 +189,8 @@ struct Graph
                 je.set("seqNum", (double)e.seqNum);
             if (e.isAsync)
                 je.set("isAsync", true);
-=======
             if (!e.strokeColor.empty())
                 je.set("strokeColor", e.strokeColor);
->>>>>>> 25c1e2e (feat(color): 图颜色支持 — Node/Edge 填色+描边全链路)
             es.push(je);
         }
         j.set("edges", es);
@@ -263,7 +255,6 @@ struct Graph
                     e.from  = je.str("from");
                     e.to    = je.str("to");
                     e.label = je.str("label");
-<<<<<<< HEAD
                     e.style = je.str("style", "solid");
                     e.arrow = je.str("arrow", "arrow");
                     // 扩展箭头信息：读新字段，若不存在则从 arrow 推导
@@ -271,13 +262,9 @@ struct Graph
                         "headStart", (e.arrow == "both") ? "arrow" : "none");
                     e.headEnd = je.str("headEnd",
                                        (e.arrow == "none") ? "none" : "arrow");
-                    e.seqNum  = (int)je.num("seqNum", 0);
-                    e.isAsync = je.boolean("isAsync", false);
-=======
-                    e.style       = je.str("style", "solid");
-                    e.arrow       = je.str("arrow", "arrow");
+                    e.seqNum      = (int)je.num("seqNum", 0);
+                    e.isAsync     = je.boolean("isAsync", false);
                     e.strokeColor = je.str("strokeColor");
->>>>>>> 25c1e2e (feat(color): 图颜色支持 — Node/Edge 填色+描边全链路)
                     g.edges.push_back(e);
                 }
         }

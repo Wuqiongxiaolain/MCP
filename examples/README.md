@@ -35,6 +35,10 @@
 
 #### Mermaid 颜色与新类型样例
 
+> **坏样例语义：**
+> - **硬失败（hard-bad）**：`*_bad.mmd` 中标注为硬失败者，`--input-format mermaid` 时期望非 0 退出 / MCP `isError=true`；自动检测也可能失败。
+> - **软失败（soft-bad）**：仍可解析（exit 0），但结构残缺（空 participants、节点标签丢失等）；用于观察容错行为，**不要**当成“必须失败”的断言目标。
+
 | 输入 | 类型 | 说明 |
 |------|------|------|
 | `flowchart_colors.mmd` | 正常 | `classDef`/`class`/`linkStyle` → `fillColor`/`strokeColor` |
@@ -42,10 +46,10 @@
 | `class.mmd` | 正常 | `classDiagram` |
 | `state.mmd` | 正常 | `stateDiagram-v2` |
 | `pie.mmd` | 正常 | `pie`（结构化 properties） |
-| `flowchart_colors_bad.mmd` | **硬失败** | `classDef` 写在 `flowchart` 前；`--input-format mermaid` 报错 |
-| `mermaid_unknown_bad.mmd` | **硬失败** | 非法图类型关键字 |
-| `sequence_bad.mmd` | **软失败** | 仍可解析，但 participants 空、消息残缺 |
-| `flowchart_syntax_bad.mmd` | **软失败** | 标签括号未闭合，解析器容错产出残缺图 |
+| `flowchart_colors_bad.mmd` | **硬失败 (hard-bad)** | `classDef` 写在 `flowchart` 前；`--input-format mermaid` 报错 |
+| `mermaid_unknown_bad.mmd` | **硬失败 (hard-bad)** | 非法图类型关键字 |
+| `sequence_bad.mmd` | **软失败 (soft-bad)** | 仍可解析，但 participants 空、消息残缺 |
+| `flowchart_syntax_bad.mmd` | **软失败 (soft-bad)** | 标签括号未闭合，解析器容错产出残缺图 |
 
 坏样例产物在 `example_output/<file>_out/`：`*.convert.log`（强制 mermaid）、`*.autodetect.log`（自动检测）；软失败另有 `*.model.json`。
 

@@ -54,6 +54,9 @@ inline std::vector<Issue> validate(const Graph& g)
                 endpointIds.insert(eid);
         }
     }
+    // 状态图起始/终止标记 [*]：解析器不建 Node，但边端点可合法引用
+    if (g.type == "stateDiagram")
+        endpointIds.insert("[*]");
     for (auto& n : g.nodes) {
         if (!n.parent.empty() && !ids.count(n.parent))
             err("node '" + n.id + "' references missing parent '" + n.parent +

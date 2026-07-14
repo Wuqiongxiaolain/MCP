@@ -1021,6 +1021,13 @@ static void testValidate()
         if (i.message.find("cycle") != std::string::npos)
             cycle = true;
     CHECK(cycle);
+
+    // 状态图起始/终止标记 [*]：边可引用，不必出现在 nodes 中
+    Graph st = gp::parseMermaid(
+        "stateDiagram-v2\n[*] --> Idle\nIdle --> Running : start\nIdle --> "
+        "[*]\n");
+    auto sti = gl::validate(st);
+    CHECK(!gl::hasErrors(sti));
 }
 
 static void testLayout()

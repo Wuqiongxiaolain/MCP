@@ -19,6 +19,8 @@ endif
 
 HDRS := src/json.hpp src/model.hpp src/parsers.hpp src/layout.hpp \
         src/exporters.hpp src/storage.hpp src/mcp.hpp \
+        src/mcp_table_tools.hpp src/table_bridge.hpp src/table_model.hpp \
+        src/table_storage.hpp src/table_xml.hpp \
         src/version_types.hpp src/cursor_types.hpp src/version_manager.hpp \
 
 .PHONY: all test test-all test-version test-cursor smoke mcp-smoke table-smoke clean export-testout export-table-examples export-table-collab-examples docs-api

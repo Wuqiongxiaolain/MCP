@@ -68,9 +68,8 @@ inline void appendCompatWarning(Json& out, const std::string& msg)
 inline Json tableCreate(gts::TableStore& tables, const Json& a)
 {
     std::vector<std::string> warnings;
-    gt::Table t =
-        gtx::parseTableContent(a.str("content"), a.str("format", "csv"),
-                               &warnings);
+    gt::Table t = gtx::parseTableContent(a.str("content"),
+                                         a.str("format", "csv"), &warnings);
     if (!a.str("id").empty())
         t.id = a.str("id");
     if (!a.str("name").empty())
@@ -116,9 +115,8 @@ inline Json tableCreate(gts::TableStore& tables, const Json& a)
 inline Json tableImport(gts::TableStore& tables, const Json& a)
 {
     std::vector<std::string> warnings;
-    gt::Table t =
-        gtx::parseTableContent(a.str("content"), a.str("format", "csv"),
-                               &warnings);
+    gt::Table t = gtx::parseTableContent(a.str("content"),
+                                         a.str("format", "csv"), &warnings);
     if (!a.str("id").empty())
         t.id = a.str("id");
     if (!a.str("name").empty())
@@ -213,9 +211,7 @@ inline Json tableDelete(gts::TableStore& tables, const Json& a)
 }
 
 inline Json tableHistory(gts::TableStore& tables, const Json& a)
-{
-    return textContent(tables.history(a.str("id")).dump(2));
-}
+{ return textContent(tables.history(a.str("id")).dump(2)); }
 
 inline Json tableRollback(gts::TableStore& tables, const Json& a)
 {
@@ -230,11 +226,14 @@ inline Json tableRollback(gts::TableStore& tables, const Json& a)
 }
 
 // applyTablePatches: 应用补丁；detail=true 时 details 收集逐格 before/after
-inline void applyTablePatches(gt::Table& t, const Json& a, Json& summary,
-                              Json& compat_out, bool detail = false,
-                              Json* details = nullptr)
+inline void applyTablePatches(gt::Table&  t,
+                              const Json& a,
+                              Json&       summary,
+                              Json&       compat_out,
+                              bool        detail  = false,
+                              Json*       details = nullptr)
 {
-    int cells = 0, addedRows = 0, deletedRows = 0, addedCols = 0;
+    int  cells = 0, addedRows = 0, deletedRows = 0, addedCols = 0;
     Json detailArr = Json::arr();
 
     Json setCells = parseJsonField(a, "set_cells");
@@ -274,16 +273,15 @@ inline void applyTablePatches(gt::Table& t, const Json& a, Json& summary,
                     "set_cells.col is deprecated; use column or col_index");
             }
             else {
-                throw gt::TableError(
-                    "set_cells requires column or col_index");
+                throw gt::TableError("set_cells requires column or col_index");
             }
             if (col < 0 || (size_t)col >= t.columns.size())
                 throw gt::TableError("col_index out of range");
 
-            std::string before =
-                ((size_t)row < t.rows.size()) ? t.cell((size_t)row, (size_t)col)
-                                              : "";
-            std::string after = item.str("value");
+            std::string before = ((size_t)row < t.rows.size()) ?
+                                     t.cell((size_t)row, (size_t)col) :
+                                     "";
+            std::string after  = item.str("value");
             if (detail) {
                 Json d = Json::obj();
                 d.set("op", "set_cell");
@@ -355,7 +353,7 @@ inline void applyTablePatches(gt::Table& t, const Json& a, Json& summary,
         const Json* vals = setCol.find("values");
         if (vals && vals->isArr()) {
             for (size_t i = 0; i < vals->a->size(); i++) {
-                const Json& v = (*vals->a)[i];
+                const Json& v     = (*vals->a)[i];
                 std::string after = v.isStr() ? v.s : v.dump();
                 std::string before =
                     (i < t.rows.size()) ? t.cell(i, (size_t)ci) : "";
@@ -437,8 +435,8 @@ inline Json tableDiffTool(gts::TableStore& tables, const Json& a)
     return textContent(gt::tableDiff(aT, bT).dump(2));
 }
 
-inline Json tableFromGraphTool(gs::Store& store, gts::TableStore& tables,
-                               const Json& a)
+inline Json
+tableFromGraphTool(gs::Store& store, gts::TableStore& tables, const Json& a)
 {
     Graph       g;
     std::string err;
@@ -455,7 +453,8 @@ inline Json tableFromGraphTool(gs::Store& store, gts::TableStore& tables,
     if (a.boolean("save", true)) {
         int v = tables.save(t, "from graph " + g.id, &err);
         if (v < 0)
-            return textContent(err.empty() ? "failed to save table" : err, true);
+            return textContent(err.empty() ? "failed to save table" : err,
+                               true);
         out.set("id", t.id);
         out.set("version", (double)v);
     }
@@ -477,8 +476,8 @@ inline Json tableFromGraphTool(gs::Store& store, gts::TableStore& tables,
     return textContent(out.dump(2));
 }
 
-inline Json graphFromTableTool(gs::Store& store, gts::TableStore& tables,
-                               const Json& a)
+inline Json
+graphFromTableTool(gs::Store& store, gts::TableStore& tables, const Json& a)
 {
     gt::Table t;
     if (!a.str("content").empty()) {
@@ -487,8 +486,8 @@ inline Json graphFromTableTool(gs::Store& store, gts::TableStore& tables,
     else {
         std::string err;
         if (!tables.load(a.str("table_id"), t, 0, &err))
-            return textContent(err.empty() ? "table_id or content required" : err,
-                               true);
+            return textContent(
+                err.empty() ? "table_id or content required" : err, true);
     }
     Graph g = gtb::graphFromTable(t, a.str("from_col"), a.str("to_col"),
                                   a.str("label_col"), a.str("id_col"),
@@ -518,11 +517,12 @@ inline Json tableAlignTool(gts::TableStore& tables, const Json& a)
         return textContent(err, true);
     if (!tables.load(a.str("target_id"), target, 0, &err))
         return textContent(err, true);
-    Json align =
-        gtb::tableAlign(primary, target, a.str("primary_key"), a.str("target_key"));
-    int v = tables.save(target, a.str("note", "aligned via MCP"), &err);
+    Json align = gtb::tableAlign(primary, target, a.str("primary_key"),
+                                 a.str("target_key"));
+    int  v     = tables.save(target, a.str("note", "aligned via MCP"), &err);
     if (v < 0)
-        return textContent(err.empty() ? "failed to save target table" : err, true);
+        return textContent(err.empty() ? "failed to save target table" : err,
+                           true);
     Json out = Json::obj();
     out.set("status", "ok");
     out.set("target_id", target.id);
@@ -550,7 +550,7 @@ inline Json tableCheckTool(gts::TableStore& tables, const Json& a)
         allowed = *j;
     }
 
-    gt::Table       rules;
+    gt::Table        rules;
     const gt::Table* rulesPtr = nullptr;
     if (!a.str("rules_id").empty()) {
         if (!tables.load(a.str("rules_id"), rules, 0, &err))
@@ -558,7 +558,7 @@ inline Json tableCheckTool(gts::TableStore& tables, const Json& a)
         rulesPtr = &rules;
     }
 
-    bool ignoreHint = false;
+    bool ignoreHint               = false;
     bool used_legacy_hint_default = false;
     if (a.find("ignore_hint_row")) {
         ignoreHint = a.boolean("ignore_hint_row", false);
@@ -590,7 +590,8 @@ inline Json tableCheckTool(gts::TableStore& tables, const Json& a)
     if (a.boolean("save", false)) {
         int v = tables.save(report, "check report for " + target.id, &err);
         if (v < 0)
-            return textContent(err.empty() ? "failed to save report" : err, true);
+            return textContent(err.empty() ? "failed to save report" : err,
+                               true);
         out.set("report_id", report.id);
         out.set("version", (double)v);
     }
@@ -598,8 +599,9 @@ inline Json tableCheckTool(gts::TableStore& tables, const Json& a)
 }
 
 // tableRulesFromGraphTool: 导图 → 规则表 column/allowed/hint
-inline Json tableRulesFromGraphTool(gs::Store& store, gts::TableStore& tables,
-                                    const Json& a)
+inline Json tableRulesFromGraphTool(gs::Store&       store,
+                                    gts::TableStore& tables,
+                                    const Json&      a)
 {
     Graph       g;
     std::string err;
@@ -618,7 +620,8 @@ inline Json tableRulesFromGraphTool(gs::Store& store, gts::TableStore& tables,
     if (a.boolean("save", true)) {
         int v = tables.save(t, "rules from graph " + g.id, &err);
         if (v < 0)
-            return textContent(err.empty() ? "failed to save table" : err, true);
+            return textContent(err.empty() ? "failed to save table" : err,
+                               true);
         out.set("id", t.id);
         out.set("version", (double)v);
     }
@@ -653,6 +656,11 @@ inline Json tableFixEnumsTool(gts::TableStore& tables, const Json& a)
         rulesPtr = &rules;
     }
 
+    bool hasAllowed = allowed.isObj() && allowed.o && !allowed.o->empty();
+    if (!rulesPtr && !hasAllowed)
+        return textContent("table_fix_enums: allowed or rules_id required",
+                           true);
+
     bool ignoreHint = false;
     if (a.find("ignore_hint_row"))
         ignoreHint = a.boolean("ignore_hint_row", false);
@@ -667,19 +675,20 @@ inline Json tableFixEnumsTool(gts::TableStore& tables, const Json& a)
     out.set("skipped_count", (double)fix.skipped_count);
     out.set("id", target.id);
 
-    if (a.boolean("save", true)) {
+    // 无写回时不 bump 目标表版本
+    if (a.boolean("save", true) && fix.fixed_count > 0) {
         int v = tables.save(target, a.str("note", "fix enums via MCP"), &err);
         if (v < 0)
-            return textContent(err.empty() ? "failed to save table" : err, true);
+            return textContent(err.empty() ? "failed to save table" : err,
+                               true);
         out.set("version", (double)v);
     }
     if (a.boolean("save_skipped", true) && fix.skipped_count > 0) {
-        int v = tables.save(fix.skipped,
-                            "fix enums skipped for " + target.id, &err);
+        int v = tables.save(fix.skipped, "fix enums skipped for " + target.id,
+                            &err);
         if (v < 0)
-            return textContent(err.empty() ? "failed to save skipped report"
-                                           : err,
-                               true);
+            return textContent(
+                err.empty() ? "failed to save skipped report" : err, true);
         out.set("skipped_report_id", fix.skipped.id);
         out.set("skipped_version", (double)v);
     }
@@ -708,7 +717,8 @@ inline Json tableDeriveTool(gts::TableStore& tables, const Json& a)
     if (a.boolean("save", true)) {
         int v = tables.save(t, "derive from " + src.id, &err);
         if (v < 0)
-            return textContent(err.empty() ? "failed to save table" : err, true);
+            return textContent(err.empty() ? "failed to save table" : err,
+                               true);
         out.set("id", t.id);
         out.set("version", (double)v);
     }
@@ -739,7 +749,8 @@ inline Json tableTransformColumnTool(gts::TableStore& tables, const Json& a)
     if (a.boolean("save", true)) {
         int v = tables.save(t, a.str("note", "transform column slug"), &err);
         if (v < 0)
-            return textContent(err.empty() ? "failed to save table" : err, true);
+            return textContent(err.empty() ? "failed to save table" : err,
+                               true);
         out.set("version", (double)v);
     }
     return textContent(out.dump(2));
@@ -770,7 +781,8 @@ inline Json tableSampleRowsTool(gts::TableStore& tables, const Json& a)
     if (a.boolean("save", true)) {
         int v = tables.save(t, a.str("note", "sample rows"), &err);
         if (v < 0)
-            return textContent(err.empty() ? "failed to save table" : err, true);
+            return textContent(err.empty() ? "failed to save table" : err,
+                               true);
         out.set("version", (double)v);
     }
     return textContent(out.dump(2));
@@ -783,7 +795,7 @@ inline Json tableProposeRowsTool(gts::TableStore& tables, const Json& a)
     std::string err;
     if (!tables.load(a.str("id"), t, 0, &err))
         return textContent(err, true);
-    Json rows = parseJsonField(a, "rows");
+    Json             rows = parseJsonField(a, "rows");
     gt::Table        rules;
     const gt::Table* rp = nullptr;
     if (!a.str("rules_id").empty()) {
@@ -801,7 +813,8 @@ inline Json tableProposeRowsTool(gts::TableStore& tables, const Json& a)
     if (a.boolean("save", true)) {
         int v = tables.save(t, a.str("note", "propose rows"), &err);
         if (v < 0)
-            return textContent(err.empty() ? "failed to save table" : err, true);
+            return textContent(err.empty() ? "failed to save table" : err,
+                               true);
         out.set("version", (double)v);
     }
     return textContent(out.dump(2));

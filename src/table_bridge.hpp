@@ -7,6 +7,7 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <vector>
 
 namespace gtb {
 
@@ -28,7 +29,7 @@ inline Table tableFromGraphSkeleton(const Graph& g, bool with_hint_row)
     t.name = g.name.empty() ? g.id : g.name;
 
     std::map<std::string, std::vector<const Node*>> kids;
-    std::set<std::string>                          hasKids;
+    std::set<std::string>                           hasKids;
     for (auto& n : g.nodes) {
         if (n.shape == "group")
             continue;
@@ -104,7 +105,7 @@ inline Table tableFromGraphSkeleton(const Graph& g, bool with_hint_row)
 inline Table tableFromGraphEdgelist(const Graph& g)
 {
     Table t;
-    t.name = g.name.empty() ? g.id : g.name;
+    t.name    = g.name.empty() ? g.id : g.name;
     t.columns = {"from", "to", "label"};
     for (auto& e : g.edges) {
         t.appendRow({e.from, e.to, e.label});
@@ -115,7 +116,7 @@ inline Table tableFromGraphEdgelist(const Graph& g)
 inline Table tableFromGraphHierarchy(const Graph& g)
 {
     Table t;
-    t.name = g.name.empty() ? g.id : g.name;
+    t.name    = g.name.empty() ? g.id : g.name;
     t.columns = {"id", "label", "parent"};
     for (auto& n : g.nodes) {
         if (n.shape == "group")
@@ -128,7 +129,7 @@ inline Table tableFromGraphHierarchy(const Graph& g)
 inline Table tableFromGraphNodelist(const Graph& g)
 {
     Table t;
-    t.name = g.name.empty() ? g.id : g.name;
+    t.name    = g.name.empty() ? g.id : g.name;
     t.columns = {"id", "label", "shape", "parent", "style"};
     for (auto& n : g.nodes) {
         t.appendRow({n.id, n.label, n.shape, n.parent, n.style});
@@ -150,8 +151,8 @@ inline Table tableFromGraph(const Graph&       g,
         return tableFromGraphHierarchy(g);
     if (m == "nodelist")
         return tableFromGraphNodelist(g);
-    throw TableError(
-        "unknown table_from_graph mode (use skeleton|edgelist|hierarchylist|nodelist)");
+    throw TableError("unknown table_from_graph mode (use "
+                     "skeleton|edgelist|hierarchylist|nodelist)");
 }
 
 // ---- graph_from_table ----
@@ -200,8 +201,8 @@ inline Graph graphFromTableHierarchyMapped(const Table&       t,
         std::string id = t.cell(r, (size_t)cId);
         if (id.empty())
             continue;
-        std::string label = cLbl >= 0 ? t.cell(r, (size_t)cLbl) : "";
-        Node&       n     = g.ensureNode(id, label);
+        std::string label  = cLbl >= 0 ? t.cell(r, (size_t)cLbl) : "";
+        Node&       n      = g.ensureNode(id, label);
         std::string parent = cPar >= 0 ? t.cell(r, (size_t)cPar) : "";
         if (!parent.empty()) {
             n.parent = parent;
@@ -230,10 +231,9 @@ inline Graph graphFromTable(const Table&       t,
         t.colIndex("from") >= 0 ? t.colIndex("from") : t.colIndex("source");
     int cTo = t.colIndex("to") >= 0 ? t.colIndex("to") : t.colIndex("target");
     if (cFrom >= 0 && cTo >= 0) {
-        std::string fromName =
-            t.colIndex("from") >= 0 ? "from" : "source";
-        std::string toName = t.colIndex("to") >= 0 ? "to" : "target";
-        std::string lblName = t.colIndex("label") >= 0 ? "label" : "";
+        std::string fromName = t.colIndex("from") >= 0 ? "from" : "source";
+        std::string toName   = t.colIndex("to") >= 0 ? "to" : "target";
+        std::string lblName  = t.colIndex("label") >= 0 ? "label" : "";
         return graphFromTableMapped(t, fromName, toName, lblName);
     }
     if (t.colIndex("id") >= 0) {
@@ -294,42 +294,74 @@ inline Json tableAlign(const Table&       primary,
     return out;
 }
 
+// ---- allowed / pipe helpers ----
+
+// splitPipeList: "a|b|c" → 保序去重列表（用于 suggestion / sample 首值）
+inline std::vector<std::string> splitPipeList(const std::string& s)
+{
+    std::vector<std::string> out;
+    std::set<std::string>    seen;
+    size_t                   start = 0;
+    while (start <= s.size()) {
+        size_t      p = s.find('|', start);
+        std::string part;
+        if (p == std::string::npos) {
+            part = trim(s.substr(start));
+            if (!part.empty() && !seen.count(part)) {
+                seen.insert(part);
+                out.push_back(part);
+            }
+            break;
+        }
+        part = trim(s.substr(start, p - start));
+        if (!part.empty() && !seen.count(part)) {
+            seen.insert(part);
+            out.push_back(part);
+        }
+        start = p + 1;
+    }
+    return out;
+}
+
+// toAllowedSet: 保序列表 → 成员集合
+inline std::set<std::string> toAllowedSet(const std::vector<std::string>& vals)
+{ return std::set<std::string>(vals.begin(), vals.end()); }
+
 // ---- table_check ----
 
-// allowed: { "列名": ["v1","v2",...] } 或规则表（列 column / allowed，allowed 用 | 分隔）
-inline Table tableCheck(const Table&       target,
-                        const Json&        allowedObj,
-                        const Table*       rulesTable = nullptr,
-                        bool               ignore_hint_row = false)
+// AllowedSpec: 成员集合 + 保序列表（suggestion 取 ordered[0]）
+struct AllowedSpec
 {
-    std::map<std::string, std::set<std::string>> allowed;
+    std::set<std::string>    members;
+    std::vector<std::string> ordered;
+};
+
+// allowed: { "列名": ["v1","v2",...] } 或规则表（列 column / allowed，allowed
+// 用 | 分隔）
+inline Table tableCheck(const Table& target,
+                        const Json&  allowedObj,
+                        const Table* rulesTable      = nullptr,
+                        bool         ignore_hint_row = false)
+{
+    std::map<std::string, AllowedSpec> allowed;
     if (allowedObj.isObj() && allowedObj.o) {
         for (auto& kv : *allowedObj.o) {
-            std::set<std::string> vals;
+            AllowedSpec spec;
             if (kv.second.isArr()) {
-                for (auto& v : *kv.second.a)
-                    if (v.isStr())
-                        vals.insert(v.s);
-            }
-            else if (kv.second.isStr()) {
-                // 支持 "a|b|c"
-                std::string s = kv.second.s;
-                size_t      start = 0;
-                while (start <= s.size()) {
-                    size_t p = s.find('|', start);
-                    if (p == std::string::npos) {
-                        std::string part = trim(s.substr(start));
-                        if (!part.empty())
-                            vals.insert(part);
-                        break;
+                for (auto& v : *kv.second.a) {
+                    if (!v.isStr() || v.s.empty())
+                        continue;
+                    if (!spec.members.count(v.s)) {
+                        spec.members.insert(v.s);
+                        spec.ordered.push_back(v.s);
                     }
-                    std::string part = trim(s.substr(start, p - start));
-                    if (!part.empty())
-                        vals.insert(part);
-                    start = p + 1;
                 }
             }
-            allowed[toLower(kv.first)] = std::move(vals);
+            else if (kv.second.isStr()) {
+                spec.ordered = splitPipeList(kv.second.s);
+                spec.members = toAllowedSet(spec.ordered);
+            }
+            allowed[toLower(kv.first)] = std::move(spec);
         }
     }
     if (rulesTable) {
@@ -341,50 +373,38 @@ inline Table tableCheck(const Table&       target,
             for (size_t r = 0; r < rulesTable->rows.size(); r++) {
                 std::string col = rulesTable->cell(r, (size_t)cCol);
                 std::string all = rulesTable->cell(r, (size_t)cAll);
-                std::set<std::string> vals;
-                size_t start = 0;
-                while (start <= all.size()) {
-                    size_t p = all.find('|', start);
-                    if (p == std::string::npos) {
-                        std::string part = trim(all.substr(start));
-                        if (!part.empty())
-                            vals.insert(part);
-                        break;
-                    }
-                    std::string part = trim(all.substr(start, p - start));
-                    if (!part.empty())
-                        vals.insert(part);
-                    start = p + 1;
-                }
-                allowed[toLower(col)] = std::move(vals);
+                AllowedSpec spec;
+                spec.ordered          = splitPipeList(all);
+                spec.members          = toAllowedSet(spec.ordered);
+                allowed[toLower(col)] = std::move(spec);
             }
         }
     }
 
     Table report;
-    report.name = "check_report";
+    report.name    = "check_report";
     report.columns = {"row", "field", "actual", "expected", "suggestion"};
-    size_t start_row = (ignore_hint_row && target.hasHintRow && !target.rows.empty())
-                           ? 1
-                           : 0;
+    size_t start_row =
+        (ignore_hint_row && target.hasHintRow && !target.rows.empty()) ? 1 : 0;
     for (size_t r = start_row; r < target.rows.size(); r++) {
         for (size_t c = 0; c < target.columns.size(); c++) {
             auto it = allowed.find(toLower(target.columns[c]));
-            if (it == allowed.end() || it->second.empty())
+            if (it == allowed.end() || it->second.members.empty())
                 continue;
             std::string actual = target.cell(r, c);
             if (actual.empty())
                 continue;
-            if (it->second.count(actual))
+            if (it->second.members.count(actual))
                 continue;
             std::string expected;
-            for (auto& v : it->second) {
+            for (auto& v : it->second.ordered) {
                 if (!expected.empty())
                     expected += "|";
                 expected += v;
             }
+            // suggestion：保序首项（与 sample_rows / 导图子节点顺序一致）
             std::string suggestion =
-                it->second.empty() ? "" : *it->second.begin();
+                it->second.ordered.empty() ? "" : it->second.ordered.front();
             report.appendRow({std::to_string((int)r + 1), target.columns[c],
                               actual, expected, suggestion});
         }
@@ -394,12 +414,13 @@ inline Table tableCheck(const Table&       target,
 
 // ---- table_rules_from_graph ----
 
-// tableRulesFromGraph: 叶子节点→column，子节点文案→allowed|hint（与 skeleton 启发式一致）
+// tableRulesFromGraph: 末级父节点→column，子节点文案→allowed|hint（与 skeleton
+// 一致）
 inline Table tableRulesFromGraph(const Graph& g)
 {
     Table skel = tableFromGraphSkeleton(g, true);
     Table rules;
-    rules.name = (g.name.empty() ? g.id : g.name) + "-rules";
+    rules.name    = (g.name.empty() ? g.id : g.name) + "-rules";
     rules.columns = {"column", "allowed", "hint"};
     if (skel.hasHintRow && !skel.rows.empty()) {
         for (size_t c = 0; c < skel.columns.size(); c++) {
@@ -426,17 +447,17 @@ struct FixEnumsResult
     int   skipped_count = 0;
 };
 
-// tableFixEnums: 按 tableCheck 报告写回 suggestion；空 suggestion 记入 skipped
+// tableFixEnums: 按 tableCheck 报告写回 suggestion；空 suggestion / 越界记入
+// skipped
 inline FixEnumsResult tableFixEnums(Table&       target,
                                     const Json&  allowedObj,
                                     const Table* rulesTable,
                                     bool         ignore_hint_row)
 {
-    Table report =
-        tableCheck(target, allowedObj, rulesTable, ignore_hint_row);
+    Table report = tableCheck(target, allowedObj, rulesTable, ignore_hint_row);
     FixEnumsResult out;
-    out.skipped.name = "fix_enums_skipped";
-    out.skipped.columns = {"row",    "field",      "actual",
+    out.skipped.name    = "fix_enums_skipped";
+    out.skipped.columns = {"row",      "field",      "actual",
                            "expected", "suggestion", "reason"};
     for (size_t i = 0; i < report.rows.size(); i++) {
         std::string rowStr = report.cell(i, 0);
@@ -467,6 +488,12 @@ inline FixEnumsResult tableFixEnums(Table&       target,
             out.skipped_count++;
             continue;
         }
+        if ((size_t)row >= target.rows.size()) {
+            out.skipped.appendRow(
+                {rowStr, field, actual, expect, sugg, "row_out_of_range"});
+            out.skipped_count++;
+            continue;
+        }
         target.setCell((size_t)row, (size_t)col, sugg);
         out.fixed_count++;
     }
@@ -479,10 +506,10 @@ inline FixEnumsResult tableFixEnums(Table&       target,
 inline Table tableDeriveAnimationChecklist(const Table& src)
 {
     Table out;
-    out.name = (src.name.empty() ? src.id : src.name) + "-anim-checklist";
-    out.columns = {"编号", "名称", "动画字段", "需求"};
-    int idCol   = src.colIndex("编号");
-    int nameCol = src.colIndex("名称");
+    out.name       = (src.name.empty() ? src.id : src.name) + "-anim-checklist";
+    out.columns    = {"编号", "名称", "动画字段", "需求"};
+    int    idCol   = src.colIndex("编号");
+    int    nameCol = src.colIndex("名称");
     size_t start =
         (src.hasHintRow && !src.rows.empty()) ? (size_t)1 : (size_t)0;
     for (size_t r = start; r < src.rows.size(); r++) {
@@ -560,21 +587,19 @@ inline void tableTransformColumnSlug(Table&             t,
 
 // ---- table_sample_rows / propose helpers ----
 
-// firstAllowedFromPipe: "a|b|c" → "a"
+// firstAllowedFromPipe: "a|b|c" → "a"（保序首项）
 inline std::string firstAllowedFromPipe(const std::string& all)
 {
-    size_t p = all.find('|');
-    if (p == std::string::npos)
-        return trim(all);
-    return trim(all.substr(0, p));
+    auto parts = splitPipeList(all);
+    return parts.empty() ? "" : parts.front();
 }
 
 // loadAllowedMapFromRules: 规则表 → 列名小写 → allowed 原文（| 分隔）
-inline std::map<std::string, std::string> loadAllowedMapFromRules(
-    const Table& rules)
+inline std::map<std::string, std::string>
+loadAllowedMapFromRules(const Table& rules)
 {
     std::map<std::string, std::string> m;
-    int cCol = rules.colIndex("column");
+    int                                cCol = rules.colIndex("column");
     if (cCol < 0)
         cCol = rules.colIndex("field");
     int cAll = rules.colIndex("allowed");
@@ -590,9 +615,7 @@ inline std::map<std::string, std::string> loadAllowedMapFromRules(
 }
 
 // tableSampleRows: 追加 count 行占位样例（枚举首值 / 动画默认 x / 文本 TODO）
-inline void tableSampleRows(Table&             t,
-                            int                count,
-                            const Table*       rulesTable)
+inline void tableSampleRows(Table& t, int count, const Table* rulesTable)
 {
     if (count <= 0)
         throw TableError("table_sample_rows: count must be > 0");
@@ -622,32 +645,16 @@ inline void tableSampleRows(Table&             t,
 }
 
 // tableProposeRows: 对象行写入；可选 rules 枚举校验（非法整批拒绝）
-inline void tableProposeRows(Table& t, const Json& rowsArr, const Table* rulesTable)
+inline void
+tableProposeRows(Table& t, const Json& rowsArr, const Table* rulesTable)
 {
     if (!rowsArr.isArr())
         throw TableError("table_propose_rows: rows must be a JSON array");
     std::map<std::string, std::set<std::string>> allowed;
     if (rulesTable) {
         auto raw = loadAllowedMapFromRules(*rulesTable);
-        for (auto& kv : raw) {
-            std::set<std::string> vals;
-            std::string           s     = kv.second;
-            size_t                start = 0;
-            while (start <= s.size()) {
-                size_t p = s.find('|', start);
-                if (p == std::string::npos) {
-                    std::string part = trim(s.substr(start));
-                    if (!part.empty())
-                        vals.insert(part);
-                    break;
-                }
-                std::string part = trim(s.substr(start, p - start));
-                if (!part.empty())
-                    vals.insert(part);
-                start = p + 1;
-            }
-            allowed[kv.first] = std::move(vals);
-        }
+        for (auto& kv : raw)
+            allowed[kv.first] = toAllowedSet(splitPipeList(kv.second));
     }
     std::vector<std::vector<std::string>> pending;
     for (auto& rowJ : *rowsArr.a) {

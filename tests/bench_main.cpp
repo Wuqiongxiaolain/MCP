@@ -18,6 +18,11 @@
 #include <string>
 #include <vector>
 
+using gj::Json;
+using gm::Edge;
+using gm::Graph;
+using gm::Node;
+
 // ── 轻量 JSON 输出辅助（不依赖 json.hpp 避免干扰被测对象） ──
 static void jsonStr(FILE* f, const std::string& s)
 {

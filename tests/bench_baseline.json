@@ -1,5 +1,5 @@
 {
-  "_note": "性能基准基线文件。由 CI (main 分支 push) 自动更新，请勿手动编辑。",
-  "_updated": "initial-placeholder",
+  "_note": "性能基准基线文件。由开发者在 PR 内用 make bench-baseline 更新并提交；日常 CI 仅做比对，不自动回写。",
+  "_updated": "placeholder",
   "benchmarks": []
 }

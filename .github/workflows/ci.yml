@@ -87,19 +87,8 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
-      - name: 更新性能基线（仅 main 分支）
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: |
-          make bench-baseline CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet tests/bench_baseline.json; then
-            git add tests/bench_baseline.json
-            git commit -m "ci: update performance baseline" -m "Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
-            git push
-          else
-            echo "baseline unchanged"
-          fi
+      # 性能基线由开发者在同一 PR 内用 `make bench-baseline` 人工更新并提交，
+      # CI 仅通过上方 bench-ci 做回归比对，避免 bot 回写 main 造成 tip 漂移。
 
       - name: 打包制品
         run: |

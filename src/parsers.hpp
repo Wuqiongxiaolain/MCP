@@ -17,6 +17,7 @@ using gm::Graph;
 using gm::Node;
 using gm::splitLines;
 using gm::startsWith;
+using gm::stripUtf8Bom;
 using gm::toLower;
 using gm::trim;
 
@@ -184,20 +185,74 @@ inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines,
         std::string line = trim(lines[li]);
         if (line.empty() || startsWith(line, "%%"))
             continue;
-        // linkStyle <index> stroke:#xxx[,...] — 按边索引写 strokeColor
+        // linkStyle: 支持单索引 / 逗号列表 / 区间 / default
+        // 例：linkStyle 0 stroke:#f00
+        //     linkStyle 0,1,2 stroke:#f00
+        //     linkStyle 1-3 stroke:#f00
+        //     linkStyle default stroke:#f00
         if (startsWith(line, "linkStyle")) {
             std::string rest = trim(line.substr(9));
-            size_t      i    = 0;
-            while (i < rest.size() &&
-                   isdigit((unsigned char)rest[i]))
-                i++;
-            if (i > 0) {
-                size_t      idx   = (size_t)std::strtoul(rest.substr(0, i).c_str(),
-                                                    nullptr, 10);
-                std::string style = trim(rest.substr(i));
-                auto        colors = parseStyleColors(style);
-                if (!colors.second.empty())
-                    pendingLinkStyles.push_back({idx, colors.second});
+            // 步骤1：定位样式段（stroke:/fill:/color:）
+            size_t stylePos = std::string::npos;
+            for (const char* key : {"stroke:", "fill:", "color:"}) {
+                size_t p = rest.find(key);
+                if (p != std::string::npos &&
+                    (stylePos == std::string::npos || p < stylePos))
+                    stylePos = p;
+            }
+            std::string indexPart =
+                stylePos == std::string::npos ? rest : trim(rest.substr(0, stylePos));
+            std::string style =
+                stylePos == std::string::npos ? "" : trim(rest.substr(stylePos));
+            auto colors = parseStyleColors(style);
+            if (!colors.second.empty() && !indexPart.empty()) {
+                // 步骤2：解析索引集合（default=全部边，占位 SIZE_MAX）
+                if (toLower(indexPart) == "default") {
+                    pendingLinkStyles.push_back(
+                        {static_cast<size_t>(-1), colors.second});
+                }
+                else {
+                    size_t pos = 0;
+                    while (pos < indexPart.size()) {
+                        while (pos < indexPart.size() &&
+                               (indexPart[pos] == ' ' || indexPart[pos] == ','))
+                            pos++;
+                        if (pos >= indexPart.size())
+                            break;
+                        size_t numStart = pos;
+                        while (pos < indexPart.size() &&
+                               isdigit((unsigned char)indexPart[pos]))
+                            pos++;
+                        if (pos == numStart)
+                            break;
+                        size_t a = (size_t)std::strtoul(
+                            indexPart.substr(numStart, pos - numStart).c_str(),
+                            nullptr, 10);
+                        // 区间 a-b
+                        if (pos < indexPart.size() && indexPart[pos] == '-') {
+                            pos++;
+                            size_t numStart2 = pos;
+                            while (pos < indexPart.size() &&
+                                   isdigit((unsigned char)indexPart[pos]))
+                                pos++;
+                            if (pos > numStart2) {
+                                size_t b = (size_t)std::strtoul(
+                                    indexPart
+                                        .substr(numStart2, pos - numStart2)
+                                        .c_str(),
+                                    nullptr, 10);
+                                if (a > b)
+                                    std::swap(a, b);
+                                for (size_t k = a; k <= b; ++k)
+                                    pendingLinkStyles.push_back(
+                                        {k, colors.second});
+                            }
+                        }
+                        else {
+                            pendingLinkStyles.push_back({a, colors.second});
+                        }
+                    }
+                }
             }
             continue;
         }
@@ -326,10 +381,15 @@ inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines,
             prev = id2;
         }
     }
-    // 回写 linkStyle 缓存的边描边色
+    // 回写 linkStyle 缓存的边描边色（SIZE_MAX 表示 default → 全部边）
     for (auto& ps : pendingLinkStyles) {
-        if (ps.first < g.edges.size())
+        if (ps.first == static_cast<size_t>(-1)) {
+            for (auto& e : g.edges)
+                e.strokeColor = ps.second;
+        }
+        else if (ps.first < g.edges.size()) {
             g.edges[ps.first].strokeColor = ps.second;
+        }
     }
     return g;
 }
@@ -3330,7 +3390,8 @@ inline Graph parseExcalidraw(const std::string& text)
 // 识别顺序：xml/json-mermaid-markdown-csv，尽量减少误判成本
 inline std::string detectFormat(const std::string& text)
 {
-    std::string t = trim(text);
+    // 先剥 BOM，再 trim，避免首字符识别被 EF BB BF 干扰
+    std::string t = trim(stripUtf8Bom(text));
     if (t.empty())
         return "auto";
     if (t[0] == '<') {

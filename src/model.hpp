@@ -298,12 +298,23 @@ inline std::string trim(const std::string& s)
     return s.substr(b, e - b + 1);
 }
 
+// stripUtf8Bom: 去掉文本开头的 UTF-8 BOM（EF BB BF），避免关键字识别失败
+inline std::string stripUtf8Bom(std::string s)
+{
+    if (s.size() >= 3 && (unsigned char)s[0] == 0xEF &&
+        (unsigned char)s[1] == 0xBB && (unsigned char)s[2] == 0xBF)
+        s.erase(0, 3);
+    return s;
+}
+
 // splitLines: 按行拆分文本（兼容 \r\n），供解析器逐行处理
 inline std::vector<std::string> splitLines(const std::string& text)
 {
+    // 关键步骤：先剥 BOM -> 再按换行切分
+    std::string              src = stripUtf8Bom(text);
     std::vector<std::string> lines;
     std::string              cur;
-    for (char c : text) {
+    for (char c : src) {
         if (c == '\n') {
             lines.push_back(cur);
             cur.clear();

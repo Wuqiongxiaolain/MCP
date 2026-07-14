@@ -1,0 +1,11 @@
+exit_code=2
+input_format=mermaid
+---
+graphmcp.exe : error: unsupported mermaid diagram type: classdef ok fill:#e8
+所在位置 C:\Users\haima\AppData\Local\Temp\ps-script-ad9ac2e5-77d2-4831-8ea8-f2485d285247.ps1:118 字符: 10
++   $log = & $bin convert to-model --file "examples/example_input/$f" - ...
++          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (error: unsuppor...def ok fill:#e8:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+

@@ -1,0 +1,31 @@
+{
+  "id": "",
+  "name": "",
+  "type": "pie",
+  "laidOut": true,
+  "nodes": [],
+  "edges": [],
+  "files": {},
+  "properties": {
+    "pie": {
+      "title": "Pets",
+      "showData": false,
+      "entries": [
+        {
+          "label": "Dogs",
+          "value": 50
+        },
+        {
+          "label": "Cats",
+          "value": 30
+        },
+        {
+          "label": "Birds",
+          "value": 20
+        }
+      ]
+    }
+  },
+  "edgeCounter": 0,
+  "nodeCounter": 0
+}

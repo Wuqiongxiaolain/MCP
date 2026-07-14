@@ -1,0 +1,33 @@
+exit_code=0
+input_format=mermaid
+---
+{
+  "id": "",
+  "name": "",
+  "type": "sequenceDiagram",
+  "laidOut": true,
+  "nodes": [],
+  "edges": [],
+  "files": {},
+  "properties": {
+    "sequence": {
+      "autonumber": false,
+      "participants": [],
+      "messages": [
+        {
+          "from": "",
+          "to": "Alice",
+          "label": "orphan arrow",
+          "type": "async",
+          "seqNum": 1,
+          "headEnd": "arrow",
+          "isReturn": false
+        }
+      ],
+      "fragments": []
+    }
+  },
+  "edgeCounter": 0,
+  "nodeCounter": 0
+}
+

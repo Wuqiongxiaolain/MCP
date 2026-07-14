@@ -1,0 +1,14 @@
+classDiagram
+  class Animal {
+    +int age
+    +String name
+    +eat()
+  }
+  class Dog {
+    +bark()
+  }
+  class Cat {
+    +meow()
+  }
+  Animal <|-- Dog
+  Animal <|-- Cat

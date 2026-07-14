@@ -23,7 +23,11 @@ HDRS := src/json.hpp src/model.hpp src/parsers.hpp src/layout.hpp \
         src/table_storage.hpp src/table_xml.hpp \
         src/version_types.hpp src/cursor_types.hpp src/version_manager.hpp \
 
+<<<<<<< HEAD
 .PHONY: all test test-all test-version test-cursor smoke mcp-smoke table-smoke clean export-testout export-table-examples export-table-collab-examples docs-api
+=======
+.PHONY: all test test-all test-version test-cursor bench bench-ci bench-baseline smoke mcp-smoke table-smoke clean export-testout export-table-examples docs-api
+>>>>>>> eec9678 (feat: add micro-benchmark suite and CI performance regression detection)
 
 all: $(BIN)/graphmcp$(EXE) $(BIN)/graphmcp_tests$(EXE) \
      $(BIN)/graphmcp_version_tests$(EXE) $(BIN)/graphmcp_cursor_tests$(EXE)
@@ -56,6 +60,30 @@ test-cursor: $(BIN)/graphmcp_cursor_tests$(EXE)
 test-all: test test-version test-cursor
 	@echo "=========================================="
 	@echo "all unit tests completed"
+
+# ── 性能基准测试 ──
+$(BIN)/graphmcp_bench$(EXE): tests/bench_main.cpp $(HDRS)
+	-$(MKDIR)
+	$(CXX) $(CXXFLAGS) -o $@ tests/bench_main.cpp
+
+bench: $(BIN)/graphmcp_bench$(EXE)
+	$(BIN)/graphmcp_bench$(EXE)
+
+# CI 用：运行 bench 并比对基线
+BENCH_BASELINE := tests/bench_baseline.json
+bench-ci: $(BIN)/graphmcp_bench$(EXE)
+	$(BIN)/graphmcp_bench$(EXE) > $(BIN)/bench_result.json
+	@if [ -f $(BENCH_BASELINE) ]; then \
+		python3 scripts/bench_compare.py $(BENCH_BASELINE) $(BIN)/bench_result.json; \
+	else \
+		echo "::warning::基线文件不存在，将当前结果写入基线"; \
+		cp $(BIN)/bench_result.json $(BENCH_BASELINE); \
+	fi
+
+# 更新基线（仅 main 分支使用）
+bench-baseline: $(BIN)/graphmcp_bench$(EXE)
+	$(BIN)/graphmcp_bench$(EXE) > $(BENCH_BASELINE)
+	@echo "baseline updated: $(BENCH_BASELINE)"
 
 smoke: $(BIN)/graphmcp$(EXE)
 	bash tests/smoke_test.sh $(BIN)/graphmcp$(EXE)

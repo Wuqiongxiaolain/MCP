@@ -2,7 +2,7 @@
 name: CI
 on:
   push:
-    branches: [main, dev, 'feature/**']
+    branches: [main, dev, 'feat/**', 'feature/**', 'fix/**']
   pull_request:
     branches: [main, dev]
 
@@ -36,6 +36,24 @@ jobs:
       - name: 单元测试
         run: make test-all
 
+      - name: 性能基准测试
+        id: bench
+        run: |
+          # 编译并运行基准测试
+          make bench-ci CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
+        env:
+          CI: "true"
+
+      - name: 上传基准测试结果
+        if: always() && steps.bench.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results-${{ github.run_number }}
+          path: |
+            bin/bench_result.json
+          retention-days: 30
+          if-no-files-found: ignore
+
       - name: CLI 冒烟（新版命令族）
         env:
           SMOKE_REQUIRE_RASTER: "1"
@@ -68,6 +86,20 @@ jobs:
             mcp-smoke.log
           retention-days: 30
           if-no-files-found: ignore
+
+      - name: 更新性能基线（仅 main 分支）
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          make bench-baseline CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet tests/bench_baseline.json; then
+            git add tests/bench_baseline.json
+            git commit -m "ci: update performance baseline" -m "Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+            git push
+          else
+            echo "baseline unchanged"
+          fi
 
       - name: 打包制品
         run: |

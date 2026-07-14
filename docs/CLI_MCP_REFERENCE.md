@@ -72,6 +72,8 @@
 | `with-excalidraw` | 打开 `.excalidraw` | |
 | `with-svg` | 打开 `.svg` | |
 
+设置 `GRAPHMCP_NO_LAUNCH=1` 时只生成目标 URL/文件，不实际拉起外部程序（单元测试与无头 CI 使用）。
+
 ### `import` — 编辑回导
 
 | 用法 | 说明 | 常用选项 |
@@ -161,7 +163,7 @@
 
 ---
 
-## 三、MCP 工具（25 个）
+## 三、MCP 工具（39 个）
 
 参数与 CLI 对应；通过 `tools/call` 调用。
 
@@ -172,7 +174,7 @@
 | `graph_create` | 解析 → 校验 → 布局 → 存储 | `content` |
 | `graph_convert` | 格式直转（不存储） | `content`, `to` |
 | `graph_export` | 导出已存储图 | `id`, `to` |
-| `graph_open` | 外部编辑器打开 | `id` |
+| `graph_open` | 外部编辑器打开（`launch=false` 仅生成目标） | `id` |
 | `graph_import` | 编辑回导 | `id` |
 | `graph_validate` | 结构校验 | `id` 或 `content` |
 | `graph_list` | 列出所有图 | （无） |
@@ -215,6 +217,36 @@
 | `graph_cursor_move` | 移动游标（delta±1） | `id`, `cursor` |
 | `graph_cursor_close` | 关闭游标 | `id`, `cursor` |
 
+### 通用表（CSV / 表 XML）与图↔表协作
+
+> **通用表 ≠** `create from-csv`（后者仍是边表/层级表 → Graph）。通用表是并列一等对象；交换格式为 **CSV** 与 **表 XML**（根 `<table>`，与图 XML 根 `<graph>` 无关）；仓库内为 JSON。不实现 Excel 全量读写。默认 `format=csv`。
+
+| 工具名 | 功能 | 必填参数 |
+|--------|------|----------|
+| `table_create` | 从 CSV / 表 XML / model 创建表并入库 | `content`（可选 `format`） |
+| `table_import` | 导入 CSV / 表 XML / model（可指定 id） | `content`（可选 `format`） |
+| `table_export` | 导出 csv / model / xml | `id` |
+| `table_list` | 列出表 | （无） |
+| `table_show` | 查看表 | `id` |
+| `table_update` | 批量补丁并返回变更摘要 | `id` |
+| `table_delete` | 删除表 | `id`, `force` |
+| `table_history` / `table_rollback` / `table_diff` | 版本与差异 | 见 schema |
+| `table_from_graph` | 图→表有损投影（skeleton/edgelist/…） | `graph_id` |
+| `graph_from_table` | 表→图（边/层级列或映射列） | `table_id` 或 `content` |
+| `table_align` | 按主键跨表补行 | `primary_id`, `target_id`, keys |
+| `table_check` | 枚举校验 → 违规清单表 | `id` |
+
+CLI：`graphmcp table create|import|export|list|show|update|delete|history|rollback|from-graph|from-table|align|check`
+
+关键语义约束：
+
+- `table_create` 默认**不覆盖**已存在 id（同 id 需 `force=true`）；`table_import` 保留 upsert。环境变量 `GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT=1`（或 `true`）可临时恢复旧 upsert（响应含 `compat_warnings`）。
+- `table_update.set_cells` 使用 `{row,column,value}` 或 `{row,col_index,value}`；旧字段 `col` 仍接受但已弃用（同文案 warning 去重）。
+- `table_from_graph` 返回 `csv_preview` 默认仅前 20 行（截断时带 `truncated`/`hint`）；全量请用 `table_export`。
+- `table_check` 支持 `ignore_hint_row`；当 `table.hasHintRow=true` 时默认忽略首行说明。`GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1`（或 `true`）可将缺省改为不跳过 hint 行。CLI 可用 `--ignore-hint-row=false` 显式关闭。
+- **表 XML**：`format=xml` 导入根为 `<table>` 的模式 A 方言（命名字段行，见 USER_GUIDE）；`to=xml` 导出。与 `create from-xml`（图）无关。
+- **维护约定（抽离触发）**：当前表 XML 实现为多新增少修改（`table_xml.hpp`），与 `fromCsv` 装表样板可能少量重复且依赖 `gp::detail::parseXmlDoc`。出现以下**任一**情况时应单独开重构 PR（抽出 `xml_util` + `buildTable`），勿继续叠债：① CSV 与表 XML 在 normalize/缺列/meta 等行为漂移；② 再增加第三种表交换格式；③ 表侧需脱离 `parsers.hpp`。详见 `APPLICATION_LOGIC.md`。
+
 ---
 
 ## 四、最小示例
@@ -226,5 +258,7 @@
 | 导出 | `graphmcp export to-svg --id <graph-id> -o output.svg` |
 | 转链接 | `graphmcp convert to-url --file examples/example_input/flowchart.mmd` |
 | 改图并提交 | `graph update …` → `version stage` → `version commit -m "…"` |
+| 建通用表 | `graphmcp table create --file examples/example_input/enemy_sample.csv --name enemies`（样见 `examples/example_output/enemy_sample.csv_out/`） |
+| 技能表→关系图 | `graphmcp table from-table --file examples/example_input/skill_relations.csv`（样见 `examples/example_output/skill_relations.csv_out/`） |
 | MCP 创建 | `tools/call` → `graph_create`，参数 `content` + `name` |
 | MCP 提交 | `tools/call` → `graph_commit`，参数 `id` + `message` |

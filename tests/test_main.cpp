@@ -1,10 +1,47 @@
 // test_main.cpp - assertion-based unit tests for graphmcp core modules
-#include "../src/exporters.hpp"
+// 依赖 mcp.hpp 间接引入 exporters / table 工具头文件
 #include "../src/mcp.hpp"
 #include "../src/parsers.hpp"
 #include "../src/storage.hpp"
+#include "../src/table_bridge.hpp"
+#include "../src/table_model.hpp"
+#include "../src/table_storage.hpp"
+#include "../src/table_xml.hpp"
 #include <cstdlib>
+#include <exception>
 #include <iostream>
+#include <string>
+
+// EnvGuard: 测试内临时设置环境变量，析构时恢复（避免污染后续用例）
+struct EnvGuard {
+    std::string name_;
+    std::string old_;
+
+    EnvGuard(const char* name, const char* value) : name_(name)
+    {
+        old_ = ge::getEnvVar(name);
+#ifdef _WIN32
+        _putenv_s(name_.c_str(), value);
+#else
+        setenv(name_.c_str(), value, 1);
+#endif
+    }
+
+    ~EnvGuard()
+    {
+#ifdef _WIN32
+        _putenv_s(name_.c_str(), old_.c_str());
+#else
+        if (old_.empty())
+            unsetenv(name_.c_str());
+        else
+            setenv(name_.c_str(), old_.c_str(), 1);
+#endif
+    }
+
+    EnvGuard(const EnvGuard&)            = delete;
+    EnvGuard& operator=(const EnvGuard&) = delete;
+};
 
 static int g_failed = 0;
 static int g_passed = 0;
@@ -735,60 +772,63 @@ static void testMcpToolsRemaining()
     CHECK(de.str("status") == "deleted");
     CHECK(de.str("elementType") == "node");
 
-    // ── graph_open MCP 冒烟（不依赖 GUI，验证协议层完整性）
+    // ── graph_open MCP 冒烟（launch=false，不拉起外部编辑器）
     {
         // 1. browser 模式：验证生成 mermaid.live URL
         Json ob = Json::parse(
             R"({"jsonrpc":"2.0","id":24,"method":"tools/call","params":{
             "name":"graph_open","arguments":{"id":")" +
-            gid + R"(","editor":"browser"}}})",
+            gid + R"(","editor":"browser","launch":false}}})",
             &err);
         CHECK(mcp::handleMessage(ob, store, resp));
         Json obj = Json::parse(mcpText(resp), &err);
         CHECK(obj.str("target").find("https://mermaid.live/") == 0);
         CHECK(obj.str("editor") == "browser");
-        CHECK(obj.find("launched") != nullptr);
+        CHECK(obj.boolean("launched") == false);
 
         // 2. drawio 模式：验证生成 .drawio 文件路径
         Json od = Json::parse(
             R"({"jsonrpc":"2.0","id":25,"method":"tools/call","params":{
             "name":"graph_open","arguments":{"id":")" +
-            gid + R"(","editor":"drawio"}}})",
+            gid + R"(","editor":"drawio","launch":false}}})",
             &err);
         CHECK(mcp::handleMessage(od, store, resp));
         Json odj = Json::parse(mcpText(resp), &err);
         CHECK(odj.str("target").find("/open.drawio") != std::string::npos);
         CHECK(odj.str("editor") == "drawio");
+        CHECK(odj.boolean("launched") == false);
         CHECK(odj.find("availableEditors") != nullptr);
 
         // 3. excalidraw 模式：验证生成 .excalidraw 文件路径
         Json oe = Json::parse(
             R"({"jsonrpc":"2.0","id":26,"method":"tools/call","params":{
             "name":"graph_open","arguments":{"id":")" +
-            gid + R"(","editor":"excalidraw"}}})",
+            gid + R"(","editor":"excalidraw","launch":false}}})",
             &err);
         CHECK(mcp::handleMessage(oe, store, resp));
         Json oej = Json::parse(mcpText(resp), &err);
         CHECK(oej.str("target").find("/open.excalidraw") != std::string::npos);
         CHECK(oej.str("editor") == "excalidraw");
+        CHECK(oej.boolean("launched") == false);
 
         // 4. svg 模式 + editorPath：验证显式编辑器路径
         Json os = Json::parse(
             R"({"jsonrpc":"2.0","id":27,"method":"tools/call","params":{
             "name":"graph_open","arguments":{"id":")" +
             gid +
-            R"(","editor":"svg","editorPath":"/usr/bin/code"}}})",
+            R"(","editor":"svg","editorPath":"/usr/bin/code","launch":false}}})",
             &err);
         CHECK(mcp::handleMessage(os, store, resp));
         Json osj = Json::parse(mcpText(resp), &err);
         CHECK(osj.str("target").find("/open.svg") != std::string::npos);
         CHECK(osj.str("editor") == "svg");
         CHECK(osj.str("editorPath") == "/usr/bin/code");
+        CHECK(osj.boolean("launched") == false);
 
         // 5. 不存在的图：验证错误返回
         Json onf = Json::parse(
             R"({"jsonrpc":"2.0","id":28,"method":"tools/call","params":{
-            "name":"graph_open","arguments":{"id":"nonexistent-id"}}})",
+            "name":"graph_open","arguments":{"id":"nonexistent-id","launch":false}}})",
             &err);
         CHECK(mcp::handleMessage(onf, store, resp));
         CHECK(resp.find("result")->find("content")->a->at(0)
@@ -1122,7 +1162,7 @@ static void testMcpProtocol()
     Json tl =
         Json::parse(R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})", &err);
     CHECK(mcp::handleMessage(tl, store, resp));
-    CHECK(resp.find("result")->find("tools")->size() == 26);
+    CHECK(resp.find("result")->find("tools")->size() == 39);
     // tools/call graph_create
     Json call = Json::parse(
         R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
@@ -1336,339 +1376,629 @@ static void testMcpGraphImport()
     CHECK((int)j2.num("version") == 2);
 }
 
-// 测试所有 Mermaid 类型的深度解析（取代旧的 rawMermaid 透传测试）
-static void testMermaidDeepParsing()
+static void testTableModel()
 {
-    struct
-    {
-        std::string text;
-        std::string expectedType;
-        const char* name;
-        std::string propsKey;  // properties 子对象 key
-    } cases[] = {
-        {"sequenceDiagram\nAlice->>Bob: Hello", "sequenceDiagram", "seq", "sequence"},
-        {"gantt\ntitle Project\ndateFormat YYYY-MM-DD\nsection Dev\nTask A: 1d", "gantt", "gantt", "gantt"},
-        {"pie title Pets\n\"Dog\": 50\n\"Cat\": 30", "pie", "pie", "pie"},
-        {"gitGraph\ncommit\nbranch dev\ncheckout dev\ncommit\ncheckout main\nmerge dev", "gitGraph", "git", "gitGraph"},
-        {"journey\ntitle My Day\nsection Morning\nWake: 5: Me", "journey", "journey", "journey"},
-        {"timeline\ntitle History\nsection Era\nEvent: detail", "timeline", "timeline", "timeline"},
-        {"kanban\ntodo[To Do]\n  c1[Task]@{ assigned: 'me' }\ndone[Done]\n  c2[Deploy]", "kanban", "kanban", "kanban"},
-        {"quadrantChart\ntitle Quad\nx-axis Low --> High\ny-axis Low --> High\nA: [0.3, 0.5]", "quadrantChart", "quad", "quadrantChart"},
-        {"xychart-beta\ntitle Sales\nx-axis [A,B]\nbar [10,20]", "xychart", "xy", "xychart"},
-        {"architecture-beta\ngroup api(cloud)[API]\nservice db(database)[DB]", "architecture-beta", "arch", "architecture"},
-        {"packet-beta\ntitle Frame\n0-7: Header\n8-15: Data", "packet", "packet", "packet"},
-        {"block-beta\ncolumns 2\nA[Hello]\nB[World]\nA --> B", "block", "block", "block"},
-        {"requirementDiagram\nrequirement req1 {\nid: REQ-1\ntext: Login\n}\nelement elem1 {\ntype: software\ndocRef: DOC-1\n}\nreq1 - satisfies -> elem1", "requirementDiagram", "req", "requirementDiagram"},
-        {"sankey-beta\nSource,Target,100\nTarget,Sink,50", "sankey", "sankey", "sankey"},
+    gt::Table t = gt::Table::fromCsv(
+        "from,to,label\n"
+        "A,B,\"x,y\"\n"
+        "B,C,\n");
+    CHECK(t.columns.size() == 3);
+    CHECK(t.rows.size() == 2);
+    CHECK(t.cell(0, 2) == "x,y");
+    t.addColumn("weight", "1");
+    CHECK(t.columns.size() == 4);
+    CHECK(t.cell(0, 3) == "1");
+    t.setCell(1, 3, "9");
+    CHECK(t.cell(1, 3) == "9");
+    std::string csv = t.toCsv();
+    gt::Table   t2  = gt::Table::fromCsv(csv);
+    CHECK(t2.rows.size() == 2);
+    CHECK(t2.cell(0, 2) == "x,y");
+    Json j = t.toJson();
+    gt::Table t3 = gt::Table::fromJson(j);
+    CHECK(t3.columns.size() == 4);
+
+    // BOM CSV（Excel CSV UTF-8）应能正确识别首列
+    gt::Table bom = gt::Table::fromCsv("\xEF\xBB\xBF编号,名称\n1,爬虫\n");
+    CHECK(bom.colIndex("编号") == 0);
+    CHECK(bom.cell(0, 1) == "爬虫");
+}
+
+static void testTableStoreAndBridge()
+{
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_STORE", "test-table-store-tmp");
+#else
+    setenv("GRAPHMCP_STORE", "test-table-store-tmp", 1);
+#endif
+    ge::removeDirectory("test-table-store-tmp");
+    gts::TableStore ts("test-table-store-tmp");
+    gt::Table       t = gt::Table::fromCsv("id,label,parent\nceo,CEO,\ncto,CTO,ceo\n");
+    t.name            = "org";
+    int v1            = ts.save(t, "init");
+    CHECK(v1 == 1);
+    gt::Table loaded;
+    CHECK(ts.load(t.id, loaded));
+    CHECK(loaded.rows.size() == 2);
+
+    Graph g = gtb::graphFromTable(loaded);
+    CHECK(g.type == "orgchart");
+    CHECK(g.nodes.size() >= 2);
+    CHECK(!g.edges.empty());
+
+    gt::Table edges = gtb::tableFromGraph(g, "edgelist", false);
+    CHECK(edges.columns.size() == 3);
+    CHECK(!edges.rows.empty());
+
+    gt::Table sk = gtb::tableFromGraph(g, "skeleton", true);
+    CHECK(!sk.columns.empty());
+    CHECK(sk.hasHintRow);
+
+    // align
+    gt::Table drop = gt::Table::fromCsv("enemy_id,item\n");
+    drop.id        = gm::genId("t");
+    ts.save(drop, "drop");
+    gt::Table enemies = gt::Table::fromCsv("编号,名称\n1,爬虫\n2,肿瘤\n");
+    enemies.id        = gm::genId("t");
+    ts.save(enemies, "enemies");
+    // reload drop
+    ts.load(drop.id, drop);
+    Json align = gtb::tableAlign(enemies, drop, "编号", "enemy_id");
+    CHECK((int)align.num("added_rows") == 2);
+    CHECK(drop.rows.size() == 2);
+
+    Json allowed = Json::obj();
+    Json vals    = Json::arr();
+    vals.push(Json("小怪"));
+    vals.push(Json("Boss"));
+    allowed.set("层级", vals);
+    gt::Table bad = gt::Table::fromCsv("层级\n小怪\n精英\n");
+    gt::Table rep = gtb::tableCheck(bad, allowed, nullptr);
+    CHECK(rep.rows.size() == 1);
+    bad.hasHintRow = true;
+    gt::Table rep2 = gtb::tableCheck(bad, allowed, nullptr, true);
+    CHECK(rep2.rows.size() == 1);  // 忽略首行后仍有一条违规（第二数据行）
+
+    CHECK(ts.remove(t.id));
+    ge::removeDirectory("test-table-store-tmp");
+}
+
+// 解析 example_input 夹具路径（支持从仓库根或 bin/ 运行）
+static std::string readExampleInput(const std::string& name)
+{
+    const std::string cands[] = {
+        "examples/example_input/" + name,
+        "../examples/example_input/" + name,
+        "../../examples/example_input/" + name,
     };
-
-    for (auto& c : cases) {
-        // 测试 1：parseMermaid 深度解析（rawMermaid 为空）
-        Graph g = gp::parseMermaid(c.text);
-        CHECK(g.type == c.expectedType);
-        CHECK(g.rawMermaid.empty());  // 深度解析不依赖透传
-
-        // 测试 2：properties 已填充
-        CHECK(g.properties.isObj());
-        bool hasProps = g.properties.o && !g.properties.o->empty();
-        CHECK(hasProps || g.type == c.expectedType);  // 至少有类型信息
-
-        // 测试 3：toMermaid 生成有效 Mermaid
-        std::string exported = ge::toMermaid(g);
-        CHECK(!exported.empty());
-        CHECK(exported.find(c.expectedType) != std::string::npos ||
-              exported.find(c.expectedType.substr(0, 3)) != std::string::npos);
-
-        // 测试 4：detectFormat 识别为 mermaid
-        std::string fmt = gp::detectFormat(c.text);
-        CHECK(fmt == "mermaid");
-
-        // 测试 5：parseAny 也能正确深度解析
-        Graph g2 = gp::parseAny(c.text, "auto", "");
-        CHECK(g2.type == c.expectedType);
-        CHECK(g2.rawMermaid.empty());
-
-        // 测试 6：验证通过（properties 类型无节点也 OK）
-        auto issues = gl::validate(g);
-        CHECK(issues.empty());
-
-        // 测试 7：布局跳过 properties 类型
-        gl::layout(g);
-        CHECK(g.laidOut == true);
-
-        // 测试 8：Graph JSON 往返（含 properties）
-        Json j = g.toJson();
-        Graph g3 = Graph::fromJson(j);
-        CHECK(g3.type == c.expectedType);
-        CHECK(g3.rawMermaid.empty());
-        if (hasProps)
-            CHECK(g3.properties.isObj());
-
-        // 测试 9：JSON 中不包含 rawMermaid
-        CHECK(j.str("rawMermaid").empty());
+    for (const auto& p : cands) {
+        std::string s = ge::readFile(p);
+        if (!s.empty())
+            return s;
     }
+    return {};
 }
 
-// 测试深度解析的结构化内容正确性
-static void testMermaidStructureValidation()
+static void testTableFixtures()
 {
-    // sequenceDiagram: 验证 participants 和 messages
-    {
-        Graph g = gp::parseMermaid(
-            "sequenceDiagram\n"
-            "    participant Alice\n"
-            "    actor Bob\n"
-            "    Alice->>Bob: Hello\n"
-            "    Bob-->>Alice: Hi\n");
-        CHECK(g.type == "sequenceDiagram");
-        CHECK(g.rawMermaid.empty());
-        const Json* seq = g.properties.find("sequence");
-        CHECK(seq != nullptr);
-        const Json* parts = seq->find("participants");
-        CHECK(parts != nullptr && parts->isArr() && parts->a->size() == 2);
-        const Json* msgs = seq->find("messages");
-        CHECK(msgs != nullptr && msgs->isArr() && msgs->a->size() == 2);
-        CHECK((*msgs->a)[0].str("headEnd") == "arrow");
-        CHECK((*msgs->a)[1].str("type") == "async");
+    // enemy_sample：通用表列与枚举校验
+    std::string enemy_csv = readExampleInput("enemy_sample.csv");
+    CHECK(!enemy_csv.empty());
+    if (!enemy_csv.empty()) {
+        gt::Table enemy = gt::Table::fromCsv(enemy_csv);
+        CHECK(enemy.colIndex("编号") >= 0);
+        CHECK(enemy.colIndex("名称") >= 0);
+        CHECK(enemy.colIndex("层级") >= 0);
+        CHECK(enemy.rows.size() >= 4);
+
+        Json allowed = Json::obj();
+        Json vals    = Json::arr();
+        vals.push(Json("小怪"));
+        vals.push(Json("Boss"));
+        allowed.set("层级", vals);
+        gt::Table report = gtb::tableCheck(enemy, allowed, nullptr, false);
+        CHECK(report.rows.size() == 0);
     }
 
-    // pie: 验证 entries
-    {
-        Graph g = gp::parseMermaid(
-            "pie title Test\n"
-            "\"A\" : 10\n"
-            "\"B\" : 20\n");
-        CHECK(g.type == "pie");
-        const Json* pie = g.properties.find("pie");
-        CHECK(pie != nullptr);
-        CHECK(pie->str("title") == "Test");
-        const Json* entries = pie->find("entries");
-        CHECK(entries != nullptr && entries->isArr() && entries->a->size() == 2);
-        CHECK((*entries->a)[0].str("label") == "A");
-        CHECK((*entries->a)[0].num("value", -1) == 10);
-    }
-
-    // gantt: 验证 sections 和 tasks
-    {
-        Graph g = gp::parseMermaid(
-            "gantt\n"
-            "    dateFormat YYYY-MM-DD\n"
-            "    title Plan\n"
-            "    section Design\n"
-            "    Task A : done, t1, 2024-01-01, 5d\n");
-        CHECK(g.type == "gantt");
-        const Json* gantt = g.properties.find("gantt");
-        CHECK(gantt != nullptr);
-        const Json* secs = gantt->find("sections");
-        CHECK(secs != nullptr && secs->isArr() && secs->a->size() == 1);
-        const Json* tasks = (*secs->a)[0].find("tasks");
-        CHECK(tasks != nullptr && tasks->isArr() && tasks->a->size() == 1);
-        CHECK((*tasks->a)[0].str("status") == "done");
-    }
-
-    // requirementDiagram: 验证双写
-    {
-        Graph g = gp::parseMermaid(
-            "requirementDiagram\n"
-            "    requirement req1 {\n"
-            "        id: REQ-1\n"
-            "        text: Login\n"
-            "    }\n"
-            "    element e1 {\n"
-            "        type: software\n"
-            "    }\n"
-            "    req1 - satisfies -> e1\n");
-        CHECK(g.type == "requirementDiagram");
-        CHECK(g.nodes.size() >= 2);  // 双写：nodes 也有数据
-        CHECK(g.edges.size() >= 1);
-        const Json* rd = g.properties.find("requirementDiagram");
-        CHECK(rd != nullptr);
-        const Json* els = rd->find("elements");
-        CHECK(els != nullptr && els->isArr() && els->a->size() == 2);
-        const Json* rels = rd->find("relations");
-        CHECK(rels != nullptr && rels->isArr() && rels->a->size() == 1);
-        CHECK((*rels->a)[0].str("type") == "satisfies");
-    }
-
-    // sankey-beta: 验证 flows
-    {
-        Graph g = gp::parseMermaid(
-            "sankey-beta\n"
-            "A,B,100\n"
-            "B,C,50\n");
-        CHECK(g.type == "sankey");
-        const Json* sk = g.properties.find("sankey");
-        CHECK(sk != nullptr);
-        const Json* flows = sk->find("flows");
-        CHECK(flows != nullptr && flows->isArr() && flows->a->size() == 2);
-        CHECK((*flows->a)[0].num("value", -1) == 100);
-        CHECK(g.edges.size() == 2);  // 双写
-    }
-
-    // pathSet 错误报告
-    {
-        Graph g;
-        g.type = "pie";
-        g.properties.set("pie", Json::obj());
-        g.properties["pie"].set("entries", Json::arr());
-        // 在无效索引上 set 应返回 false
-        bool ok = gj::pathSet(g.properties, "pie.entries[99].label", Json("X"));
-        CHECK(!ok);  // 索引 99 不存在
-    }
-
-    // parseJsonPath 转义
-    {
-        auto segs = gj::parseJsonPath("foo\\.bar.baz");
-        CHECK(segs.size() == 2);
-        CHECK(segs[0] == "foo.bar");  // 转义的点
-        CHECK(segs[1] == "baz");
+    // skill_relations：边表可投影为 flowchart
+    std::string skill_csv = readExampleInput("skill_relations.csv");
+    CHECK(!skill_csv.empty());
+    if (!skill_csv.empty()) {
+        gt::Table skill = gt::Table::fromCsv(skill_csv);
+        Graph     g     = gtb::graphFromTable(skill);
+        CHECK(g.type == "flowchart");
+        CHECK(g.edges.size() == skill.rows.size());
+        CHECK(g.nodes.size() >= 2);
+        // 端点去重后节点数应不超过 2*边数，且不少于去重端点下界
+        CHECK(g.nodes.size() <= skill.rows.size() * 2);
     }
 }
 
-// 测试 classDiagram 深度解析
-static void testMermaidClass()
+static void testTableMcpTools()
 {
-    // 基本类图解析
-    std::string text = R"(classDiagram
-class Animal {
-  +int age
-  +String gender
-  +mate(Animal)
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_STORE", "test-table-mcp-tmp");
+#else
+    setenv("GRAPHMCP_STORE", "test-table-mcp-tmp", 1);
+#endif
+    ge::removeDirectory("test-table-mcp-tmp");
+    gs::Store store("test-table-mcp-tmp");
+    mcp::ToolRunner runner(store);
+    Json            args = Json::obj();
+    args.set("content", "from,to,label\nA,B,go\n");
+    args.set("name", "edges");
+    Json res = runner.call("table_create", args);
+    CHECK(!res.boolean("isError", false));
+    std::string err;
+    Json        body = Json::parse(res.find("content")->a->at(0).str("text"), &err);
+    CHECK(err.empty());
+    std::string tid = body.str("id");
+    CHECK(!tid.empty());
+
+    // create 语义：同 id 重复创建应失败（无 force）
+    Json dup = Json::obj();
+    dup.set("id", tid);
+    dup.set("content", "a,b\n1,2\n");
+    Json dupRes = runner.call("table_create", dup);
+    CHECK(dupRes.boolean("isError", false));
+
+    // 向后兼容：LEGACY_UPSERT 允许同 id 覆盖（仅 1/true 生效）
+    {
+        EnvGuard legacy("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT", "1");
+        Json     legacyCreate = runner.call("table_create", dup);
+        CHECK(!legacyCreate.boolean("isError", false));
+        Json legacyBody = Json::parse(
+            legacyCreate.find("content")->a->at(0).str("text"), &err);
+        CHECK(legacyBody.find("compat_warnings") != nullptr);
+    }
+    {
+        // "false" 不应启用 legacy upsert
+        EnvGuard bogus("GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT", "false");
+        Json     stillFail = runner.call("table_create", dup);
+        CHECK(stillFail.boolean("isError", false));
+    }
+
+    // 恢复边表内容供后续用例
+    Json restore = Json::obj();
+    restore.set("id", tid);
+    restore.set("content", "from,to,label\nA,B,go\n");
+    restore.set("force", true);
+    CHECK(!runner.call("table_create", restore).boolean("isError", false));
+
+    Json u = Json::obj();
+    u.set("id", tid);
+    u.set("add_rows", R"([["B","C","next"]])");
+    Json ur = runner.call("table_update", u);
+    CHECK(!ur.boolean("isError", false));
+
+    // set_cells 语义：缺 column/col_index 应失败
+    Json badUpdate = Json::obj();
+    badUpdate.set("id", tid);
+    badUpdate.set("set_cells", R"([{"row":0,"value":"x"}])");
+    Json badRes = runner.call("table_update", badUpdate);
+    CHECK(badRes.boolean("isError", false));
+
+    // 向后兼容：旧字段 col 仍可用；批量时 warning 去重为 1 条
+    Json colUpdate = Json::obj();
+    colUpdate.set("id", tid);
+    colUpdate.set(
+        "set_cells",
+        R"([{"row":0,"col":"from","value":"AA"},{"row":0,"col":"to","value":"BB"}])");
+    Json colRes = runner.call("table_update", colUpdate);
+    CHECK(!colRes.boolean("isError", false));
+    Json colBody =
+        Json::parse(colRes.find("content")->a->at(0).str("text"), &err);
+    CHECK(colBody.find("compat_warnings") != nullptr);
+    CHECK(colBody.find("compat_warnings")->size() == 1);
+
+    Json gf = Json::obj();
+    gf.set("table_id", tid);
+    Json gr = runner.call("graph_from_table", gf);
+    CHECK(!gr.boolean("isError", false));
+    Json gb = Json::parse(gr.find("content")->a->at(0).str("text"), &err);
+    CHECK(gb.str("status") == "ok");
+    CHECK((int)gb.num("nodes") >= 2);
+
+    // from_graph 预览截断
+    Json tf = Json::obj();
+    tf.set("graph_id", gb.str("id"));
+    tf.set("mode", "nodelist");
+    tf.set("preview_rows", 1);
+    Json tfr = runner.call("table_from_graph", tf);
+    CHECK(!tfr.boolean("isError", false));
+    Json tfj = Json::parse(tfr.find("content")->a->at(0).str("text"), &err);
+    CHECK(tfj.boolean("truncated", false) || (int)tfj.num("rows") <= 1);
+    if (tfj.boolean("truncated", false))
+        CHECK(tfj.str("hint").find("table_export") != std::string::npos);
+
+    // table_check：LEGACY_HINT 使缺省不跳过 hint 行
+    {
+        Json hintCreate = Json::obj();
+        hintCreate.set("content", "层级\n非法提示\n小怪\n");
+        hintCreate.set("name", "hint-check");
+        Json hc = runner.call("table_create", hintCreate);
+        CHECK(!hc.boolean("isError", false));
+        Json hcb =
+            Json::parse(hc.find("content")->a->at(0).str("text"), &err);
+        std::string hid = hcb.str("id");
+        // 标记 hasHintRow：通过 from_graph skeleton 更自然，这里直接 update
+        // 存盘字段——用 table_export model / 再 import 太重，改为底层 store
+        gts::TableStore ts("test-table-mcp-tmp");
+        gt::Table       ht;
+        CHECK(ts.load(hid, ht));
+        ht.hasHintRow = true;
+        CHECK(ts.save(ht, "mark hint") > 0);
+
+        Json allowed = Json::obj();
+        Json vals    = Json::arr();
+        vals.push(Json("小怪"));
+        vals.push(Json("Boss"));
+        allowed.set("层级", vals);
+
+        // 默认（hasHintRow）：跳过首行 → 0 违规
+        Json ck = Json::obj();
+        ck.set("id", hid);
+        ck.set("allowed", allowed.dump());
+        Json ckr = runner.call("table_check", ck);
+        CHECK(!ckr.boolean("isError", false));
+        Json ckj =
+            Json::parse(ckr.find("content")->a->at(0).str("text"), &err);
+        CHECK((int)ckj.num("violations") == 0);
+
+        EnvGuard legacyHint("GRAPHMCP_TABLE_CHECK_LEGACY_HINT", "1");
+        Json     ckr2 = runner.call("table_check", ck);
+        CHECK(!ckr2.boolean("isError", false));
+        Json ckj2 =
+            Json::parse(ckr2.find("content")->a->at(0).str("text"), &err);
+        CHECK((int)ckj2.num("violations") == 1);
+        CHECK(ckj2.find("compat_warnings") != nullptr);
+        CHECK(ckj2.boolean("ignore_hint_row") == false);
+    }
+
+    // writeFileAtomic 轻量回环
+    {
+        std::string p = "test-table-mcp-tmp/atomic-probe.txt";
+        CHECK(ge::writeFileAtomic(p, "hello-atomic"));
+        CHECK(ge::readFile(p) == "hello-atomic");
+        CHECK(ge::writeFileAtomic(p, "hello-atomic-2"));
+        CHECK(ge::readFile(p) == "hello-atomic-2");
+    }
+
+    // table_import：同 id upsert 成功
+    {
+        Json imp = Json::obj();
+        imp.set("id", tid);
+        imp.set("content", "from,to,label\nX,Y,z\n");
+        imp.set("name", "edges-imported");
+        Json ir = runner.call("table_import", imp);
+        CHECK(!ir.boolean("isError", false));
+        Json ib =
+            Json::parse(ir.find("content")->a->at(0).str("text"), &err);
+        CHECK(ib.str("status") == "imported");
+        CHECK(ib.str("id") == tid);
+        CHECK((int)ib.num("version") >= 2);
+    }
+
+    // table_export：to=csv|model
+    {
+        Json ex = Json::obj();
+        ex.set("id", tid);
+        ex.set("to", "csv");
+        Json er = runner.call("table_export", ex);
+        CHECK(!er.boolean("isError", false));
+        std::string csv_out = er.find("content")->a->at(0).str("text");
+        CHECK(csv_out.find("from") != std::string::npos);
+        CHECK(csv_out.find("X") != std::string::npos);
+
+        ex.set("to", "model");
+        Json em = runner.call("table_export", ex);
+        CHECK(!em.boolean("isError", false));
+        Json model =
+            Json::parse(em.find("content")->a->at(0).str("text"), &err);
+        CHECK(err.empty());
+        CHECK(model.str("id") == tid);
+        CHECK(model.find("columns") != nullptr);
+    }
+
+    // table_align：主键补行
+    {
+        Json pCreate = Json::obj();
+        pCreate.set("content", "key,name\nA,alpha\nB,beta\nC,gamma\n");
+        pCreate.set("name", "align-primary");
+        Json pr = runner.call("table_create", pCreate);
+        CHECK(!pr.boolean("isError", false));
+        Json pb =
+            Json::parse(pr.find("content")->a->at(0).str("text"), &err);
+        std::string pid = pb.str("id");
+
+        Json tCreate = Json::obj();
+        tCreate.set("content", "key,extra\nA,keep\n");
+        tCreate.set("name", "align-target");
+        Json tr = runner.call("table_create", tCreate);
+        CHECK(!tr.boolean("isError", false));
+        Json tb =
+            Json::parse(tr.find("content")->a->at(0).str("text"), &err);
+        std::string tgt = tb.str("id");
+
+        Json al = Json::obj();
+        al.set("primary_id", pid);
+        al.set("target_id", tgt);
+        al.set("primary_key", "key");
+        al.set("target_key", "key");
+        Json ar = runner.call("table_align", al);
+        CHECK(!ar.boolean("isError", false));
+        Json ab =
+            Json::parse(ar.find("content")->a->at(0).str("text"), &err);
+        CHECK(ab.str("status") == "ok");
+        CHECK((int)ab.find("align")->num("added_rows") == 2);
+    }
+
+    // table_show：limit 截断
+    {
+        Json multi = Json::obj();
+        multi.set("content", "c\n1\n2\n3\n4\n5\n");
+        multi.set("name", "show-limit");
+        Json mr = runner.call("table_create", multi);
+        CHECK(!mr.boolean("isError", false));
+        Json mb =
+            Json::parse(mr.find("content")->a->at(0).str("text"), &err);
+        std::string mid = mb.str("id");
+
+        Json sh = Json::obj();
+        sh.set("id", mid);
+        sh.set("limit", 2);
+        Json sr = runner.call("table_show", sh);
+        CHECK(!sr.boolean("isError", false));
+        Json sb =
+            Json::parse(sr.find("content")->a->at(0).str("text"), &err);
+        CHECK(sb.boolean("truncated", false));
+        CHECK((int)sb.num("total_rows") == 5);
+        CHECK(sb.find("rows")->size() == 2);
+    }
+
+    // table_delete：无 force 失败，有 force 成功
+    {
+        Json del = Json::obj();
+        del.set("id", tid);
+        Json d1 = runner.call("table_delete", del);
+        CHECK(d1.boolean("isError", false));
+        del.set("force", true);
+        Json d2 = runner.call("table_delete", del);
+        CHECK(!d2.boolean("isError", false));
+        Json db =
+            Json::parse(d2.find("content")->a->at(0).str("text"), &err);
+        CHECK(db.str("status") == "deleted");
+    }
+
+    ge::removeDirectory("test-table-mcp-tmp");
 }
-class Dog {
-  +String breed
-  +bark()
-}
-Animal <|-- Dog : Inheritance
-class Car {
-  -Engine engine
-}
-Car *-- Engine : Composition)";
 
-    Graph g = gp::parseMermaid(text);
-    CHECK(g.type == "classDiagram");
-    CHECK(g.rawMermaid.empty());  // 深度解析不应走透传
+static void testTableXml()
+{
+    // 模式 A：显式列 + 命名子元素
+    gt::Table t = gtx::fromXml(
+        "<table id=\"t1\" name=\"demo\" hasHintRow=\"false\">"
+        "<columns><col>编号</col><col>名称</col><col>层级</col></columns>"
+        "<rows>"
+        "<row><编号>1</编号><名称>爬虫</名称><层级>小怪</层级></row>"
+        "<row><名称>游荡者</名称><编号>2</编号></row>"
+        "</rows></table>");
+    CHECK(t.id == "t1");
+    CHECK(t.name == "demo");
+    CHECK(!t.hasHintRow);
+    CHECK(t.columns.size() == 3);
+    CHECK(t.rows.size() == 2);
+    CHECK(t.cell(0, 0) == "1");
+    CHECK(t.cell(0, 1) == "爬虫");
+    CHECK(t.cell(1, 0) == "2");
+    CHECK(t.cell(1, 2) == "");  // 缺列补空
 
-    // 节点验证
-    CHECK(g.nodes.size() >= 4);
-    Node* animal = g.findNode("Animal");
-    CHECK(animal != nullptr);
-    CHECK(animal->shape == "rect");
-    CHECK(animal->attrs.size() >= 2);  // 有属性/方法
+    // 一层嵌套 → 父.子；属性被同名子元素覆盖；属性出现序（z 在 a 前）
+    gt::Table nest = gtx::fromXml(
+        "<table><columns><col>id</col><col>动画.生成</col><col>动画.受击</col>"
+        "<col>名</col></columns>"
+        "<row 名=\"attr\" id=\"a\" z=\"1\"><名>elem</名>"
+        "<动画><生成>x</生成><受击>y</受击></动画></row></table>");
+    CHECK(nest.cell(0, 0) == "a");
+    CHECK(nest.cell(0, 1) == "x");
+    CHECK(nest.cell(0, 2) == "y");
+    CHECK(nest.cell(0, 3) == "elem");
 
-    Node* dog = g.findNode("Dog");
-    CHECK(dog != nullptr);
-    CHECK(dog->attrs.size() >= 1);
+    // toXml 按父标签聚合
+    std::string agg = gtx::toXml(nest);
+    CHECK(agg.find("<动画>") != std::string::npos);
+    CHECK(agg.find("<生成>x</生成>") != std::string::npos);
+    CHECK(agg.find("<受击>y</受击>") != std::string::npos);
+    // 同一父只出现一次开标签（粗检：第二个 <动画> 应不存在于聚合后）
+    {
+        size_t first = agg.find("<动画>");
+        CHECK(first != std::string::npos);
+        size_t second = agg.find("<动画>", first + 1);
+        CHECK(second == std::string::npos);
+    }
 
-    // 边验证
-    CHECK(g.edges.size() >= 2);
-    bool foundInheritance = false, foundComp = false;
-    for (auto& e : g.edges) {
-        std::string el = gm::toLower(e.label);
-        if (e.from == "Animal" && e.to == "Dog") {
-            CHECK(el.find("inheritance") != std::string::npos);
-            foundInheritance = true;
+    // 无 columns 时属性按出现序（非字典序）：z 应在 a 前
+    {
+        gt::Table inferred = gtx::fromXml(
+            "<table><row z=\"1\" a=\"2\"/></table>");
+        CHECK(inferred.columns.size() == 2);
+        CHECK(inferred.columns[0] == "z");
+        CHECK(inferred.columns[1] == "a");
+    }
+
+    // 重复列名去重 + warning
+    {
+        std::vector<std::string> warns;
+        gt::Table dup = gtx::fromXml(
+            "<table><columns><col>a</col><col>a</col><col>b</col></columns>"
+            "<row><a>1</a><b>2</b></row></table>",
+            &warns);
+        CHECK(dup.columns.size() == 2);
+        CHECK(dup.columns[0] == "a");
+        CHECK(dup.columns[1] == "b");
+        CHECK(!warns.empty());
+        CHECK(warns[0].find("duplicate") != std::string::npos);
+    }
+
+    // 不安全列名拒绝
+    {
+        bool bad = false;
+        try {
+            gtx::fromXml(
+                "<table><columns><col>a b</col></columns><row/></table>");
         }
-        if (e.from == "Car" && e.to == "Engine") {
-            CHECK(el.find("composition") != std::string::npos);
-            foundComp = true;
+        catch (const gt::TableError&) {
+            bad = true;
         }
+        CHECK(bad);
     }
-    CHECK(foundInheritance);
-    CHECK(foundComp);
 
-    // Mermaid 往返导出
-    std::string exported = ge::toMermaid(g);
-    CHECK(exported.find("classDiagram") != std::string::npos);
-    CHECK(exported.find("class Animal") != std::string::npos);
-    CHECK(exported.find("Dog") != std::string::npos);
-
-    // 测试各类关系箭头
-    const char* relTests[] = {
-        "classDiagram\nA <|-- B : Inheritance",
-        "classDiagram\nA *-- B : Composition",
-        "classDiagram\nA o-- B : Aggregation",
-        "classDiagram\nA --> B : Association",
-        "classDiagram\nA <--> B : Bidirectional",
-        "classDiagram\nA ..|> B : Realization",
-        "classDiagram\nA ..> B : Dependency",
-        "classDiagram\nA -- B : Link",
-    };
-    for (auto& rt : relTests) {
-        Graph rg = gp::parseMermaid(std::string(rt));
-        CHECK(rg.type == "classDiagram");
-        CHECK(rg.edges.size() >= 1);
-        // 往返不应丢边
-        std::string re = ge::toMermaid(rg);
-        CHECK(!re.empty());
+    // 未知 format / to 报错
+    {
+        bool bad = false;
+        try {
+            gtx::parseTableContent("a\n1\n", "yaml");
+        }
+        catch (const gt::TableError& e) {
+            bad = true;
+            CHECK(std::string(e.what()).find("unsupported") != std::string::npos);
+        }
+        CHECK(bad);
+        bad = false;
+        try {
+            gtx::exportTableText(nest, "foo");
+        }
+        catch (const gt::TableError&) {
+            bad = true;
+        }
+        CHECK(bad);
     }
-}
 
-// 测试 stateDiagram 深度解析
-static void testMermaidState()
-{
-    std::string text = R"(stateDiagram-v2
-    [*] --> Idle
-    Idle --> Processing : start
-    Processing --> Done : finish
-    Processing --> Error : [failed] / retry
-    Done --> [*]
-    Error --> Idle : reset)";
-
-    Graph g = gp::parseMermaid(text);
-    CHECK(g.type == "stateDiagram");
-    CHECK(g.rawMermaid.empty());
-
-    // 节点验证
-    Node* idle = g.findNode("Idle");
-    CHECK(idle != nullptr);
-    CHECK(idle->shape == "round");
-
-    Node* processing = g.findNode("Processing");
-    CHECK(processing != nullptr);
-    CHECK(processing->shape == "round");
-
-    // 边验证
-    CHECK(g.edges.size() >= 5);
-    // 验证带标签的边
-    bool foundStart = false, foundFinish = false;
-    for (auto& e : g.edges) {
-        if (e.from == "Processing" && e.to == "Done")
-            foundFinish = true;
-        if (e.from == "[*]" && e.to == "Idle")
-            foundStart = true;
+    // 畸形 XML → TableError（包装 ParseError）
+    {
+        bool bad = false;
+        try {
+            gtx::fromXml("not-xml");
+        }
+        catch (const gt::TableError& e) {
+            bad = true;
+            CHECK(std::string(e.what()).find("table xml:") != std::string::npos);
+        }
+        CHECK(bad);
     }
-    CHECK(foundStart);
-    CHECK(foundFinish);
 
-    // Mermaid 往返导出
-    std::string exported = ge::toMermaid(g);
-    CHECK(exported.find("stateDiagram-v2") != std::string::npos);
-    CHECK(exported.find("Idle") != std::string::npos);
+    // XML ↔ JSON ↔ XML 往返
+    Json      j  = nest.toJson();
+    gt::Table j2 = gt::Table::fromJson(j);
+    CHECK(j2.cell(0, 1) == "x");
+    std::string xml2 = gtx::toXml(j2);
+    gt::Table   back = gtx::fromXml(xml2);
+    CHECK(back.columns.size() == nest.columns.size());
+    CHECK(back.cell(0, 0) == "a");
+    CHECK(back.cell(0, 1) == "x");
+    CHECK(back.cell(0, 2) == "y");
+    CHECK(back.cell(0, 3) == "elem");
 
-    // 测试复合状态
-    std::string compText = R"(stateDiagram-v2
-    [*] --> s1
-    state "My State" as s1 {
-        [*] --> s2
-        s2 --> [*]
+    // 叶子列与嵌套父名冲突
+    {
+        gt::Table conflict;
+        conflict.columns = {"动画", "动画.生成"};
+        conflict.rows    = {{"leaf", "x"}};
+        bool bad         = false;
+        try {
+            gtx::toXml(conflict);
+        }
+        catch (const gt::TableError&) {
+            bad = true;
+        }
+        CHECK(bad);
     }
-    s1 --> s3 : transition)";
 
-    Graph cg = gp::parseMermaid(compText);
-    CHECK(cg.type == "stateDiagram");
-    // s1 是复合状态（有 { } 块）-> shape="group"
-    Node* s1 = cg.findNode("s1");
-    CHECK(s1 != nullptr);
-    CHECK(s1->shape == "group");
+    // 更深嵌套应报错
+    bool threw = false;
+    try {
+        gtx::fromXml(
+            "<table><row><a><b><c>z</c></b></a></row></table>");
+    }
+    catch (const gt::TableError&) {
+        threw = true;
+    }
+    CHECK(threw);
 
-    // 双向往返
-    std::string re = ge::toMermaid(cg);
-    CHECK(!re.empty());
+    // 与 enemy_sample.csv 内容对齐
+    std::string enemy_csv = readExampleInput("enemy_sample.csv");
+    std::string enemy_xml = readExampleInput("enemy_sample.xml");
+    CHECK(!enemy_csv.empty());
+    CHECK(!enemy_xml.empty());
+    if (!enemy_csv.empty() && !enemy_xml.empty()) {
+        gt::Table fromCsv = gt::Table::fromCsv(enemy_csv);
+        gt::Table fromXml = gtx::fromXml(enemy_xml);
+        CHECK(fromCsv.columns.size() == fromXml.columns.size());
+        CHECK(fromCsv.rows.size() == fromXml.rows.size());
+        for (size_t c = 0; c < fromCsv.columns.size(); c++)
+            CHECK(fromCsv.columns[c] == fromXml.columns[c]);
+        for (size_t r = 0; r < fromCsv.rows.size(); r++)
+            for (size_t c = 0; c < fromCsv.columns.size(); c++)
+                CHECK(fromCsv.cell(r, c) == fromXml.cell(r, c));
+    }
+
+    // parseTableContent + MCP format=xml
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_STORE", "test-table-xml-mcp-tmp");
+#else
+    setenv("GRAPHMCP_STORE", "test-table-xml-mcp-tmp", 1);
+#endif
+    ge::removeDirectory("test-table-xml-mcp-tmp");
+    {
+        gs::Store       store("test-table-xml-mcp-tmp");
+        mcp::ToolRunner runner(store);
+        std::string     err;
+        Json            imp = Json::obj();
+        imp.set("format", "xml");
+        imp.set("content",
+                "<table name=\"x\"><columns><col>a</col></columns>"
+                "<row><a>1</a></row></table>");
+        Json ir = runner.call("table_import", imp);
+        CHECK(!ir.boolean("isError", false));
+        Json ib =
+            Json::parse(ir.find("content")->a->at(0).str("text"), &err);
+        std::string tid = ib.str("id");
+        CHECK(!tid.empty());
+
+        Json ex = Json::obj();
+        ex.set("id", tid);
+        ex.set("to", "xml");
+        Json er = runner.call("table_export", ex);
+        CHECK(!er.boolean("isError", false));
+        std::string xml_out = er.find("content")->a->at(0).str("text");
+        CHECK(xml_out.find("<table") != std::string::npos);
+        CHECK(xml_out.find("<a>") != std::string::npos);
+
+        ex.set("to", "model");
+        Json em = runner.call("table_export", ex);
+        CHECK(!em.boolean("isError", false));
+        Json model =
+            Json::parse(em.find("content")->a->at(0).str("text"), &err);
+        CHECK(err.empty());
+        CHECK(model.find("columns") != nullptr);
+
+        // 未知 to 应报错
+        ex.set("to", "foo");
+        Json ef = runner.call("table_export", ex);
+        CHECK(ef.boolean("isError", false));
+    }
+    ge::removeDirectory("test-table-xml-mcp-tmp");
 }
 
 int runAll()
 {
+    // 防止 graph_open / export 等路径意外拉起浏览器或外部编辑器
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_NO_LAUNCH", "1");
+#else
+    setenv("GRAPHMCP_NO_LAUNCH", "1", 1);
+#endif
+
     testJson();
     testMermaidFlowchart();
     testMermaidMindmapAndER();
@@ -1688,6 +2018,11 @@ int runAll()
     testBase64();
     testStorage();
     testMcpProtocol();
+    testTableModel();
+    testTableStoreAndBridge();
+    testTableFixtures();
+    testTableMcpTools();
+    testTableXml();
     testMcpExtended();
     testMcpToolsRemaining();
     testMcpErrors();
@@ -1704,4 +2039,17 @@ int runAll()
 }
 
 int main()
-{ return runAll(); }
+{
+    try {
+        int code = runAll();
+        return code;
+    }
+    catch (const std::exception& e) {
+        std::cerr << "uncaught exception: " << e.what() << "\n";
+        return 1;
+    }
+    catch (...) {
+        std::cerr << "uncaught unknown exception\n";
+        return 1;
+    }
+}

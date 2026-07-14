@@ -2445,7 +2445,49 @@ inline std::string toSVG(Graph g)
     os << "  <style>text{font-family:'Segoe "
           "UI',Arial,sans-serif;font-size:13px;}"
           ".lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>\n";
-    // 边先绘制在底层
+    // 边先绘制在底层（智能端口 + 折线绕行）
+    // ---- 辅助：轴对齐智能端口（偏好最近侧出发）------------------------------
+    auto smartPort = [](double cx, double cy, double w, double h,
+                        double tx, double ty, double& ox, double& oy) {
+        double dx    = tx - cx, dy = ty - cy;
+        double absDx = std::abs(dx), absDy = std::abs(dy);
+        double hw    = w / 2, hh = h / 2;
+        if (absDx * hh > absDy * hw) {
+            // 横向为主：从左/右边出发
+            ox = cx + (dx > 0 ? hw : -hw);
+            oy = cy + dy * hw / std::max(absDx, 1e-6);
+            oy = std::max(cy - hh, std::min(oy, cy + hh));
+        } else {
+            // 纵向为主：从上/下边出发
+            ox = cx + dx * hh / std::max(absDy, 1e-6);
+            ox = std::max(cx - hw, std::min(ox, cx + hw));
+            oy = cy + (dy > 0 ? hh : -hh);
+        }
+    };
+    // ---- 辅助：线段 vs 矩形相交检测（Liang-Barsky）-----------------------
+    auto lineHitsRect = [](double x1, double y1, double x2, double y2,
+                           double rx, double ry, double rw, double rh) -> bool {
+        double dx    = x2 - x1, dy = y2 - y1;
+        double p[4]  = {-dx, dx, -dy, dy};
+        double q[4]  = {x1 - rx, rx + rw - x1, y1 - ry, ry + rh - y1};
+        double t0 = 0.0, t1 = 1.0;
+        for (int i = 0; i < 4; i++) {
+            if (std::abs(p[i]) < 1e-9) {
+                if (q[i] < 0) return false;
+            } else {
+                double t = q[i] / p[i];
+                if (p[i] < 0) {
+                    if (t > t1) return false;
+                    t0 = std::max(t0, t);
+                } else {
+                    if (t < t0) return false;
+                    t1 = std::min(t1, t);
+                }
+            }
+        }
+        return t0 <= t1;
+    };
+
     for (auto& e : g.edges) {
         const Node* a = g.findNode(e.from);
         const Node* b = g.findNode(e.to);
@@ -2453,31 +2495,70 @@ inline std::string toSVG(Graph g)
             continue;
         double ax = a->x + a->w / 2, ay = a->y + a->h / 2;
         double bx = b->x + b->w / 2, by = b->y + b->h / 2;
-        // 将连线端点裁剪到节点边界（近似、轴对齐）
-        auto clip = [](double cx, double cy, double w, double h, double tx,
-                       double ty, double& ox, double& oy) {
-            double dx = tx - cx, dy = ty - cy;
-            double sx = dx != 0 ? (w / 2) / std::fabs(dx) : 1e18;
-            double sy = dy != 0 ? (h / 2) / std::fabs(dy) : 1e18;
-            double s  = std::min(sx, sy);
-            s         = std::min(s, 1.0);
-            ox        = cx + dx * s;
-            oy        = cy + dy * s;
-        };
+
         double x1, y1, x2, y2;
-        clip(ax, ay, a->w, a->h, bx, by, x1, y1);
-        clip(bx, by, b->w, b->h, ax, ay, x2, y2);
-        os << "  <line x1=\"" << x1 << "\" y1=\"" << y1 << "\" x2=\"" << x2
-           << "\" y2=\"" << y2 << "\" stroke=\""
-           << xmlEscape(e.strokeColor.empty() ? "#333" : e.strokeColor)
-           << "\" stroke-width=\"" << (e.style == "thick" ? 3 : 1.5) << "\"";
-        if (e.style == "dashed")
-            os << " stroke-dasharray=\"6,4\"";
-        if (e.arrow != "none")
-            os << " marker-end=\"url(#arrow)\"";
-        if (e.arrow == "both")
-            os << " marker-start=\"url(#arrow)\"";
-        os << "/>\n";
+        smartPort(ax, ay, a->w, a->h, bx, by, x1, y1);
+        smartPort(bx, by, b->w, b->h, ax, ay, x2, y2);
+
+        // 检测直线是否穿过中间节点（扩大 8px 容差）
+        double  b1x = 0, b1y = 0, b2x = 0, b2y = 0;
+        bool    blocked = false;
+        for (auto& n : g.nodes) {
+            if (n.id == e.from || n.id == e.to)
+                continue;
+            if (lineHitsRect(x1, y1, x2, y2,
+                             n.x - 4, n.y - 4, n.w + 8, n.h + 8)) {
+                blocked = true;
+                double safeX = (x1 + x2) / 2;
+                double safeY = (y1 + y2) / 2;
+                if (std::abs(x2 - x1) < 8) {
+                    b1x = (safeX < n.x + n.w / 2)
+                              ? n.x - 16 : n.x + n.w + 16;
+                    b1y = y1;
+                    b2x = b1x;
+                    b2y = y2;
+                } else if (std::abs(y2 - y1) < 8) {
+                    b1x = x1;
+                    b1y = (safeY < n.y + n.h / 2)
+                              ? n.y - 16 : n.y + n.h + 16;
+                    b2x = x2;
+                    b2y = b1y;
+                } else {
+                    b1x = x1;
+                    b1y = safeY;
+                    b2x = x2;
+                    b2y = safeY;
+                }
+                break;
+            }
+        }
+
+        std::string sc = e.strokeColor.empty() ? "#333" : e.strokeColor;
+        const char* dash = (e.style == "dashed") ? " stroke-dasharray=\"6,4\"" : "";
+        double      sw   = (e.style == "thick") ? 3 : 1.5;
+
+        if (blocked) {
+            os << "  <polyline points=\"" << x1 << "," << y1
+               << " " << b1x << "," << b1y
+               << " " << b2x << "," << b2y
+               << " " << x2 << "," << y2
+               << "\" fill=\"none\" stroke=\"" << xmlEscape(sc)
+               << "\" stroke-width=\"" << sw << "\"";
+            if (e.arrow != "none")
+                os << " marker-end=\"url(#arrow)\"";
+            if (e.arrow == "both")
+                os << " marker-start=\"url(#arrow)\"";
+            os << dash << "/>\n";
+        } else {
+            os << "  <line x1=\"" << x1 << "\" y1=\"" << y1 << "\" x2=\"" << x2
+               << "\" y2=\"" << y2 << "\" stroke=\"" << xmlEscape(sc)
+               << "\" stroke-width=\"" << sw << "\"";
+            if (e.arrow != "none")
+                os << " marker-end=\"url(#arrow)\"";
+            if (e.arrow == "both")
+                os << " marker-start=\"url(#arrow)\"";
+            os << dash << "/>\n";
+        }
         if (!e.label.empty()) {
             os << "  <text class=\"elabel\" x=\"" << (x1 + x2) / 2 << "\" y=\""
                << (y1 + y2) / 2 - 4 << "\" text-anchor=\"middle\">"

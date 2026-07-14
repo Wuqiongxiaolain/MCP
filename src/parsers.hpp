@@ -358,7 +358,7 @@ inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines,
             std::string style, arrow;
             if (!detail::readArrow(line, pos, style, arrow))
                 break;
-            // 可选边标签 |label|
+            // 可选边标签: |label| 或 "label"
             while (pos < line.size() && isspace((unsigned char)line[pos]))
                 pos++;
             std::string elabel;
@@ -367,6 +367,22 @@ inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines,
                 if (end != std::string::npos) {
                     elabel = trim(line.substr(pos + 1, end - pos - 1));
                     pos    = end + 1;
+                }
+            } else if (pos < line.size() && line[pos] == '"') {
+                // 处理 "label" 语法: -- "label" -->  或  -- "label" ---
+                size_t end = line.find('"', pos + 1);
+                if (end != std::string::npos) {
+                    elabel = line.substr(pos + 1, end - pos - 1);
+                    pos    = end + 1;
+                    // 跳过空格，重读真正的箭头方向
+                    while (pos < line.size() &&
+                           isspace((unsigned char)line[pos]))
+                        pos++;
+                    std::string style2, arrow2;
+                    if (detail::readArrow(line, pos, style2, arrow2)) {
+                        style = style2;
+                        arrow = arrow2;
+                    }
                 }
             }
             std::string id2, label2, shape2;

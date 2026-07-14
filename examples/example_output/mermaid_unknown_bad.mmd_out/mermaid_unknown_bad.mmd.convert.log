@@ -1,11 +1,7 @@
-exit_code=2
-input_format=mermaid
----
-graphmcp.exe : error: unsupported mermaid diagram type: notamermaiddiagram
-所在位置 C:\Users\haima\AppData\Local\Temp\ps-script-ad9ac2e5-77d2-4831-8ea8-f2485d285247.ps1:118 字符: 10
-+   $log = & $bin convert to-model --file "examples/example_input/$f" - ...
-+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+﻿graphmcp.exe : error: unsupported mermaid diagram type: notamermaiddiagram
+所在位置 C:\Users\haima\AppData\Local\Temp\ps-script-7b84db17-78e5-4ab4-8e92-5ff5127c2a4f.ps1:168 字符: 3
++   & $BIN convert to-mermaid --file (Join-Path $IN $bad) --input-forma ...
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (error: unsuppor...amermaiddiagram:String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
  
-

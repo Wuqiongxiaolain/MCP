@@ -1,6 +1,6 @@
 # graphmcp 用户手册
 
-> latest update: v0.1.1, 2026-07-10
+> latest update: v0.1.1, 2026-07-14
 
 > 用户手册（版本以根目录 VERSION 为准）  
 > 命令与参数速查（表格）：[CLI & MCP 指令参考](CLI_MCP_REFERENCE.md)
@@ -89,7 +89,7 @@ graphmcp export to-url --id g7abc
 graphmcp <命令族> <子命令> [参数...]
 ```
 
-共 **10 个命令族**（含新增的 import 编辑回导）。以下按族逐一说明。
+共 **15 个命令族**（含 `table`、`dump-tools` 与 `import` 编辑回导）。以下按族逐一说明。
 
 ---
 
@@ -101,7 +101,7 @@ graphmcp <命令族> <子命令> [参数...]
 
 | 子命令 | 输入格式 | 示例文件 |
 |--------|---------|---------|
-| `from-mermaid` | Mermaid 文本 (flowchart/mindmap/erDiagram) | `examples/flowchart.mmd` |
+| `from-mermaid` | Mermaid 文本（支持 flowchart/mindmap/er/class/state/sequence/pie 等） | `examples/flowchart.mmd` |
 | `from-markdown` | Markdown 大纲 (标题+列表) | `examples/mindmap.md` |
 | `from-csv` | CSV 边表或层级表 | `examples/orgchart.csv` |
 | `from-xml` | XML 图描述 | `examples/architecture.xml` |

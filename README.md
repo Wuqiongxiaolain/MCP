@@ -1,6 +1,6 @@
 # graphmcp — 图形设计与绘图 MCP 工具
 
-> latest update: v0.1.1, 2026-07-10
+> latest update: v0.2.0, 2026-07-14
 
 > Gitlab 为镜像备份仓，活跃项目管理见 GitHub：https://github.com/Wuqiongxiaolain/MCP
 
@@ -25,7 +25,7 @@
 | 文档 | 说明 |
 |------|------|
 | [用户手册](docs/USER_GUIDE.md) | 场景化教程与完整命令说明 |
-| [CLI & MCP 指令参考](docs/CLI_MCP_REFERENCE.md) | 命令族与 25 个 MCP 工具速查表 |
+| [CLI & MCP 指令参考](docs/CLI_MCP_REFERENCE.md) | 命令族与 46 个 MCP 工具速查表（以 `toolList()`/OpenAPI 为准） |
 | [OpenAPI 契约](docs/api_reference/openapi.yaml) | 由 `make docs-api` 从 `toolList()` 生成，可供 Swagger 打开 |
 | [项目思维导图](docs/MINDMAP.md) | 能力与 DevOps 全景（Mermaid / 大纲） |
 

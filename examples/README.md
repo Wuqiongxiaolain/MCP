@@ -31,7 +31,8 @@
 
 - `.drawio` / Mermaid / Excalidraw / SVG / PNG / PDF / `.url.txt`
 
-示例：`example_input/flowchart.mmd` → `example_output/flowchart.mmd_out/`
+示例：`example_input/flowchart.mmd` → `example_output/flowchart.mmd_out/`  
+带颜色：`example_input/flowchart_colors.mmd`（`classDef` / `linkStyle` → 模型 `fillColor`/`strokeColor`）
 
 ### 通用表 CSV / 表 XML → table 产物
 

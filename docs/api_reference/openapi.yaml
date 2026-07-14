@@ -377,7 +377,7 @@ paths:
     post:
       operationId: graph_update
       summary: graph_update
-      description: Update node/edge attributes via cursor operation. Changes go to the draft. Use --node/--edge for single element or --selector for batch. Multiple --set flags allowed.
+      description: Update node/edge attributes via cursor operation. Changes go to the draft. Use --node/--edge for single element or --selector for batch. Multiple --set flags allowed (supports fillColor/strokeColor).
       requestBody:
         required: true
         content:
@@ -399,7 +399,7 @@ paths:
                   description: "batch selector: shape=rect|label~=Step|parent=g1"
                 set:
                   type: string
-                  description: field=value pairs (can be specified multiple times)
+                  description: field=value pairs (can be specified multiple times); node fields include label/shape/parent/style/fillColor/strokeColor/x/y/w/h; edge fields include from/to/label/style/arrow/strokeColor
               required:
                 - id
                 - set
@@ -410,7 +410,7 @@ paths:
     post:
       operationId: graph_insert
       summary: graph_insert
-      description: "Insert a node or edge into the graph. Changes go to the draft. For nodes: specify type, label, position, size, parent. For edges: specify from, to, label, style, arrow."
+      description: "Insert a node or edge into the graph. Changes go to the draft. For nodes: specify type, label, position, size, parent, fillColor, strokeColor. For edges: specify from, to, label, style, arrow, strokeColor."
       requestBody:
         required: true
         content:
@@ -451,6 +451,12 @@ paths:
                 arrow:
                   type: string
                   description: "edge arrow: arrow|none|both (default arrow)"
+                fillColor:
+                  type: string
+                  description: "node fill color (e.g. #eef4ff); empty = default"
+                strokeColor:
+                  type: string
+                  description: "node/edge stroke color (e.g. #4a72b8); empty = default"
               required:
                 - id
                 - element

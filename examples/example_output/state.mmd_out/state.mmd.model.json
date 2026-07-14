@@ -1,0 +1,86 @@
+{
+  "id": "",
+  "name": "",
+  "type": "stateDiagram",
+  "laidOut": true,
+  "nodes": [
+    {
+      "id": "Idle",
+      "label": "Idle",
+      "shape": "round",
+      "x": 20,
+      "y": 20,
+      "w": 100,
+      "h": 44
+    },
+    {
+      "id": "Running",
+      "label": "Running",
+      "shape": "round",
+      "x": 180,
+      "y": 20,
+      "w": 100,
+      "h": 44
+    },
+    {
+      "id": "Paused",
+      "label": "Paused",
+      "shape": "round",
+      "x": 340,
+      "y": 20,
+      "w": 100,
+      "h": 44
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "[*]",
+      "to": "Idle",
+      "style": "solid",
+      "arrow": "arrow"
+    },
+    {
+      "id": "e2",
+      "from": "Idle",
+      "to": "Running",
+      "label": "start",
+      "style": "solid",
+      "arrow": "arrow"
+    },
+    {
+      "id": "e3",
+      "from": "Running",
+      "to": "Paused",
+      "label": "pause",
+      "style": "solid",
+      "arrow": "arrow"
+    },
+    {
+      "id": "e4",
+      "from": "Paused",
+      "to": "Running",
+      "label": "resume",
+      "style": "solid",
+      "arrow": "arrow"
+    },
+    {
+      "id": "e5",
+      "from": "Running",
+      "to": "Idle",
+      "label": "stop",
+      "style": "solid",
+      "arrow": "arrow"
+    },
+    {
+      "id": "e6",
+      "from": "Idle",
+      "to": "[*]",
+      "style": "solid",
+      "arrow": "arrow"
+    }
+  ],
+  "files": {},
+  "edgeCounter": 6,
+  "nodeCounter": 0
+}

@@ -207,6 +207,36 @@ else
     fail "graph_cursor chain" "open=$CURSOR_OPEN_TEXT get=$CURSOR_GET_TEXT move=$CURSOR_MOVE_TEXT close=$CURSOR_CLOSE_TEXT"
 fi
 
+
+# ─── hard-fail imports: isError + server continues ────────────
+rpc_call '{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"graph_create","arguments":{"content":"classDef x fill:#f00\nflowchart TD\nA-->B","format":"mermaid","name":"mcp-bad-colors"}}}'
+BAD1_ISERR="$(jq -r '.result.isError // false' "$TMP_RESP")"
+BAD1_TEXT="$(extract_text)"
+if [ "$BAD1_ISERR" = "true" ]; then
+    pass "graph_create colors hard-bad isError" "text=${BAD1_TEXT:0:80}"
+else
+    fail "graph_create colors hard-bad isError" "isError=$BAD1_ISERR text=$BAD1_TEXT"
+fi
+
+rpc_call '{"jsonrpc":"2.0","id":21,"method":"tools/call","params":{"name":"graph_create","arguments":{"content":"notAMermaidDiagram\nA-->B","format":"mermaid","name":"mcp-bad-unknown"}}}'
+BAD2_ISERR="$(jq -r '.result.isError // false' "$TMP_RESP")"
+BAD2_TEXT="$(extract_text)"
+if [ "$BAD2_ISERR" = "true" ]; then
+    pass "graph_create unknown hard-bad isError" "text=${BAD2_TEXT:0:80}"
+else
+    fail "graph_create unknown hard-bad isError" "isError=$BAD2_ISERR text=$BAD2_TEXT"
+fi
+
+# 失败后服务仍可用：原 GID 的 graph_show 应成功
+rpc_call "{\"jsonrpc\":\"2.0\",\"id\":22,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_show\",\"arguments\":{\"id\":\"$GID\"}}}"
+AFTER_BAD_SHOW="$(extract_text)"
+AFTER_BAD_ISERR="$(jq -r '.result.isError // false' "$TMP_RESP")"
+if [ "$AFTER_BAD_ISERR" != "true" ] && printf '%s' "$AFTER_BAD_SHOW" | jq -e '.nodeList != null' >/dev/null 2>&1; then
+    pass "server continues after hard-bad" "graph_show still ok id=$GID"
+else
+    fail "server continues after hard-bad" "isError=$AFTER_BAD_ISERR text=$AFTER_BAD_SHOW"
+fi
+
 rpc_call "{\"jsonrpc\":\"2.0\",\"id\":14,\"method\":\"tools/call\",\"params\":{\"name\":\"graph_delete\",\"arguments\":{\"id\":\"$GID\",\"force\":true}}}"
 DELETE_TEXT="$(extract_text)"
 if printf '%s' "$DELETE_TEXT" | jq -e '.status == "deleted"' >/dev/null 2>&1; then

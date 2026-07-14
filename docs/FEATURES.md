@@ -83,6 +83,16 @@ Excalidraw 手绘的白板——笔迹、图片、字体——原样往返，不
 
 <img src="images/type-whiteboard.svg" alt="Excalidraw 白板精确导出" height="200">
 
+### 🌈 节点/边颜色：一等字段，多格式往返
+
+颜色不再塞进模糊的 `style` 字符串：模型用 `fillColor` / `strokeColor`（空串=默认色）。
+
+- **导入**：Mermaid `classDef` / `class` / `style` / `linkStyle`；draw.io `fillColor`/`strokeColor`；Excalidraw `backgroundColor`/`strokeColor`
+- **导出**：SVG / draw.io / Excalidraw / Mermaid 都会写出模型颜色（Mermaid 在 `flowchart` 声明之后输出 `classDef`/`linkStyle`）
+- **编辑**：`graph_update --set fillColor=#eef4ff`、`graph_insert` 可带 `fillColor`/`strokeColor`
+
+示例输入见 [`examples/example_input/flowchart_colors.mmd`](../examples/example_input/flowchart_colors.mmd)。
+
 ---
 
 ## 🎯 进阶能力：让「改图」这件事可控

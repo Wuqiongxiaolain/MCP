@@ -1,0 +1,67 @@
+{
+  "id": "",
+  "name": "",
+  "type": "classDiagram",
+  "laidOut": true,
+  "nodes": [
+    {
+      "id": "Animal",
+      "label": "Animal",
+      "shape": "rect",
+      "attrs": [
+        "+int age",
+        "+String name",
+        "+eat()"
+      ],
+      "x": 100,
+      "y": 20,
+      "w": 100,
+      "h": 96
+    },
+    {
+      "id": "Dog",
+      "label": "Dog",
+      "shape": "rect",
+      "attrs": [
+        "+bark()"
+      ],
+      "x": 20,
+      "y": 196,
+      "w": 100,
+      "h": 52
+    },
+    {
+      "id": "Cat",
+      "label": "Cat",
+      "shape": "rect",
+      "attrs": [
+        "+meow()"
+      ],
+      "x": 180,
+      "y": 196,
+      "w": 100,
+      "h": 52
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "Animal",
+      "to": "Dog",
+      "label": "inheritance",
+      "style": "solid",
+      "arrow": "arrow"
+    },
+    {
+      "id": "e2",
+      "from": "Animal",
+      "to": "Cat",
+      "label": "inheritance",
+      "style": "solid",
+      "arrow": "arrow"
+    }
+  ],
+  "files": {},
+  "edgeCounter": 2,
+  "nodeCounter": 0
+}

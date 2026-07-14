@@ -1,0 +1,14 @@
+flowchart TD
+  A[需求输入] --> B{是否可解析?}
+  B -->|是| C[统一图模型]
+  B -->|否| D[报错]
+  C --> E[多格式导出]
+  classDef ok fill:#e8f7ec,stroke:#3d9155
+  classDef warn fill:#fff7e0,stroke:#c9a227
+  classDef bad fill:#fde8e8,stroke:#c0392b
+  class A,C,E ok
+  class B warn
+  class D bad
+  linkStyle 0 stroke:#4a72b8
+  linkStyle 1 stroke:#3d9155
+  linkStyle 2 stroke:#c0392b

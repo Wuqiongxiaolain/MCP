@@ -1,0 +1,56 @@
+{
+  "id": "",
+  "name": "drawio输入样例",
+  "type": "flowchart",
+  "laidOut": true,
+  "nodes": [
+    {
+      "id": "start",
+      "label": "Start",
+      "shape": "round",
+      "x": 20,
+      "y": 20,
+      "w": 100,
+      "h": 44
+    },
+    {
+      "id": "check",
+      "label": "Check",
+      "shape": "diamond",
+      "x": 20,
+      "y": 144,
+      "w": 100,
+      "h": 60
+    },
+    {
+      "id": "done",
+      "label": "Done",
+      "shape": "rect",
+      "x": 20,
+      "y": 284,
+      "w": 100,
+      "h": 44
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "start",
+      "to": "check",
+      "label": "next",
+      "style": "solid",
+      "arrow": "arrow"
+    },
+    {
+      "id": "e2",
+      "from": "check",
+      "to": "done",
+      "label": "ok",
+      "style": "solid",
+      "arrow": "arrow"
+    }
+  ],
+  "files": {},
+  "edgeCounter": 2,
+  "nodeCounter": 0
+}

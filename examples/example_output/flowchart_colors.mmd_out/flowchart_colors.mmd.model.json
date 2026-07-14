@@ -1,0 +1,101 @@
+{
+  "id": "",
+  "name": "",
+  "type": "flowchart",
+  "laidOut": true,
+  "nodes": [
+    {
+      "id": "A",
+      "label": "需求输入",
+      "shape": "rect",
+      "fillColor": "#e8f7ec",
+      "strokeColor": "#3d9155",
+      "x": 101,
+      "y": 20,
+      "w": 100,
+      "h": 44
+    },
+    {
+      "id": "B",
+      "label": "是否可解析?",
+      "shape": "diamond",
+      "fillColor": "#fff7e0",
+      "strokeColor": "#c9a227",
+      "x": 93,
+      "y": 144,
+      "w": 116,
+      "h": 60
+    },
+    {
+      "id": "C",
+      "label": "统一图模型",
+      "shape": "rect",
+      "fillColor": "#e8f7ec",
+      "strokeColor": "#3d9155",
+      "x": 20,
+      "y": 284,
+      "w": 102,
+      "h": 44
+    },
+    {
+      "id": "D",
+      "label": "报错",
+      "shape": "rect",
+      "fillColor": "#fde8e8",
+      "strokeColor": "#c0392b",
+      "x": 182,
+      "y": 284,
+      "w": 100,
+      "h": 44
+    },
+    {
+      "id": "E",
+      "label": "多格式导出",
+      "shape": "rect",
+      "fillColor": "#e8f7ec",
+      "strokeColor": "#3d9155",
+      "x": 100,
+      "y": 408,
+      "w": 102,
+      "h": 44
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "A",
+      "to": "B",
+      "style": "solid",
+      "arrow": "arrow",
+      "strokeColor": "#4a72b8"
+    },
+    {
+      "id": "e2",
+      "from": "B",
+      "to": "C",
+      "label": "是",
+      "style": "solid",
+      "arrow": "arrow",
+      "strokeColor": "#3d9155"
+    },
+    {
+      "id": "e3",
+      "from": "B",
+      "to": "D",
+      "label": "否",
+      "style": "solid",
+      "arrow": "arrow",
+      "strokeColor": "#c0392b"
+    },
+    {
+      "id": "e4",
+      "from": "C",
+      "to": "E",
+      "style": "solid",
+      "arrow": "arrow"
+    }
+  ],
+  "files": {},
+  "edgeCounter": 4,
+  "nodeCounter": 0
+}

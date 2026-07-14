@@ -1,0 +1,84 @@
+{
+  "id": "",
+  "name": "微服务示例",
+  "type": "architecture",
+  "laidOut": true,
+  "nodes": [
+    {
+      "id": "gateway",
+      "label": "API Gateway",
+      "shape": "round",
+      "x": 57,
+      "y": 20,
+      "w": 125.5,
+      "h": 44
+    },
+    {
+      "id": "cluster",
+      "label": "Service Cluster",
+      "shape": "group",
+      "x": 20,
+      "y": 108,
+      "w": 199.5,
+      "h": 224
+    },
+    {
+      "id": "order",
+      "label": "Order Service",
+      "shape": "rect",
+      "parent": "cluster",
+      "x": 48.5,
+      "y": 144,
+      "w": 142.5,
+      "h": 44
+    },
+    {
+      "id": "payment",
+      "label": "Payment Service",
+      "shape": "rect",
+      "parent": "cluster",
+      "x": 40,
+      "y": 268,
+      "w": 159.5,
+      "h": 44
+    },
+    {
+      "id": "db",
+      "label": "MySQL",
+      "shape": "ellipse",
+      "x": 69.75,
+      "y": 392,
+      "w": 100,
+      "h": 44
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "gateway",
+      "to": "order",
+      "label": "http",
+      "style": "solid",
+      "arrow": "arrow"
+    },
+    {
+      "id": "e2",
+      "from": "order",
+      "to": "payment",
+      "label": "rpc",
+      "style": "solid",
+      "arrow": "arrow"
+    },
+    {
+      "id": "e3",
+      "from": "payment",
+      "to": "db",
+      "label": "sql",
+      "style": "solid",
+      "arrow": "arrow"
+    }
+  ],
+  "files": {},
+  "edgeCounter": 3,
+  "nodeCounter": 0
+}

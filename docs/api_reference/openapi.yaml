@@ -917,7 +917,7 @@ paths:
     post:
       operationId: table_update
       summary: table_update
-      description: Apply batch patches to a table and save a new version; returns an audit summary of changes.
+      description: Apply batch patches to a table and save a new version; returns an audit summary of changes. Use dry_run to preview; detail for per-cell before/after.
       requestBody:
         required: true
         content:
@@ -946,6 +946,12 @@ paths:
                 set_column_values:
                   type: string
                   description: "JSON {column, values:[...]} fill column"
+                dry_run:
+                  type: boolean
+                  description: "if true, compute changes without saving (default false)"
+                detail:
+                  type: boolean
+                  description: "if true, include per-cell before/after in details (default false)"
               required:
                 - id
       responses:
@@ -1131,6 +1137,207 @@ paths:
                   description: report table name
               required:
                 - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_rules_from_graph:
+    post:
+      operationId: table_rules_from_graph
+      summary: table_rules_from_graph
+      description: "Extract enum rules table (column,allowed,hint) from mindmap skeleton heuristics (leaves=columns, children=allowed)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                graph_id:
+                  type: string
+                  description: source mindmap/graph id
+                name:
+                  type: string
+                  description: rules table name
+                id:
+                  type: string
+                  description: optional rules table id
+                save:
+                  type: boolean
+                  description: save rules table (default true)
+              required:
+                - graph_id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_fix_enums:
+    post:
+      operationId: table_fix_enums
+      summary: table_fix_enums
+      description: Auto-fix enum violations using table_check suggestions; empty suggestion rows go to skipped report with reason.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: target table id
+                allowed:
+                  type: string
+                  description: "JSON object {column:[values]|\"a|b\"} of allowed enums"
+                rules_id:
+                  type: string
+                  description: optional rules table id
+                ignore_hint_row:
+                  type: boolean
+                  description: skip first row when target.hasHintRow
+                save:
+                  type: boolean
+                  description: save fixed table (default true)
+                save_skipped:
+                  type: boolean
+                  description: save skipped violations report (default true)
+                note:
+                  type: string
+                  description: version note
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_derive:
+    post:
+      operationId: table_derive
+      summary: table_derive
+      description: "Derive a new table from source. animation_checklist: columns containing 动画 with cell value √ become checklist rows."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source_id:
+                  type: string
+                  description: source table id
+                mode:
+                  type: string
+                  description: derive mode (only animation_checklist in v1)
+                name:
+                  type: string
+                  description: output table name
+                id:
+                  type: string
+                  description: optional output table id
+                save:
+                  type: boolean
+                  description: save derived table (default true)
+              required:
+                - source_id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_transform_column:
+    post:
+      operationId: table_transform_column
+      summary: table_transform_column
+      description: "Transform a column into another (slug: deterministic ASCII key)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: table id
+                source_column:
+                  type: string
+                  description: source column name
+                target_column:
+                  type: string
+                  description: target column (created if missing)
+                transform:
+                  type: string
+                  description: transform type (only slug in v1)
+                save:
+                  type: boolean
+                  description: save table (default true)
+                note:
+                  type: string
+                  description: version note
+              required:
+                - id
+                - source_column
+                - target_column
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_sample_rows:
+    post:
+      operationId: table_sample_rows
+      summary: table_sample_rows
+      description: Append conservative placeholder rows (enum first allowed / 动画 default x / other TODO). Response sets placeholder=true.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: table id
+                count:
+                  type: number
+                  description: number of sample rows (default 1)
+                rules_id:
+                  type: string
+                  description: optional rules table for enums
+                save:
+                  type: boolean
+                  description: save table (default true)
+                note:
+                  type: string
+                  description: version note
+              required:
+                - id
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /table_propose_rows:
+    post:
+      operationId: table_propose_rows
+      summary: table_propose_rows
+      description: Append structured object rows aligned to columns; optional enum validation via rules_id (no NL parsing).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: table id
+                rows:
+                  type: string
+                  description: JSON array of objects keyed by column name
+                rules_id:
+                  type: string
+                  description: "optional rules: non-empty cells validated; batch rejected on illegal enum"
+                save:
+                  type: boolean
+                  description: save table (default true)
+                note:
+                  type: string
+                  description: version note
+              required:
+                - id
+                - rows
       responses:
         "200":
           description: MCP tools/call 成功返回（content 文本或结构化结果）

@@ -66,7 +66,7 @@ graphmcp 是一个 **C++17 单可执行文件**，零第三方依赖。核心设
 | 版本 | `graph_draft`、`graph_stage`、`graph_commit`、`graph_rollback`、`graph_checkout` |
 | 游标 | `graph_cursor_open`、`graph_cursor_get`、`graph_cursor_move`、`graph_cursor_close` |
 | 通用表 | `table_create`、`table_import`、`table_export`、`table_list`、`table_show`、`table_update`、`table_delete`、`table_history`、`table_rollback`、`table_diff` |
-| 图↔表 | `table_from_graph`、`graph_from_table`、`table_align`、`table_check` |
+| 图↔表 | `table_from_graph`、`graph_from_table`、`table_align`、`table_check`、`table_rules_from_graph`、`table_fix_enums`、`table_derive`、`table_transform_column`、`table_sample_rows`、`table_propose_rows` |
 
 注意：`graph_rollback` 走 `Store::rollback`——把旧快照**再 save 成新版本**（版本号递增），与 `graph_checkout`（只改 `HEAD`）不同，见 §十。
 
@@ -84,7 +84,8 @@ model JSON─fromJson┘
 - `table_create` 不覆盖已存在 id（除非显式 `force=true`）；`table_import` 用于 upsert。
 - `table_update.set_cells` 仅接受 `column` 或 `col_index`，不再复用双义字段。
 - `table_from_graph` 仅返回截断 preview；全量表导出统一通过 `table_export`（`to=csv|model|xml`）。
-- skeleton 生成的说明首行通过 `hasHintRow` 标记，`table_check` 可按 `ignore_hint_row` 跳过该行。
+- skeleton：优先「子节点全为叶子」的父节点作列、子节点文案作 hint；生成的说明首行通过 `hasHintRow` 标记，`table_check` 可按 `ignore_hint_row` 跳过该行。
+- `table_rules_from_graph` 产出规则表供 check/fix；`table_update` 支持 `dry_run` / `detail`。
 
 #### 表 XML 与后续抽离约定
 

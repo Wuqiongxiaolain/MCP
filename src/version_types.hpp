@@ -438,6 +438,10 @@ inline std::string getNodeField(const Node& n, const std::string& field)
         return n.parent;
     if (field == "style")
         return n.style;
+    if (field == "fillColor")
+        return n.fillColor;
+    if (field == "strokeColor")
+        return n.strokeColor;
     if (field == "x")
         return std::to_string(n.x);
     if (field == "y")
@@ -460,6 +464,10 @@ setNodeField(Node& n, const std::string& field, const std::string& val)
         n.parent = val;
     else if (field == "style")
         n.style = val;
+    else if (field == "fillColor")
+        n.fillColor = val;
+    else if (field == "strokeColor")
+        n.strokeColor = val;
     else if (field == "x")
         n.x = std::strtod(val.c_str(), nullptr);
     else if (field == "y")
@@ -484,6 +492,8 @@ inline std::string getEdgeField(const Edge& e, const std::string& field)
         return e.style;
     if (field == "arrow")
         return e.arrow;
+    if (field == "strokeColor")
+        return e.strokeColor;
     return "";
 }
 
@@ -500,6 +510,8 @@ setEdgeField(Edge& e, const std::string& field, const std::string& val)
         e.style = val;
     else if (field == "arrow")
         e.arrow = val;
+    else if (field == "strokeColor")
+        e.strokeColor = val;
 }
 
 // ─── Selector 匹配逻辑 ───────────────────────────────────────────
@@ -597,15 +609,17 @@ inline Graph Commit::rebuild(const Graph&                  parentModel,
         if (op.type == OpType::NODE_INSERT) {
             // 从 snapshot JSON 重建 Node
             Node n;
-            n.id     = op.snapshot.str("id");
-            n.label  = op.snapshot.str("label");
-            n.shape  = op.snapshot.str("shape", "rect");
-            n.parent = op.snapshot.str("parent");
-            n.style  = op.snapshot.str("style");
-            n.x      = op.snapshot.num("x");
-            n.y      = op.snapshot.num("y");
-            n.w      = op.snapshot.num("w");
-            n.h      = op.snapshot.num("h");
+            n.id          = op.snapshot.str("id");
+            n.label       = op.snapshot.str("label");
+            n.shape       = op.snapshot.str("shape", "rect");
+            n.parent      = op.snapshot.str("parent");
+            n.style       = op.snapshot.str("style");
+            n.fillColor   = op.snapshot.str("fillColor");
+            n.strokeColor = op.snapshot.str("strokeColor");
+            n.x           = op.snapshot.num("x");
+            n.y           = op.snapshot.num("y");
+            n.w           = op.snapshot.num("w");
+            n.h           = op.snapshot.num("h");
             if (const Json* attrs = op.snapshot.find("attrs")) {
                 if (attrs->isArr())
                     for (auto& a : *attrs->a)
@@ -635,12 +649,13 @@ inline Graph Commit::rebuild(const Graph&                  parentModel,
         }
         else if (op.type == OpType::EDGE_INSERT) {
             Edge e;
-            e.id    = op.snapshot.str("id");
-            e.from  = op.snapshot.str("from");
-            e.to    = op.snapshot.str("to");
-            e.label = op.snapshot.str("label");
-            e.style = op.snapshot.str("style", "solid");
-            e.arrow = op.snapshot.str("arrow", "arrow");
+            e.id          = op.snapshot.str("id");
+            e.from        = op.snapshot.str("from");
+            e.to          = op.snapshot.str("to");
+            e.label       = op.snapshot.str("label");
+            e.style       = op.snapshot.str("style", "solid");
+            e.arrow       = op.snapshot.str("arrow", "arrow");
+            e.strokeColor = op.snapshot.str("strokeColor");
             g.edges.push_back(e);
         }
         else if (op.type == OpType::EDGE_UPDATE) {
@@ -694,6 +709,10 @@ inline Json nodeToSnapshot(const Node& n)
         j.set("parent", n.parent);
     if (!n.style.empty())
         j.set("style", n.style);
+    if (!n.fillColor.empty())
+        j.set("fillColor", n.fillColor);
+    if (!n.strokeColor.empty())
+        j.set("strokeColor", n.strokeColor);
     if (!n.attrs.empty()) {
         Json arr = Json::arr();
         for (auto& a : n.attrs)
@@ -717,6 +736,8 @@ inline Json edgeToSnapshot(const Edge& e)
         j.set("label", e.label);
     j.set("style", e.style);
     j.set("arrow", e.arrow);
+    if (!e.strokeColor.empty())
+        j.set("strokeColor", e.strokeColor);
     return j;
 }
 

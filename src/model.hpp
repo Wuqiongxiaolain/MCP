@@ -27,9 +27,9 @@ struct Node
     std::string shape;  // 节点形状：rect | round | diamond | ellipse | circle |
                         // stadium | group
     std::string              parent;  // 层级关系：父节点 id（空字符串表示根层）
-    std::string              style;   // 自由样式提示（颜色等）
-    std::string              fillColor;    // 填充色 (如 "#eef4ff"；空串用默认)
-    std::string              strokeColor;  // 描边色 (如 "#4a72b8"；空串用默认)
+    std::string style;  // 遗留/自由样式提示（非颜色；颜色用 fillColor/strokeColor）
+    std::string fillColor;    // 填充色 (如 "#eef4ff"；空串用默认)
+    std::string strokeColor;  // 描边色 (如 "#4a72b8"；空串用默认)
     std::vector<std::string> attrs;        // ER 属性列表：形如 "type name"
     double                   x = 0, y = 0, w = 0, h = 0;
 };

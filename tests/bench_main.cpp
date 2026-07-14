@@ -1,9 +1,14 @@
 // bench_main.cpp - 微基准测试套件，输出 JSON 供 CI 回归检测
 // 编译: g++ -std=c++17 -O2 -o bin/graphmcp_bench tests/bench_main.cpp
 #include "../src/mcp.hpp"
+#include "../src/mcp_table_tools.hpp"
 #include "../src/parsers.hpp"
 #include "../src/exporters.hpp"
 #include "../src/storage.hpp"
+#include "../src/table_bridge.hpp"
+#include "../src/table_model.hpp"
+#include "../src/table_storage.hpp"
+#include "../src/table_xml.hpp"
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -337,7 +342,234 @@ static void benchMcpTools()
     ge::removeDirectory("bench-mcp-tmp");
 }
 
-// ── 7. 内存泄漏检查 (重复操作后 RSS 增长) ──
+// ── 7. Table 模型专项 ──
+
+// 构造 N 行 CSV 的辅助函数
+static std::string makeCsv(int rows, int cols)
+{
+    std::string csv;
+    // 表头
+    for (int c = 0; c < cols; c++) {
+        if (c > 0) csv += ",";
+        csv += "col" + std::to_string(c);
+    }
+    csv += "\n";
+    // 数据行
+    for (int r = 0; r < rows; r++) {
+        for (int c = 0; c < cols; c++) {
+            if (c > 0) csv += ",";
+            csv += "v" + std::to_string(r) + "_" + std::to_string(c);
+        }
+        csv += "\n";
+    }
+    return csv;
+}
+
+static void benchTableModel()
+{
+    // ── CSV 解析规模测试 ──
+    for (int n : {100, 500, 2000}) {
+        std::string csv = makeCsv(n, 8);
+        bench("table_fromCsv_n" + std::to_string(n), 100, {},
+              [&csv]() {
+                  gt::Table t = gt::Table::fromCsv(csv);
+                  (void)t;
+              });
+    }
+
+    // ── 大 CSV + toJson 往返 ──
+    {
+        std::string csv500 = makeCsv(500, 8);
+        gt::Table   t500   = gt::Table::fromCsv(csv500);
+        bench("table_toJson_n500", 100, {},
+              [&t500]() {
+                  Json j = t500.toJson();
+                  (void)j;
+              });
+        Json j500 = t500.toJson();
+        bench("table_fromJson_n500", 100, {},
+              [&j500]() {
+                  gt::Table t = gt::Table::fromJson(j500);
+                  (void)t;
+              });
+    }
+
+    // ── 单元格访问性能 ──
+    {
+        std::string csv = makeCsv(200, 10);
+        gt::Table   t   = gt::Table::fromCsv(csv);
+        bench("table_cell_n200", 5000, {},
+              [&t]() {
+                  // 随机访问散布的单元格
+                  for (int r = 0; r < 200; r++)
+                      for (int c = 0; c < 10; c++)
+                          t.cell(r, c);
+              });
+    }
+}
+
+static void benchTableXml()
+{
+    // ── XML 往返规模测试 ──
+    for (int n : {50, 200, 500}) {
+        std::string csv    = makeCsv(n, 5);
+        gt::Table   t      = gt::Table::fromCsv(csv);
+        std::string xml    = gtx::toXml(t);
+        std::string labelN = std::to_string(n);
+        bench("table_toXml_n" + labelN, 50, {},
+              [&t]() {
+                  std::string x = gtx::toXml(t);
+                  (void)x;
+              });
+        bench("table_fromXml_n" + labelN, 50, {},
+              [&xml]() {
+                  gt::Table t2 = gtx::fromXml(xml);
+                  (void)t2;
+              });
+    }
+}
+
+static void benchTableBridge()
+{
+    // ── 边表 → Graph ──
+    {
+        // 构造边表: from,to,label (N 条边)
+        std::string csv = "from,to,label\n";
+        for (int i = 0; i < 500; i++)
+            csv += "N" + std::to_string(i) + ",N" + std::to_string(i + 1) + ",e" +
+                   std::to_string(i) + "\n";
+        gt::Table t = gt::Table::fromCsv(csv);
+        bench("graphFromTable_n500", 100, {},
+              [&t]() {
+                  Graph g = gtb::graphFromTable(t);
+                  (void)g;
+              });
+    }
+
+    // ── Graph → 边表 ──
+    {
+        std::string mmd = "flowchart TD\n";
+        for (int i = 0; i < 200; i++)
+            mmd += "N" + std::to_string(i) + " --> N" + std::to_string(i + 1) +
+                   " |edge" + std::to_string(i) + "|\n";
+        Graph g = gp::parseMermaid(mmd);
+        bench("tableFromGraph_edgelist_n200", 100, {},
+              [&g]() {
+                  gt::Table t = gtb::tableFromGraph(g, "edgelist", false);
+                  (void)t;
+              });
+        bench("tableFromGraph_skeleton_n200", 100, {},
+              [&g]() {
+                  gt::Table t = gtb::tableFromGraph(g, "skeleton", true);
+                  (void)t;
+              });
+    }
+
+    // ── tableCheck 枚举校验 ──
+    {
+        std::string csv = "type,status,value\n";
+        for (int i = 0; i < 300; i++)
+            csv += "T" + std::to_string(i % 5) + ",S" + std::to_string(i % 3) +
+                   "," + std::to_string(i) + "\n";
+        gt::Table t = gt::Table::fromCsv(csv);
+        Json      allowed = Json::obj();
+        Json      types   = Json::arr();
+        for (int i = 0; i < 5; i++)
+            types.push(Json("T" + std::to_string(i)));
+        allowed.set("type", types);
+        bench("tableCheck_n300_1rule", 50, {},
+              [&t, &allowed]() {
+                  gt::Table report = gtb::tableCheck(t, allowed, nullptr, false);
+                  (void)report;
+              });
+    }
+
+    // ── tableAlign 表对齐 ──
+    {
+        std::string csv1 = "id,name\n";
+        std::string csv2 = "enemy_id,item\n";
+        for (int i = 0; i < 100; i++) {
+            csv1 += std::to_string(i) + ",Name" + std::to_string(i) + "\n";
+            csv2 += std::to_string(i) + ",Item" + std::to_string(i) + "\n";
+        }
+        gt::Table primary = gt::Table::fromCsv(csv1);
+        gt::Table ref     = gt::Table::fromCsv(csv2);
+        bench("tableAlign_n100", 50, {},
+              [&primary, &ref]() {
+                  Json result = gtb::tableAlign(primary, ref, "id", "enemy_id");
+                  (void)result;
+              });
+    }
+}
+
+static void benchTableStorage()
+{
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_STORE", "bench-table-tmp");
+#else
+    setenv("GRAPHMCP_STORE", "bench-table-tmp", 1);
+#endif
+    ge::removeDirectory("bench-table-tmp");
+    gts::TableStore ts("bench-table-tmp");
+
+    std::string csv = makeCsv(200, 6);
+    gt::Table   t   = gt::Table::fromCsv(csv);
+    t.name          = "bench-table";
+
+    bench("tableStore_save_n200", 50, {},
+          [&ts, &t]() {
+              int v = ts.save(t, "bench");
+              (void)v;
+          });
+
+    // 先存一个用于 load 测试
+    ts.save(t, "pre-save");
+    std::string savedId = t.id;
+
+    bench("tableStore_load_n200", 50, {},
+          [&ts, &savedId]() {
+              gt::Table loaded;
+              bool     ok = ts.load(savedId, loaded);
+              (void)ok;
+          });
+
+    bench("tableStore_list", 100, {},
+          [&ts]() {
+              Json idx = ts.loadIndex();
+              (void)idx;
+          });
+
+    ge::removeDirectory("bench-table-tmp");
+}
+
+static void benchTableMcpTools()
+{
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_STORE", "bench-table-mcp-tmp");
+    _putenv_s("GRAPHMCP_NO_LAUNCH", "1");
+#else
+    setenv("GRAPHMCP_STORE", "bench-table-mcp-tmp", 1);
+    setenv("GRAPHMCP_NO_LAUNCH", "1", 1);
+#endif
+    ge::removeDirectory("bench-table-mcp-tmp");
+    gs::Store       store("bench-table-mcp-tmp");
+    mcp::ToolRunner runner(store);
+
+    // table_create
+    std::string csv200 = makeCsv(200, 5);
+    bench("mcp_table_create_n200", 20, {},
+          [&runner, &csv200]() {
+              Json args = Json::obj();
+              args.set("content", csv200);
+              args.set("name", "bench-tbl");
+              Json res = runner.call("table_create", args);
+              (void)res;
+          });
+
+    ge::removeDirectory("bench-table-mcp-tmp");
+}
+
+// ── 8. 内存泄漏检查 (重复操作后 RSS 增长) ──
 
 static size_t getCurrentRSS()
 {
@@ -405,6 +637,11 @@ int main()
     benchExporters();
     benchStorage();
     benchMcpTools();
+    benchTableModel();
+    benchTableXml();
+    benchTableBridge();
+    benchTableStorage();
+    benchTableMcpTools();
     benchMemoryStability();
 
     // ── 输出 JSON 结果 ──

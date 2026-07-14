@@ -307,11 +307,16 @@ inline void layout(Graph& g, bool force = false,
     else if (strategy == "grid")
         layoutGrid(g);
     else if (strategy == "auto" || strategy.empty()) {
-        if (g.type == "mindmap")       layoutTree(g, true);
-        else if (g.type == "orgchart") layoutTree(g, false);
-        else if (g.edges.empty())      layoutGrid(g);
-        else                           layoutLayered(g);
-    } else {
+        if (g.type == "mindmap")
+            layoutTree(g, true);
+        else if (g.type == "orgchart")
+            layoutTree(g, false);
+        else if (g.edges.empty())
+            layoutGrid(g);
+        else
+            layoutLayered(g);
+    }
+    else {
         layoutLayered(g);  // 未知策略回退
     }
     // 坐标归一化到正区间

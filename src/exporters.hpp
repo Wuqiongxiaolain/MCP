@@ -214,10 +214,9 @@ inline bool writeFile(const std::string& path, const std::string& content)
 // writeFileAtomic: 先写唯一 tmp 再原子替换到 path；失败时清理残留
 inline bool writeFileAtomic(const std::string& path, const std::string& content)
 {
-    auto stamp =
-        std::chrono::steady_clock::now().time_since_epoch().count();
+    auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
 #ifdef _WIN32
-    unsigned long pid = GetCurrentProcessId();
+    unsigned long pid        = GetCurrentProcessId();
     auto          toWidePath = [](const std::string& s) {
         int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
         std::wstring w((size_t)(n > 0 ? n - 1 : 0), L'\0');
@@ -268,20 +267,23 @@ inline std::string readFile(const std::string& path)
 }
 
 // removeDirectory: 递归删除目录及其内容（不使用 shell，避免注入风险）
-inline bool removeDirectory(const std::string& dirPath) {
+inline bool removeDirectory(const std::string& dirPath)
+{
 #ifdef _WIN32
     auto toWide = [](const std::string& s) {
         int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
         std::wstring w((size_t)(n > 0 ? n - 1 : 0), L'\0');
-        if (n > 0) MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &w[0], n);
+        if (n > 0)
+            MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &w[0], n);
         return w;
     };
-    std::wstring wpath = toWide(dirPath);
-    std::wstring searchPath = wpath + L"\\*";
+    std::wstring     wpath      = toWide(dirPath);
+    std::wstring     searchPath = wpath + L"\\*";
     WIN32_FIND_DATAW fd;
-    HANDLE hFind = FindFirstFileW(searchPath.c_str(), &fd);
+    HANDLE           hFind = FindFirstFileW(searchPath.c_str(), &fd);
     if (hFind == INVALID_HANDLE_VALUE) {
-        if (DeleteFileW(wpath.c_str())) return true;
+        if (DeleteFileW(wpath.c_str()))
+            return true;
         return RemoveDirectoryW(wpath.c_str()) != 0;
     }
     do {
@@ -296,7 +298,8 @@ inline bool removeDirectory(const std::string& dirPath) {
                 WideCharToMultiByte(CP_UTF8, 0, child.c_str(), -1,
                                     &childUtf8[0], clen, nullptr, nullptr);
             removeDirectory(childUtf8);
-        } else {
+        }
+        else {
             DeleteFileW(child.c_str());
         }
     } while (FindNextFileW(hFind, &fd));
@@ -304,7 +307,8 @@ inline bool removeDirectory(const std::string& dirPath) {
     return RemoveDirectoryW(wpath.c_str()) != 0;
 #else
     DIR* dir = opendir(dirPath.c_str());
-    if (!dir) return remove(dirPath.c_str()) == 0;
+    if (!dir)
+        return remove(dirPath.c_str()) == 0;
     struct dirent* entry;
     while ((entry = readdir(dir)) != nullptr) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
@@ -312,8 +316,10 @@ inline bool removeDirectory(const std::string& dirPath) {
         std::string child = dirPath + "/" + entry->d_name;
         struct stat st;
         if (stat(child.c_str(), &st) == 0) {
-            if (S_ISDIR(st.st_mode)) removeDirectory(child);
-            else remove(child.c_str());
+            if (S_ISDIR(st.st_mode))
+                removeDirectory(child);
+            else
+                remove(child.c_str());
         }
     }
     closedir(dir);
@@ -2978,8 +2984,14 @@ inline std::string readOpenFile(const std::string& storeRoot,
                                 std::string&       format)
 {
     std::string base = storeRoot + "/" + graphId + "/open";
-    struct { const char* ext; const char* fmt; } cands[] = {
-        {".drawio", "drawio"}, {".excalidraw", "excalidraw"}, {".svg", "svg"},
+    struct
+    {
+        const char* ext;
+        const char* fmt;
+    } cands[] = {
+        {".drawio", "drawio"},
+        {".excalidraw", "excalidraw"},
+        {".svg", "svg"},
     };
     for (auto& c : cands) {
         std::string text = readFile(base + c.ext);
@@ -3011,8 +3023,8 @@ inline bool openExternal(const std::string& target,
         if (reinterpret_cast<INT_PTR>(h) > 32)
             return true;
         // 降级：用系统默认关联重试
-        h = ShellExecuteW(nullptr, L"open", wtarget.c_str(), nullptr,
-                          nullptr, SW_SHOWNORMAL);
+        h = ShellExecuteW(nullptr, L"open", wtarget.c_str(), nullptr, nullptr,
+                          SW_SHOWNORMAL);
         return reinterpret_cast<INT_PTR>(h) > 32;
     }
     HINSTANCE h = ShellExecuteW(nullptr, L"open", wtarget.c_str(), nullptr,
@@ -3025,7 +3037,8 @@ inline bool openExternal(const std::string& target,
         if (dotApp != std::string::npos)
             appPath = appPath.substr(0, dotApp + 4);
         if (std::system(
-                ("open -a \"" + appPath + "\" \"" + target + "\"").c_str()) == 0)
+                ("open -a \"" + appPath + "\" \"" + target + "\"").c_str()) ==
+            0)
             return true;
         if (std::system(
                 ("\"" + editor + "\" \"" + target + "\" >/dev/null 2>&1")
@@ -3040,11 +3053,11 @@ inline bool openExternal(const std::string& target,
         if (std::system(
                 ("\"" + editor + "\" \"" + target + "\"" + quiet).c_str()) == 0)
             return true;
-        return std::system(("xdg-open \"" + target + "\"" + quiet).c_str()) == 0;
+        return std::system(("xdg-open \"" + target + "\"" + quiet).c_str()) ==
+               0;
     }
     return std::system(("xdg-open \"" + target + "\"" + quiet).c_str()) == 0;
 #endif
 }
 
 }  // namespace ge
-

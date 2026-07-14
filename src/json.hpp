@@ -172,15 +172,12 @@ class Json {
     }
 
     // ---- 类型安全常量访问器 ----
-    // as_str/as_num/as_bool: 直接从 JSON 值提取对应类型；类型不匹配时返回安全默认值
+    // as_str/as_num/as_bool: 直接从 JSON
+    // 值提取对应类型；类型不匹配时返回安全默认值
     std::string as_str() const
-    {
-        return isStr() ? s : "";
-    }
+    { return isStr() ? s : ""; }
     double as_num() const
-    {
-        return isNum() ? n : 0.0;
-    }
+    { return isNum() ? n : 0.0; }
 
     // ---- 数组索引访问 ----
     // operator[] 整型重载：随机访问数组元素（const 版本，越界返回静态空 Json）

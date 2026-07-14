@@ -52,9 +52,8 @@ class Store {
     { return root_; }
 
     // isValidGraphId: 委托统一的 gv::isValidId (version_types.hpp)
-    static bool isValidGraphId(const std::string& id) {
-        return gv::isValidId(id);
-    }
+    static bool isValidGraphId(const std::string& id)
+    { return gv::isValidId(id); }
 
     // ---- 索引 ----
     // loadIndex: 读取索引；文件缺失或损坏时返回空索引结构
@@ -83,12 +82,15 @@ class Store {
     // 返回新版本号
     // save: 保存当前图并创建不可变快照版本
     // 关键步骤：补齐 id/name -> 写 latest -> 写 versions/vN -> 更新索引版本计数
-    int save(Graph& g, const std::string& note = "",
-             int parentVersion = 0, const std::string& commitId = "")
+    int save(Graph&             g,
+             const std::string& note          = "",
+             int                parentVersion = 0,
+             const std::string& commitId      = "")
     {
         if (g.id.empty())
             g.id = gm::genId();
-        if (!isValidGraphId(g.id)) return -1;
+        if (!isValidGraphId(g.id))
+            return -1;
         if (g.name.empty())
             g.name = g.id;
         std::string dir = root_ + "/" + g.id;
@@ -138,7 +140,8 @@ class Store {
             idx["graphs"].push(e);
         }
         saveIndex(idx);
-        // 与 GraphVersionManager::writeHead 对齐，旧版 save/rollback 也更新 HEAD
+        // 与 GraphVersionManager::writeHead 对齐，旧版 save/rollback 也更新
+        // HEAD
         ge::writeFile(dir + "/HEAD", std::to_string(version));
         return version;
     }
@@ -151,7 +154,8 @@ class Store {
               std::string*       err     = nullptr) const
     {
         if (!isValidGraphId(id)) {
-            if (err) *err = "invalid graph id";
+            if (err)
+                *err = "invalid graph id";
             return false;
         }
         std::string path;
@@ -242,10 +246,12 @@ class Store {
         g.id   = id;
         int nv = save(g, "rollback to v" + std::to_string(version));
         if (nv < 0) {
-            if (err) *err = "rollback save failed";
+            if (err)
+                *err = "rollback save failed";
             return false;
         }
-        if (newVersion) *newVersion = nv;
+        if (newVersion)
+            *newVersion = nv;
         return true;
     }
 

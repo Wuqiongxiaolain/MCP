@@ -2682,17 +2682,26 @@ inline Graph parseDrawio(const std::string& text)
                          mxfile.tag + ">");
     const detail::XmlNode* diagram = nullptr;
     for (auto& c : mxfile.children)
-        if (c.tag == "diagram") { diagram = &c; break; }
+        if (c.tag == "diagram") {
+            diagram = &c;
+            break;
+        }
     if (!diagram)
         throw ParseError("drawio: <mxfile> must contain a <diagram>");
     const detail::XmlNode* model = nullptr;
     for (auto& c : diagram->children)
-        if (c.tag == "mxGraphModel") { model = &c; break; }
+        if (c.tag == "mxGraphModel") {
+            model = &c;
+            break;
+        }
     if (!model)
         throw ParseError("drawio: <diagram> must contain an <mxGraphModel>");
     const detail::XmlNode* root = nullptr;
     for (auto& c : model->children)
-        if (c.tag == "root") { root = &c; break; }
+        if (c.tag == "root") {
+            root = &c;
+            break;
+        }
     if (!root)
         throw ParseError("drawio: <mxGraphModel> must contain a <root>");
 
@@ -2860,11 +2869,10 @@ inline Graph parseDrawio(const std::string& text)
             styleHas(cell.style, "strokeWidth=4"))
             edgeStyle = "thick";
 
-        std::string arrow  = "arrow";
-        bool        noEnd  = styleHas(cell.style, "endArrow=none");
-        bool        hasStart =
-            styleHas(cell.style, "startArrow=classic") ||
-            styleHas(cell.style, "startArrow=block");
+        std::string arrow    = "arrow";
+        bool        noEnd    = styleHas(cell.style, "endArrow=none");
+        bool        hasStart = styleHas(cell.style, "startArrow=classic") ||
+                               styleHas(cell.style, "startArrow=block");
         if (noEnd && hasStart)
             arrow = "both";
         else if (noEnd)

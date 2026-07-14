@@ -1305,6 +1305,131 @@ static void testMcpProtocol()
     CHECK(text.find("deleted") != std::string::npos);
 }
 
+// testColors: 节点/边颜色全链路（解析、往返、Draft update、JSON）
+static void testColors()
+{
+    // Mermaid classDef / style / linkStyle 导入
+    Graph g = gp::parseMermaid(
+        "flowchart TD\n"
+        "A[Alpha] --> B[Beta]\n"
+        "B --> C[Gamma]\n"
+        "classDef blue fill:#eef4ff,stroke:#4a72b8\n"
+        "class A,B blue\n"
+        "style C fill:rgb(255,0,0),stroke:hsl(120,50%,40%)\n"
+        "linkStyle 0 stroke:#ff6600\n");
+    CHECK(g.findNode("A") != nullptr);
+    CHECK(g.findNode("A")->fillColor == "#eef4ff");
+    CHECK(g.findNode("A")->strokeColor == "#4a72b8");
+    CHECK(g.findNode("B")->fillColor == "#eef4ff");
+    CHECK(g.findNode("C")->fillColor == "rgb(255,0,0)");
+    CHECK(g.findNode("C")->strokeColor == "hsl(120,50%,40%)");
+    CHECK(g.edges.size() >= 1);
+    CHECK(g.edges[0].strokeColor == "#ff6600");
+
+    // toMermaid：classDef/linkStyle 必须在 flowchart 之后，且可再导入
+    std::string mmd = ge::toMermaid(g);
+    size_t      posFlow = mmd.find("flowchart TD");
+    size_t      posCls  = mmd.find("classDef");
+    size_t      posLink = mmd.find("linkStyle");
+    CHECK(posFlow != std::string::npos);
+    CHECK(posCls != std::string::npos && posCls > posFlow);
+    CHECK(posLink != std::string::npos && posLink > posFlow);
+    Graph g2 = gp::parseMermaid(mmd);
+    CHECK(g2.findNode("A")->fillColor == "#eef4ff");
+    CHECK(g2.findNode("A")->strokeColor == "#4a72b8");
+    CHECK(!g2.edges.empty());
+    CHECK(g2.edges[0].strokeColor == "#ff6600");
+
+    // JSON 往返
+    Json   j  = g.toJson();
+    Graph  g3 = Graph::fromJson(j);
+    CHECK(g3.findNode("A")->fillColor == "#eef4ff");
+    CHECK(g3.edges[0].strokeColor == "#ff6600");
+
+    // draw.io 颜色往返
+    Graph gd;
+    gd.type                 = "flowchart";
+    Node& na                = gd.ensureNode("n1", "Colored");
+    na.shape                = "rect";
+    na.fillColor            = "#aabbcc";
+    na.strokeColor          = "#112233";
+    na.x = 10;
+    na.y = 20;
+    na.w = 100;
+    na.h = 40;
+    Node& nb                = gd.ensureNode("n2", "Other");
+    nb.shape                = "rect";
+    nb.x = 200;
+    nb.y = 20;
+    nb.w = 100;
+    nb.h = 40;
+    gd.addEdge("n1", "n2", "", "solid");
+    gd.edges.back().strokeColor = "#990000";
+    std::string dx              = ge::toDrawio(gd);
+    CHECK(dx.find("fillColor=#aabbcc") != std::string::npos);
+    CHECK(dx.find("strokeColor=#112233") != std::string::npos);
+    CHECK(dx.find("strokeColor=#990000") != std::string::npos);
+    Graph gd2 = gp::parseDrawio(dx);
+    CHECK(gd2.findNode("n1")->fillColor == "#aabbcc");
+    CHECK(gd2.findNode("n1")->strokeColor == "#112233");
+    CHECK(!gd2.edges.empty());
+    CHECK(gd2.edges[0].strokeColor == "#990000");
+
+    // SVG 颜色写入并转义
+    std::string svg = ge::toSVG(g);
+    CHECK(svg.find("#eef4ff") != std::string::npos);
+    CHECK(svg.find("#ff6600") != std::string::npos);
+
+    // Draft/Cursor：graph_update 风格的 setNodeField / materialize
+    gv::Draft draft;
+    draft.graphId = "color-test";
+    Graph base;
+    base.type  = "flowchart";
+    base.id    = "color-test";
+    Node& n    = base.ensureNode("X", "NodeX");
+    n.shape    = "rect";
+    base.addEdge("X", "X", "", "solid");  // self-edge ok for field test
+    auto nc = gv::selectNode(base, &draft, "X");
+    CHECK(nc.valid());
+    nc.set("fillColor", "#112233");
+    nc.set("strokeColor", "#445566");
+    CHECK(base.findNode("X")->fillColor == "#112233");
+    CHECK(base.findNode("X")->strokeColor == "#445566");
+    // INSERT snapshot 含颜色
+    Graph gIns;
+    gIns.type = "flowchart";
+    gv::Draft dIns;
+    std::string nid =
+        gv::insertNode(gIns, &dIns, "rect", "Ins", 0, 0, 120, 44, "", "",
+                       "#fedcba", "#abcdef");
+    CHECK(gIns.findNode(nid)->fillColor == "#fedcba");
+    CHECK(dIns.operations.size() == 1);
+    CHECK(dIns.operations[0].snapshot.str("fillColor") == "#fedcba");
+    Graph rebuilt = dIns.materialize(Graph());
+    CHECK(rebuilt.findNode(nid) != nullptr);
+    CHECK(rebuilt.findNode(nid)->fillColor == "#fedcba");
+    CHECK(rebuilt.findNode(nid)->strokeColor == "#abcdef");
+
+    // Excalidraw 结构化导入颜色
+    Graph gEx = gp::parseExcalidraw(R"({
+      "type":"excalidraw","version":2,"elements":[
+        {"id":"r1","type":"rectangle","x":0,"y":0,"width":80,"height":40,
+         "backgroundColor":"#ffeecc","strokeColor":"#335577"},
+        {"id":"r2","type":"rectangle","x":120,"y":0,"width":80,"height":40,
+         "backgroundColor":"transparent","strokeColor":"#000000"},
+        {"id":"a1","type":"arrow","x":0,"y":0,"width":100,"height":0,
+         "strokeColor":"#cc0000","strokeStyle":"solid",
+         "startArrowhead":null,"endArrowhead":"arrow",
+         "startBinding":{"elementId":"r1","focus":0,"gap":1},
+         "endBinding":{"elementId":"r2","focus":0,"gap":1}}
+      ]})");
+    CHECK(gEx.findNode("r1")->fillColor == "#ffeecc");
+    CHECK(gEx.findNode("r1")->strokeColor == "#335577");
+    CHECK(gEx.findNode("r2")->fillColor.empty());
+    CHECK(!gEx.edges.empty());
+    CHECK(gEx.edges[0].strokeColor == "#cc0000");
+}
+
 static void testParseDrawio()
 {
     std::string d =
@@ -2270,6 +2395,7 @@ int runAll()
     testMcpExtended();
     testMcpToolsRemaining();
     testMcpErrors();
+    testColors();
     testParseDrawio();
     testDrawioRoundTrip();
     testMcpGraphImport();

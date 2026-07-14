@@ -1162,7 +1162,7 @@ static void testMcpProtocol()
     Json tl =
         Json::parse(R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})", &err);
     CHECK(mcp::handleMessage(tl, store, resp));
-    CHECK(resp.find("result")->find("tools")->size() == 39);
+    CHECK(resp.find("result")->find("tools")->size() == 45);
     // tools/call graph_create
     Json call = Json::parse(
         R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
@@ -1477,6 +1477,186 @@ static std::string readExampleInput(const std::string& name)
             return s;
     }
     return {};
+}
+
+// testTableCollabEnhance: P0–P3 图&表协同增强（rules/fix/derive/slug/dry_run/sample/propose）
+static void testTableCollabEnhance()
+{
+    using gm::Node;
+
+    // 导图：根 → 层级(列) → 小怪|Boss
+    Graph g;
+    g.id   = "mm-rules";
+    g.name = "enemy-spec";
+    g.type = "mindmap";
+    {
+        Node root;
+        root.id    = "root";
+        root.label = "敌人规范";
+        Node col;
+        col.id     = "c_level";
+        col.label  = "层级";
+        col.parent = "root";
+        Node a;
+        a.id     = "v_mob";
+        a.label  = "小怪";
+        a.parent = "c_level";
+        Node b;
+        b.id     = "v_boss";
+        b.label  = "Boss";
+        b.parent = "c_level";
+        g.nodes  = {root, col, a, b};
+    }
+
+    gt::Table rules = gtb::tableRulesFromGraph(g);
+    CHECK(rules.columns.size() == 3);
+    CHECK(rules.columns[0] == "column");
+    CHECK(rules.columns[1] == "allowed");
+    CHECK(rules.columns[2] == "hint");
+    CHECK(rules.rows.size() == 1);
+    CHECK(rules.cell(0, 0) == "层级");
+    CHECK(rules.cell(0, 1).find("小怪") != std::string::npos);
+    CHECK(rules.cell(0, 1).find("Boss") != std::string::npos);
+
+    gt::Table bad = gt::Table::fromCsv("层级\n小怪\n精英\n神秘\n");
+    gtb::FixEnumsResult fix =
+        gtb::tableFixEnums(bad, Json(), &rules, false);
+    CHECK(fix.fixed_count >= 1);
+    // 再 check：应用 suggestion 后违规应变少
+    gt::Table after = gtb::tableCheck(bad, Json(), &rules, false);
+    CHECK(after.rows.size() < 2);
+
+    // suggestion 空时 skipped（手工构造无 allowed 的 check 情形用空规则）
+    gt::Table emptyRules;
+    emptyRules.columns = {"column", "allowed"};
+    // 无规则时 check 空，fix 为 0
+    gt::Table okTab = gt::Table::fromCsv("层级\n小怪\n");
+    gtb::FixEnumsResult z =
+        gtb::tableFixEnums(okTab, Json(), &rules, false);
+    CHECK(z.fixed_count == 0);
+
+    // derive animation_checklist
+    std::string enemy_csv = readExampleInput("enemy_sample.csv");
+    CHECK(!enemy_csv.empty());
+    if (!enemy_csv.empty()) {
+        gt::Table enemy = gt::Table::fromCsv(enemy_csv);
+        gt::Table list =
+            gtb::tableDerive(enemy, "animation_checklist");
+        CHECK(list.columns.size() == 4);
+        // 爬虫：受击√ 死亡√ → 至少 2 行；全表 √ 数可断言 >= 4
+        CHECK(list.rows.size() >= 4);
+        CHECK(list.colIndex("动画字段") >= 0);
+    }
+
+    // slug
+    gt::Table names = gt::Table::fromCsv("名称\nHello World\n!!!\nFoo-Bar_1\n");
+    gtb::tableTransformColumnSlug(names, "名称", "key");
+    CHECK(names.colIndex("key") >= 0);
+    CHECK(names.cell(0, 1) == "Hello_World");
+    CHECK(names.cell(1, 1) == "col_1");
+    CHECK(names.cell(2, 1) == "FooBar_1");
+
+    // sample_rows：枚举首值 + TODO
+    gt::Table sample = gt::Table::fromCsv("编号,名称,层级,生成动画？\n");
+    gtb::tableSampleRows(sample, 1, &rules);
+    CHECK(sample.rows.size() == 1);
+    CHECK(sample.cell(0, 2) == "Boss" || sample.cell(0, 2) == "小怪");
+    CHECK(sample.cell(0, 3) == "x");
+    CHECK(sample.cell(0, 0) == "TODO");
+
+    // propose_rows
+    gt::Table prop = gt::Table::fromCsv("编号,名称,层级\n");
+    Json      rows = Json::arr();
+    Json      r0   = Json::obj();
+    r0.set("编号", "9");
+    r0.set("名称", "测试怪");
+    r0.set("层级", "小怪");
+    rows.push(r0);
+    gtb::tableProposeRows(prop, rows, &rules);
+    CHECK(prop.rows.size() == 1);
+    CHECK(prop.cell(0, 2) == "小怪");
+    Json badRows = Json::arr();
+    Json rBad    = Json::obj();
+    rBad.set("层级", "非法");
+    badRows.push(rBad);
+    bool threw = false;
+    try {
+        gtb::tableProposeRows(prop, badRows, &rules);
+    }
+    catch (const gt::TableError&) {
+        threw = true;
+    }
+    CHECK(threw);
+}
+
+static void testTableUpdateDryRun()
+{
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_STORE", "test-table-dryrun-tmp");
+#else
+    setenv("GRAPHMCP_STORE", "test-table-dryrun-tmp", 1);
+#endif
+    ge::removeDirectory("test-table-dryrun-tmp");
+    gs::Store       store("test-table-dryrun-tmp");
+    mcp::ToolRunner runner(store);
+    Json            c = Json::obj();
+    c.set("content", "a,b\n1,2\n");
+    c.set("name", "dry");
+    std::string err;
+    Json        cr = runner.call("table_create", c);
+    Json body =
+        Json::parse(cr.find("content")->a->at(0).str("text"), &err);
+    std::string tid = body.str("id");
+
+    Json u = Json::obj();
+    u.set("id", tid);
+    u.set("dry_run", true);
+    u.set("detail", true);
+    u.set("set_cells", R"([{"row":0,"column":"a","value":"9"}])");
+    Json ur = runner.call("table_update", u);
+    CHECK(!ur.boolean("isError", false));
+    Json ub =
+        Json::parse(ur.find("content")->a->at(0).str("text"), &err);
+    CHECK(ub.boolean("dry_run", false));
+    CHECK(ub.str("status") == "dry_run");
+    CHECK(ub.find("details") != nullptr);
+    CHECK(ub.find("version") == nullptr);
+
+    // 未落盘：历史仍为单版本
+    Json hi = Json::obj();
+    hi.set("id", tid);
+    Json hr = runner.call("table_history", hi);
+    Json hb =
+        Json::parse(hr.find("content")->a->at(0).str("text"), &err);
+    CHECK(hb.isArr());
+    CHECK(hb.size() == 1);
+
+    // rules_from_graph MCP
+    Graph g;
+    g.id = "g1";
+    g.type = "mindmap";
+    {
+        gm::Node root;
+        root.id = "r";
+        root.label = "R";
+        gm::Node col;
+        col.id = "c";
+        col.label = "层级";
+        col.parent = "r";
+        gm::Node v;
+        v.id = "v";
+        v.label = "小怪";
+        v.parent = "c";
+        g.nodes = {root, col, v};
+    }
+    store.save(g, "mind");
+    Json rf = Json::obj();
+    rf.set("graph_id", g.id);
+    rf.set("name", "rules");
+    Json rr = runner.call("table_rules_from_graph", rf);
+    CHECK(!rr.boolean("isError", false));
+
+    ge::removeDirectory("test-table-dryrun-tmp");
 }
 
 static void testTableFixtures()
@@ -2020,6 +2200,8 @@ int runAll()
     testMcpProtocol();
     testTableModel();
     testTableStoreAndBridge();
+    testTableCollabEnhance();
+    testTableUpdateDryRun();
     testTableFixtures();
     testTableMcpTools();
     testTableXml();

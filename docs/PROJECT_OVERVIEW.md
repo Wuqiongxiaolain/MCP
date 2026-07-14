@@ -1,7 +1,16 @@
 # graphmcp 项目全景总结
 
-> latest update: v0.1.1, 2026-07-10
+> latest update: v0.2.0, 2026-07-14
 
+> 说明：本文包含大量“立项/阶段过程”信息（历史视角）。涉及当前能力的口径，请以 `src/main.cpp`、`src/mcp.hpp::toolList()` 与 `docs/api_reference/openapi.yaml` 为准。
+
+## 当前状态快照（截至本次更新）
+
+- CLI 命令族已扩展到 15 个（含 `table`、`dump-tools`、`import`）。
+- MCP 工具总数为 46（图 + 表协作 + 规则/修复/派生链路）。
+- Mermaid 已支持 class/state/sequence/pie 等扩展类型，不再仅限初期子集。
+- 通用表（CSV / 表 XML）与图↔表协同链路已落地；CD 已恢复 macOS 构建矩阵。
+- OpenAPI 由 `dump-tools` / `make docs-api` 从 `toolList()` 自动生成并由 CI 校验漂移。
 
 ## 一、项目来源
 
@@ -24,17 +33,23 @@
 
 ### 2.2 功能需求完成情况
 
-| 需求功能点 | 状态 | 实现方式 |
+> 本表对照当前实现（`src/` + [`docs/api_reference/openapi.yaml`](api_reference/openapi.yaml)），状态以代码事实为准。
+
+| 需求功能点 | 状态 | 实现方式（当前） |
 |-----------|:--:|---------|
-| 接收 XML / CSV / Mermaid / Markdown / Excalidraw JSON | ✅ | 5 种解析器 + 格式自动识别 |
-| 流程图 / 架构图 / ER 图 / 组织图 / 脑图 / 白板图 | ✅ | 6 种图类型 |
-| 统一图模型管理 + 节点/连线/层级/白板元素 | ✅ | `model.hpp` 统一 Graph 结构 |
-| 生成浏览器 URL + 调起外部编辑器 | ✅ | mermaid.live URL + Draw.io/VS Code 自动发现 |
-| 图结构校验 + 基础布局 | ✅ | Kahn 分层 / 树布局 / 网格 + 4 项校验规则 |
-| 导出 .drawio / Mermaid / Excalidraw / PNG / SVG / PDF / URL | ✅ | 8 种输出格式 |
-| 图定义保存 + 历史版本管理 + 回溯 | ✅ | 类 Git 工作流（Draft→Stage→Commit→Checkout） |
-| MCP 接口：创建 / 转换 / 打开 / 导出 | ✅ | 9 个 MCP 工具 |
+| 接收 XML / CSV / Mermaid / Markdown / Excalidraw / draw.io | ✅ | `parsers.hpp`：多格式解析 + `detectFormat` 自动识别；图 CSV 为边表/层级表 |
+| 流程图 / 架构图 / ER 图 / 组织图 / 脑图 / 白板图 | ✅ | 统一 Graph 的 6 类业务图类型（`model.hpp`） |
+| Mermaid 扩展类型（class / state / sequence / pie / …） | ✅ | `parseMermaid*` 深解析多类型；未知类型报错或走 `rawMermaid` 透传 |
+| 统一图模型 + 节点/连线/层级/白板元素 + 颜色字段 | ✅ | `Node`/`Edge` 含 `fillColor`/`strokeColor`；白板保留 `elements`/`files` |
+| 生成浏览器 URL + 调起外部编辑器 | ✅ | mermaid.live URL；`edit`/`graph_open` 调起 Draw.io / Excalidraw / SVG / 浏览器 |
+| 图结构校验 + 基础布局 | ✅ | `layout.hpp`：重复 ID / 悬空边 / 层级环 / 孤立点；`auto`/`layered`/`tree-*`/`grid`；状态图认可 `[*]` 端点 |
+| 导出 draw.io / Mermaid / Excalidraw / PNG / SVG / PDF / URL / model | ✅ | `exporters.hpp` 统一分发；PNG/PDF 走外部转换链，失败回退 SVG |
+| 图版本保存 / 草稿暂存提交 / 回溯 | ✅ | Draft→Stage→Commit；`checkout` 移 HEAD；`rollback` 另存新版本 |
+| 游标遍历与细粒度改图 | ✅ | `cursor_*` + `graph_update`/`insert`/`delete_element`/`graph_property` |
+| MCP 接口（创建 / 转换 / 打开 / 导出及扩展） | ✅ | **46** 个工具（`toolList()` / OpenAPI）；另有 CLI **15** 命令族 + `dump-tools` |
+| **通用表格 + 图↔表协作**（07-10 后扩展） | ✅ | `table_*` / `graph_from_table`：CSV 与表 XML、规则校验修复、派生与样例提案行 |
 | 可选：实时画布预览 | ❎ | 列为后续目标 |
+| draw.io URL / 导出观感打磨 / 性能与性能测试管线 | ❎ | 列为下一阶段目标（见 §六） |
 
 能力与目标的思维导图总览见 [MINDMAP.md](MINDMAP.md)。
 
@@ -42,66 +57,71 @@
 
 ## 三、启动方式
 
-项目于 2026-07-05 启动，采用**自底向上、逐层构建**的策略，首日即完成了全部核心模块的开发。
+项目于 **2026-07-05** 启动，采用**自底向上、逐层构建**：首日打通「解析→模型→校验布局→导出→存储→MCP」主链路；其后在同一骨架上扩展版本/游标、表协作、Mermaid 深解析与工程化能力。
 
-### 3.1 启动路径
+### 3.1 启动日构建路径（07-05，历史）
 
-启动步骤如下：
+| 顺序 | 步骤 | 当时产出 | 说明 |
+|------|------|----------|------|
+| 1 | 项目脚手架 | Makefile、CMakeLists.txt、.gitignore | 确定构建体系 |
+| 2 | JSON + 图模型 | `json.hpp`、`model.hpp` | 自研 JSON；统一 Graph/Node/Edge |
+| 3 | 输入解析器 | `parsers.hpp` | Mermaid / Markdown / CSV / XML / Excalidraw（首日以 flowchart 等为主） |
+| 4 | 校验 + 布局 | `layout.hpp` | 校验规则 + Kahn / 树 / 网格布局 |
+| 5 | 导出器 | `exporters.hpp` | draw.io / Mermaid / Excalidraw / SVG / PNG·PDF / URL |
+| 6 | 版本化存储 | `storage.hpp` | index + latest + versions 快照 |
+| 7 | MCP + CLI | `mcp.hpp`、`main.cpp` | JSON-RPC over stdio；首日约 8 工具 + 扁平 CLI |
+| 8 | 测试 + 示例 | `tests/`、`examples/` | 首日单测与多格式样例输入 |
+| 9 | CI + 文档 | Jenkins 初版、`docs/` | 后迁 GitHub Actions |
 
-| 顺序 | 步骤 | 产出 | 说明 |
-|------|------|------|------|
-| 1 | **项目脚手架** | Makefile、CMakeLists.txt、.gitignore | 确定构建体系与项目结构 |
-| 2 | **JSON 库 + 图模型** | `json.hpp`、`model.hpp` | 自研 JSON 解析器（递归下降、\uXXXX→UTF-8、保序）；定义 Graph/Node/Edge 统一数据结构，确定 6 种图类型 |
-| 3 | **5 种输入解析器** | `parsers.hpp` | 手写 Mermaid 词法分析（节点形状括号、8 种箭头、subgraph 栈）、Markdown 标题层级解析、CSV 边表/层级表自动识别、迷你 XML 解析器、Excalidraw JSON 解析，含 `detectFormat` 自动格式识别 |
-| 4 | **校验 + 布局引擎** | `layout.hpp` | 4 项校验规则（重复 ID、悬空边、层级环、孤立节点）；3 种布局策略（Kahn 分层、递归子树树布局、网格） |
-| 5 | **8 种输出导出器** | `exporters.hpp` | Drawio XML（子节点相对坐标）、Mermaid 文本（subgraph 嵌套还原）、Excalidraw JSON（原始元素无损保留）、SVG（边裁剪到节点边界）、PNG/PDF（外部转换器链 + SVG 回退）、mermaid.live URL（Base64 编码） |
-| 6 | **版本化存储** | `storage.hpp` | 文件系统 JSON 存储：`index.json` 全局索引 + `latest.json` 工作副本 + `versions/vN.json` 不可变快照 + 回滚机制 |
-| 7 | **MCP 服务 + CLI 入口** | `mcp.hpp`、`main.cpp` | JSON-RPC 2.0 over stdio，8 个 MCP 工具；9 个 CLI 子命令 + `serve` |
-| 8 | **测试 + 示例** | `tests/test_main.cpp`、`examples/` | 121 条断言覆盖解析/布局/导出/存储/MCP 协议；多格式示例输入 |
-| 9 | **CI + 文档** | Jenkinsfile、`docs/` | Jenkins + Ansible + SonarQube（初版 CI）；README、架构说明、思维导图、工作日志 |
+### 3.2 当前模块与能力全景（对照源码）
 
-### 3.2 关键启动决策
+| 层级 | 文件 / 入口 | 当前职责 |
+|------|-------------|---------|
+| 模型 | `model.hpp` | Graph/Node/Edge；颜色、扩展箭头字段、`properties`、白板 `elements` |
+| 解析 | `parsers.hpp` | 多格式图输入；Mermaid 多类型深解析；draw.io / Excalidraw |
+| 校验布局 | `layout.hpp` | 结构校验（含 stateDiagram `[*]`）；多种布局策略 |
+| 导出 | `exporters.hpp` | 多格式导出、栅格化回退、编辑器发现与调起 |
+| 图存储 / 版本 / 游标 | `storage.hpp`、`version_*.hpp`、`cursor_types.hpp` | 图库快照、Draft/Stage/Commit、游标持久化 |
+| 通用表 | `table_model.hpp`、`table_storage.hpp`、`table_bridge.hpp`、`table_xml.hpp`、`csv_util.hpp` | 表模型、版本存储、图↔表投影、表 XML |
+| MCP | `mcp.hpp`、`mcp_table_tools.hpp` | **46** 工具；OpenAPI 由 `dump-tools` 导出 |
+| CLI | `main.cpp` | **15** 命令族：`create`/`convert`/`export`/`edit`/`import`/`layout`/`validate`/`store`/`table`/`version`/`graph`/`cursor`/`draft`/`serve`/`dump-tools` |
+| 契约 | `docs/api_reference/openapi.yaml` | `make docs-api` 从 `toolList()` 生成，CI 防漂移 |
 
-项目在启动时做出的核心设计选择，贯穿了整个开发过程：
+### 3.3 关键设计决策
 
 | 决策点 | 选择 | 原因 |
 |--------|------|------|
-| 依赖策略 | **零第三方库** | JSON/XML/Base64 全部手写内置，保证单文件可移植、零环境依赖 |
-| 架构核心 | **统一图模型居中** | 所有输入归一为 Graph，所有输出从 Graph 导出，N+M 复杂度而非 N×M |
-| 存储方案 | **JSON 文件而非 SQLite** | 零配置、可直接查看、易于备份，虽然需求允许 SQLite |
-| MCP 协议 | **自实现 JSON-RPC 2.0** | 不引入外部 RPC 框架，stdio 行分隔，简洁可控 |
-| 构建系统 | **Make + CMake 双支持** | Make 用于快速开发，CMake 用于 IDE 集成和跨平台 |
+| 依赖策略 | **零第三方库** | JSON/XML/Base64 内置，单文件可移植 |
+| 架构核心 | **统一图模型居中** | N 输入 → Graph → M 输出；表为并列一等对象 |
+| 存储方案 | **JSON 文件而非 SQLite** | 零配置、可直接查看；表与图分目录 |
+| MCP 协议 | **自实现 JSON-RPC 2.0** | stdio 行分隔，schema 与 OpenAPI 同源 |
+| 构建系统 | **Make + CMake** | 快速开发与跨平台 CI/CD（含 macOS） |
+| 契约维护 | **代码即文档** | `toolList()` → `dump-tools` → OpenAPI |
 
-### 3.3 首日成果
+### 3.4 首日成果与后续演进
 
-在 07-05 单日内，项目从零完成了**一条完整的处理链路**：
+在 07-05 单日内已打通：
 
 ```
-Mermaid/Markdown/CSV/XML 文本输入
-    → 解析为统一 Graph
-    → 校验 + 自动布局
-    → 导出为 Drawio/SVG/PNG/PDF/URL
-    → 写入文件系统版本存储
-    → 通过 MCP 协议暴露为 AI 可调用的工具
+文本/结构化输入 → 统一 Graph → 校验/布局 → 多格式导出
+               → 文件系统版本存储 → MCP/CLI 可调用
 ```
 
-这意味着在第一天结束时，项目已经是一个**可编译、可运行、可通过 MCP 协议被 AI 调用的完整工具**。后续 5 天的开发都是在这个骨架之上进行增强、重构和完善。
-
----
+这保证项目从第一天起即可编译、运行并被 AI 客户端调用。之后在同一主链上叠加：CLI 命令族与版本游标（07-08～07-10）、**表协作 + Mermaid 深解析 + 颜色链路 + macOS CD + OpenAPI**（07-11～07-14，见 §四）。
 
 ## 四、开发流程
 
 ### 4.1 时间线与里程碑
 
 ```
-2026-07-05                          2026-07-07                    2026-07-10
-    │                                    │                             │
-    ▼                                    ▼                             ▼
-┌────────────┐  ┌──────────────────┐   ┌──────────────┐   ┌──────────────────┐
-│ Day 1      │  │ Day 2            │   │ Day 3-4      │   │ Day 5-6          │
-│ 核心引擎    │─▶│ CI/CD + 工程化   │─▶│ CLI 重构      │─▶│ 编辑器 + 白板精化 │
-│ 全部模块    │  │ 中文注释 + 文档   │   │ 版本管理      │   │ 测试补全 + 文档   │
-└────────────┘  └──────────────────┘   └──────────────┘   └──────────────────┘
+2026-07-05          2026-07-07        2026-07-10           2026-07-11 ~ 07-14
+    │                    │                 │                        │
+    ▼                    ▼                 ▼                        ▼
+┌──────────┐  ┌────────────────┐  ┌────────────────┐  ┌──────────────────────────┐
+│ Day 1    │  │ Day 2~4        │  │ Day 5~6        │  │ 扩展期                   │
+│ 核心引擎  │─▶│ CI/CD + CLI    │─▶│ 编辑器 + 文档   │─▶│ 表协作 / Mermaid /       │
+│ 全部模块  │  │ 版本与白板     │  │ 初步收尾        │  │ macOS CD / 颜色 / OpenAPI│
+└──────────┘  └────────────────┘  └────────────────┘  └──────────────────────────┘
 ```
 
 | 阶段 | 日期 | 关键产出 |
@@ -110,21 +130,34 @@ Mermaid/Markdown/CSV/XML 文本输入
 | **工程化** | 07-06 | 源码英文→中文注释翻译 |
 | **CI/CD 迁移** | 07-07 | Jenkins/Ansible → GitHub Actions、clang-format/cppcheck 接入、SonarQube 可选 |
 | **功能增强** | 07-07 ~ 07-08 | Excalidraw 白板精确导出、离线字体内嵌、Excalidraw files 保真 |
-| **架构升级** | 07-08 ~ 07-09 | CLI 重构（9 命令→12 命令族）、版本管理（Draft/Stage/Commit）、游标操作、drawio 解析回导 |
-| **收尾完善** | 07-10 | 编辑器自动发现、MCP 协议补全、冒烟测试增强、应用原理文档 |
+| **架构升级** | 07-08 ~ 07-09 | CLI 重构（9 命令→多命令族）、版本管理（Draft/Stage/Commit）、游标操作、drawio 解析回导 |
+| **初步收尾** | 07-10 | 编辑器自动发现、MCP 协议补全、冒烟测试增强、应用原理文档；同时开始涌现**表协作 / Mermaid 扩展 / macOS CD**等新需求 |
+| **平台扩展** | 07-11 ~ 07-14 | 通用 Table/MCP 工具族与图表协同；Mermaid 全类型深解析与颜色全链路；补全 macOS 头文件并恢复 CD 构建矩阵；OpenAPI/`dump-tools` 落地 |
 
-按阶段编号（P1–P6）的里程碑列表见 [PROJECT_TIMELINE.md](PROJECT_TIMELINE.md)。  
+按阶段编号（P1–P6）的早期里程碑见 [PROJECT_TIMELINE.md](PROJECT_TIMELINE.md)。  
 按提交记录还原的逐日演进见 [开发过程](DEV_PROCESS.md)。
+
+自 `c6e8009`（`fix(build): 补全 macOS 头文件 + 恢复 CD macOS 构建矩阵`，2026-07-11）起至当前，仓库累计约 **70+** 次功能/测试/文档提交，重点落在表协作、Mermaid 扩展与工程契约对齐。
 
 ### 4.2 开发节奏
 
-| 指标 | 数值 |
+| 指标 | 数值（约） |
 |------|------|
-| 总提交数 | 40+ |
-| 总 PR 数 | 26 |
-| 开发天数 | 6 天 |
-| 核心模块 | 10 个 C++ 头文件 |
-| 代码规模 | 合计约 7000+ 行 |
+| 总提交数 | 200+（含扩展期） |
+| 开发跨度 | 07-05 启动；07-10 初步收尾后进入扩展期 |
+| 核心模块 | 图核心 + 表协作模块（`table_*.hpp` / `mcp_table_tools.hpp` 等） |
+| MCP 工具 | 46（以 `toolList()` 为准） |
+| CLI 命令族 | 15（含 `table` / `dump-tools`） |
+
+### 4.3 07-10 以来的需求落地（已解决）
+
+07-10 初步收尾后，新涌现并已交付的能力如下：
+
+| 需求 | 状态 | 说明 |
+|------|:--:|------|
+| **通用表格支持** | ✅ | Table 模型 / TableStore、CSV 与表 XML 互通、图↔表投影与协同增强（规则/校验/修复/派生等） |
+| **Mermaid 支持扩展** | ✅ | 覆盖 class/state/sequence/pie 等更多类型的深解析路径；坏样例区分硬失败/软失败；颜色（`classDef`/`linkStyle`）全链路 |
+| **macOS CD 支持** | ✅ | 补全 macOS 头文件依赖，恢复 CD 构建矩阵中的 macOS Runner |
 
 ---
 
@@ -162,9 +195,11 @@ main ─────────────────────────
 | 代码风格 | clang-format | 手动执行 |
 | 静态分析 | cppcheck + SonarQube（可选） | CI / 手动 |
 | 单元测试 | `test_main.cpp` + `test_version.cpp` + `test_cursor.cpp` | `make test-all` |
-| 冒烟测试 | `smoke_test.sh`（12 命令族全量） | `make smoke` + CI |
+| 冒烟测试 | `smoke_test.sh`（命令族全量 + fixture 回归） | `make smoke` + CI |
 | MCP 协议测试 | `mcp_smoke.sh` | CI |
-| 样例导出矩阵 | `export-example-testout.sh` | `make export-testout` |
+| 表协作冒烟 | `table_smoke.sh` | `make table-smoke` |
+| 样例导出矩阵 | `export-example-testout.sh` / 表样例导出脚本 | `make export-testout` 等 |
+| OpenAPI 漂移校验 | `dump-tools` / `make docs-api` | CI |
 
 ### 5.4 DevOps 演进
 
@@ -172,30 +207,38 @@ main ─────────────────────────
 |------|--------|------|
 | 初版 | Jenkins + Ansible | 07-05 搭建，遵循需求文档 |
 | 迁移 | GitHub Actions | 07-07 迁移，更适合 GitHub 生态 |
-| 现状 | GitHub Actions CI + 可选 SonarQube + GitLab 镜像 | 详见 `.github/workflows/` |
+| 现状 | GitHub Actions CI + CD（含 **macOS** 构建矩阵）+ 可选 SonarQube + GitLab 镜像 | 详见 `.github/workflows/` |
 
 ---
 
-## 六、完成初步开发后的下一步目标
+## 六、下一阶段目标（尚未解决）
 
-### 6.1 功能扩展
+### 6.1 已关闭的早期目标（对照）
+
+以下在 07-10 后的扩展期中已完成，**不再**列为待办：
+
+| 目标 | 状态 | 结果 |
+|------|:--:|------|
+| 通用表格支持 | ✅ | Table + MCP/CLI 工具族与协同链路 |
+| Mermaid 类型扩展 | ✅ | 深解析覆盖 class/state/sequence/pie 等；颜色链路可用 |
+| macOS CD | ✅ | CD 矩阵恢复 macOS Runner |
+
+### 6.2 功能扩展（待做）
 
 | 目标 | 说明 |
 |------|------|
-| **实时画布预览** | 通过 SVG + 本地 HTML 轮询 `latest.json` 实现实时预览 |
-| **更多 Mermaid 类型** | classDiagram（类图）、stateDiagram（状态图） |
-| **draw.io URL** | 需要 deflate 压缩，暂以零依赖为由缓做 |
-| **分层布局优化** | 引入 median 启发式减少连线交叉 |
+| **draw.io 能力补齐** | 现有 draw.io 往返仍有缺口（如更完整的互操作 / draw.io URL 等）；需在保持零依赖前提下继续补齐 |
+| **导出图质量过粗** | 当前部分导出结果视觉上偏粗糙（布局、渲染与样式一致化），需要系统性打磨 |
+| **实时画布预览** | 通过 SVG + 本地 HTML 轮询 `latest.json` 实现实时预览（可选） |
 
-### 6.2 工程提升
+### 6.3 工程与性能（待做）
 
 | 目标 | 说明 |
 |------|------|
-| **SQLite 可选后端** | 大图检索场景下替代 JSON 文件存储 |
+| **潜在性能问题** | 大图/大表场景下的解析、布局与导出开销尚未系统评估 |
+| **性能测试管线** | 缺少可重复的性能基准与 CI 性能冒烟；需建立可对比、可回归的性能测试流水线 |
+| **SQLite 可选后端** | 大图检索场景下可评估替代 JSON 文件存储 |
 | **贡献指南** | 开源协作规范文档（`CONTRIBUTING.md`） |
-| **Release 制品** | Tag 触发多平台二进制发布（Windows/Linux/macOS） |
-
----
 
 ## 附录：需求对照检查清单
 
@@ -208,6 +251,10 @@ main ─────────────────────────
 | 5 | 图结构校验 + 基础布局 | ✅ |
 | 6 | 导出 .drawio / Mermaid / Excalidraw / PNG / SVG / PDF / URL | ✅ |
 | 7 | 图定义保存 + 历史版本管理 + 回溯 | ✅ |
-| 8 | MCP 接口：创建 / 转换 / 打开 / 导出 | ✅ |
-| 9 | 可选：实时画布 | ❎ |
-| 10 | C++ / CLI / JSON 存储 / Git | ✅ |
+| 8 | MCP 接口：创建 / 转换 / 打开 / 导出（现含表协作等扩展） | ✅ |
+| 9 | 通用表格支持 + 图↔表协同 | ✅ |
+| 10 | Mermaid 类型扩展（class/state/sequence/pie 等） | ✅ |
+| 11 | macOS CD 构建矩阵 | ✅ |
+| 12 | C++ / CLI / JSON 存储 / Git | ✅ |
+| 13 | 可选：实时画布 | ❎ |
+| 14 | draw.io 能力补齐 / 导出质量打磨 / 性能与性能测试管线 | ❎ |

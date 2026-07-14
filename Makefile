@@ -21,13 +21,9 @@ HDRS := src/json.hpp src/model.hpp src/parsers.hpp src/layout.hpp \
         src/exporters.hpp src/storage.hpp src/mcp.hpp \
         src/mcp_table_tools.hpp src/table_bridge.hpp src/table_model.hpp \
         src/table_storage.hpp src/table_xml.hpp \
-        src/version_types.hpp src/cursor_types.hpp src/version_manager.hpp \
+        src/version_types.hpp src/cursor_types.hpp src/version_manager.hpp
 
-<<<<<<< HEAD
-.PHONY: all test test-all test-version test-cursor smoke mcp-smoke table-smoke clean export-testout export-table-examples export-table-collab-examples docs-api
-=======
-.PHONY: all test test-all test-version test-cursor bench bench-ci bench-baseline smoke mcp-smoke table-smoke clean export-testout export-table-examples docs-api
->>>>>>> eec9678 (feat: add micro-benchmark suite and CI performance regression detection)
+.PHONY: all test test-all test-version test-cursor bench bench-ci bench-baseline smoke mcp-smoke table-smoke clean export-testout export-table-examples export-table-collab-examples docs-api
 
 all: $(BIN)/graphmcp$(EXE) $(BIN)/graphmcp_tests$(EXE) \
      $(BIN)/graphmcp_version_tests$(EXE) $(BIN)/graphmcp_cursor_tests$(EXE)

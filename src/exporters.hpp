@@ -2790,13 +2790,14 @@ inline std::string toSVG(Graph g)
                 bool s2 = segBlocked(b1x, b1y, b2x, b2y);
                 bool s3 = segBlocked(b2x, b2y, x2, y2);
                 if (!s1 && !s2 && !s3) break;
-                double push = 12.0;
-                if (s1) { if (std::abs(b1x - x1) > std::abs(b1y - y1)) b1x += (b1x > x1 ? push : -push);
-                          else b1y += (b1y > y1 ? push : -push); }
-                if (s2) { if (std::abs(b2x - b1x) > std::abs(b2y - b1y)) { b1x += push/2; b2x += push/2; }
+                double push = 16.0;
+                // 垂直段被阻→推x绕过，水平段被阻→推y绕过
+                if (s1) { if (std::abs(b1x - x1) > 4) b1x += (b1x > x1 ? push : -push);
+                          else b1x += push; }  // 垂直段走x绕过
+                if (s2) { if (std::abs(b2x - b1x) > 4) { b1x += push/2; b2x += push/2; }
                           else { b1y += push/2; b2y += push/2; } }
-                if (s3) { if (std::abs(x2 - b2x) > std::abs(y2 - b2y)) b2x += (b2x > x2 ? push : -push);
-                          else b2y += (b2y > y2 ? push : -push); }
+                if (s3) { if (std::abs(x2 - b2x) > 4) b2x += (b2x > x2 ? push : -push);
+                          else b2x += push; }  // 垂直段走x绕过
             }
         }
 

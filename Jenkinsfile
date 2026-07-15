@@ -93,11 +93,29 @@ pipeline {
           steps {
             sh '''
               set -euo pipefail
-              if command -v apt-get >/dev/null 2>&1; then
+              # 步骤：已有工具则跳过；否则用 root / sudo 装依赖（Jenkins 官方镜像默认无 sudo）
+              missing=0
+              for c in g++ make python3 jq; do
+                command -v "$c" >/dev/null 2>&1 || missing=1
+              done
+              command -v convert >/dev/null 2>&1 || command -v magick >/dev/null 2>&1 || missing=1
+              if [ "$missing" -eq 0 ]; then
+                echo "依赖已就绪，跳过安装"
+                exit 0
+              fi
+              if ! command -v apt-get >/dev/null 2>&1; then
+                echo "非 apt 环境：请预先安装 g++ make python3 imagemagick jq"
+                exit 1
+              fi
+              if [ "$(id -u)" -eq 0 ]; then
+                apt-get update
+                apt-get install -y g++ make python3 imagemagick jq
+              elif command -v sudo >/dev/null 2>&1; then
                 sudo apt-get update
                 sudo apt-get install -y g++ make python3 imagemagick jq
               else
-                echo "非 apt 环境：请预先安装 g++ make python3 imagemagick jq"
+                echo "无 root/sudo：请在 Agent 预装依赖，或为 jenkins 配置免密 sudo"
+                exit 1
               fi
             '''
           }
@@ -181,9 +199,22 @@ pipeline {
               steps {
                 sh '''
                   set -euo pipefail
-                  if command -v apt-get >/dev/null 2>&1; then
+                  if command -v g++ >/dev/null 2>&1 && command -v make >/dev/null 2>&1; then
+                    echo "依赖已就绪，跳过安装"
+                    exit 0
+                  fi
+                  if ! command -v apt-get >/dev/null 2>&1; then
+                    exit 0
+                  fi
+                  if [ "$(id -u)" -eq 0 ]; then
+                    apt-get update
+                    apt-get install -y g++ make
+                  elif command -v sudo >/dev/null 2>&1; then
                     sudo apt-get update
                     sudo apt-get install -y g++ make
+                  else
+                    echo "无 root/sudo：请在 Agent 预装 g++ make"
+                    exit 1
                   fi
                 '''
               }

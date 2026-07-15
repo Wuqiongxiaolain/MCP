@@ -1766,16 +1766,18 @@ static void testDrawioEdgeLabelOffset()
     CHECK(g.name == "EdgeLabelTest");
     CHECK(g.edges.size() == 1);
     CHECK(g.edges[0].label == "hello");
-    CHECK(g.edges[0].labelX == 30);
-    CHECK(g.edges[0].labelY == -15);
+    // 解析后 labelX/Y 是绝对坐标：边中心 (260,130) + offset (30,-15)
+    CHECK(g.edges[0].labelX == 290);
+    CHECK(g.edges[0].labelY == 115);
 
     // 往返：导出再解析
     std::string dx = ge::toDrawio(g);
     Graph g2       = gp::parseDrawio(dx);
     CHECK(g2.edges.size() == 1);
     CHECK(g2.edges[0].label == "hello");
-    CHECK(g2.edges[0].labelX == 30);
-    CHECK(g2.edges[0].labelY == -15);
+    // 往返后 layout 会重算 label 位置：垂直边中点(80,120) + perp(-12,0) = (68,120)
+    CHECK(g2.edges[0].labelX == 68);
+    CHECK(g2.edges[0].labelY == 120);
 }
 
 static void testMcpGraphImport()

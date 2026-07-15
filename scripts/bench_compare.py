@@ -36,6 +36,17 @@ def load_results(path: str) -> dict:
     return {b["name"]: b for b in data.get("benchmarks", [])}
 
 
+def to_ns(val: float, unit: str) -> float:
+    """归一化到纳秒，避免跨单位比较时误判"""
+    if unit == "ns":
+        return val
+    if unit == "us":
+        return val * 1_000
+    if unit == "ms":
+        return val * 1_000_000
+    return val  # 未知单位保持原值
+
+
 def main():
     if len(sys.argv) < 3:
         print(f"用法: {sys.argv[0]} <baseline.json> <current.json>", file=sys.stderr)
@@ -66,13 +77,13 @@ def main():
             continue
 
         bl = baseline[name]
-        cur_val = cur["value"]
-        bl_val = bl["value"]
+        cur_val_ns = to_ns(cur["value"], cur.get("unit", ""))
+        bl_val_ns  = to_ns(bl["value"], bl.get("unit", ""))
 
-        if bl_val <= 0:
+        if bl_val_ns <= 0:
             continue
 
-        ratio = cur_val / bl_val
+        ratio = cur_val_ns / bl_val_ns
 
         # CI 敏感指标用更宽松阈值
         is_sensitive = any(s in name for s in CI_SENSITIVE)
@@ -127,9 +138,9 @@ def main():
                 if not bl:
                     f.write(f"| {name} | — | {cur['value']:.2f}{cur['unit']} | 🆕 |\n")
                     continue
-                cur_val = cur["value"]
-                bl_val = bl["value"]
-                ratio = (cur_val - bl_val) / bl_val * 100
+                cur_val_ns = to_ns(cur["value"], cur.get("unit", ""))
+                bl_val_ns  = to_ns(bl["value"], bl.get("unit", ""))
+                ratio = (cur_val_ns - bl_val_ns) / bl_val_ns * 100
                 emoji = (
                     "🔴" if abs(ratio) >= 50
                     else "🟡" if abs(ratio) >= 30

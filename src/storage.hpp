@@ -1,8 +1,8 @@
 // storage.hpp - 基于 JSON 文件的图存储（支持版本历史与回滚）
 // 磁盘结构：
 //   <root>/index.json                     - 图索引目录
-//   <root>/<graphId>/latest.json          - 当前模型版本
-//   <root>/<graphId>/versions/v<N>.json   - 不可变历史快照
+//   <root>/<graphId>/latest.json          - HEAD 指针 {"version":N}（兼容旧纯 model）
+//   <root>/<graphId>/versions/v<N>.json   - 不可变历史快照（含完整 model）
 //   <root>/<graphId>/versions/v<N>.meta.json - 轻量历史元数据
 #pragma once
 #include "exporters.hpp"  // writeFileAtomic / StoreLock / readFile
@@ -133,9 +133,9 @@ class Store {
         return true;
     }
 
-    // ---- 保存：写 latest.json + 新的不可变版本快照 ----
+    // ---- 保存：写不可变快照 + latest 指针（不再整图双写）----
     // 返回新版本号；失败返回 -1
-    // 关键步骤：持锁 -> 合并读 index -> 写 snapshot/latest -> 写 index
+    // 关键步骤：锁外 toJson -> 持锁分配版本 -> 写 snapshot + 指针 latest + index
     int save(Graph&             g,
              const std::string& note          = "",
              int                parentVersion = 0,
@@ -147,6 +147,9 @@ class Store {
             return -1;
         if (g.name.empty())
             g.name = g.id;
+
+        // 大文件白板含大量 base64：整图序列化在锁外完成，缩短临界区。
+        Json model = g.toJson();
 
         ge::StoreLock lock(root_);
         if (!lock.locked())
@@ -176,10 +179,6 @@ class Store {
                                 std::to_string(version) + ".json"))
             version++;
 
-        // 大文件白板含大量 base64：toJson 仅执行一次。
-        Json        model     = g.toJson();
-        std::string modelDump = model.dump();
-
         std::string savedAt = nowIso();
         Json        snap    = Json::obj();
         snap.set("version", version);
@@ -188,14 +187,17 @@ class Store {
         snap.set("parent", parentVersion);
         if (!commitId.empty())
             snap.set("commitId", commitId);
-        // 复用 model 对象挂入快照；序列化时再 dump 整棵树一次（无法避免含 model）
+        // 复用锁外的 model；锁内仅一次 snap.dump（含 model）
         snap.set("model", model);
         std::string verPath =
             dir + "/versions/v" + std::to_string(version) + ".json";
         if (!ge::writeFileAtomic(verPath, snap.dump()))
             return -1;
 
-        if (!ge::writeFileAtomic(dir + "/latest.json", modelDump))
+        // latest 只存版本指针，避免与 vN.json 重复落整图。
+        Json latestPtr = Json::obj();
+        latestPtr.set("version", version);
+        if (!ge::writeFileAtomic(dir + "/latest.json", latestPtr.dump()))
             return -1;
 
         if (entry) {
@@ -263,10 +265,21 @@ class Store {
                 return false;
             }
             out = Graph::fromJson(*m);
+            return true;
         }
-        else {
-            out = Graph::fromJson(j);
+        // latest.json：新格式为 {"version":N}；旧格式为纯 model。
+        // 有 version 且无 nodes 视为指针（Graph::toJson 必含 nodes）。
+        if (j.find("version") && !j.find("nodes")) {
+            int ptrVer = (int)j.num("version", 0);
+            if (ptrVer <= 0) {
+                if (err)
+                    *err = "latest.json pointer missing valid version: " +
+                           path;
+                return false;
+            }
+            return load(id, out, ptrVer, err);
         }
+        out = Graph::fromJson(j);
         return true;
     }
 

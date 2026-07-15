@@ -72,7 +72,8 @@ class GraphVersionManager {
     bool saveDraft(const std::string& graphId, const Draft& draft)
     {
         makeGraphDir(graphId);
-        return ge::writeFile(draftPath(graphId), draft.toJson().dump(2));
+        // 草稿热路径用紧凑 dump，减少编辑态 I/O
+        return ge::writeFile(draftPath(graphId), draft.toJson().dump());
     }
 
     // resetDraft: 丢弃草稿（删除 draft.json）
@@ -135,7 +136,7 @@ class GraphVersionManager {
     bool saveStage(const std::string& graphId, const Stage& stage)
     {
         makeGraphDir(graphId);
-        return ge::writeFile(stagePath(graphId), stage.toJson().dump(2));
+        return ge::writeFile(stagePath(graphId), stage.toJson().dump());
     }
 
     // stageAll: 暂存 Draft 中全部操作

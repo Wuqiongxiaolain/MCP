@@ -833,15 +833,14 @@ int cmdStore(Args& a, gs::Store& store)
         // 删除存储目录
         std::string dir = store.root() + "/" + id;
         ge::removeDirectory(dir);
-        // 更新 index
-        Json idx       = store.loadIndex();
-        Json newGraphs = Json::arr();
-        for (auto& e : *idx["graphs"].a) {
-            if (e.str("id") != id)
-                newGraphs.push(e);
+        // 持锁更新 index
+        std::string ierr;
+        if (!store.removeGraphFromIndex(id, &ierr)) {
+            std::cerr << "error: "
+                      << (ierr.empty() ? "failed to update index" : ierr)
+                      << "\n";
+            return 1;
         }
-        idx.set("graphs", newGraphs);
-        ge::writeFile(store.root() + "/index.json", idx.dump(2));
         std::cout << "deleted graph: " << id << "\n";
         return 0;
     }

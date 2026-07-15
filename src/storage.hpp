@@ -3,8 +3,9 @@
 //   <root>/index.json                     - 图索引目录
 //   <root>/<graphId>/latest.json          - 当前模型版本
 //   <root>/<graphId>/versions/v<N>.json   - 不可变历史快照
+//   <root>/<graphId>/versions/v<N>.meta.json - 轻量历史元数据
 #pragma once
-#include "exporters.hpp"  // 复用 writeFile / readFile
+#include "exporters.hpp"  // writeFileAtomic / StoreLock / readFile
 #include "model.hpp"
 #include "version_types.hpp"  // gv::nowIso / gv::isValidId
 #include <ctime>
@@ -31,7 +32,7 @@ inline void makeDir(const std::string& path)
 #endif
 }
 
-// nowIso/nowIso 已统一到 gv::nowIso (version_types.hpp)，避免维护分歧
+// nowIso 已统一到 gv::nowIso (version_types.hpp)，避免维护分歧
 using gv::nowIso;
 
 // Store: 文件系统版图存储服务（索引 + latest + versions）
@@ -74,14 +75,43 @@ class Store {
         }
         return j;
     }
-    // saveIndex: 将索引写回 index.json
-    void saveIndex(const Json& idx) const
-    { ge::writeFile(root_ + "/index.json", idx.dump(2)); }
+
+    // saveIndex: 原子写回 index.json（紧凑序列化）
+    bool saveIndex(const Json& idx) const
+    { return ge::writeFileAtomic(root_ + "/index.json", idx.dump()); }
+
+    // removeGraphFromIndex: 持锁删除索引条目（供 graph_delete 使用）
+    bool removeGraphFromIndex(const std::string& id, std::string* err = nullptr)
+    {
+        ge::StoreLock lock(root_);
+        if (!lock.locked()) {
+            if (err)
+                *err = "failed to acquire store lock";
+            return false;
+        }
+        Json idx = loadIndex();
+        if (!idx.find("graphs") || !idx["graphs"].isArr()) {
+            Json fresh = Json::obj();
+            fresh.set("graphs", Json::arr());
+            idx = fresh;
+        }
+        Json filtered = Json::arr();
+        for (auto& item : *idx["graphs"].a) {
+            if (item.str("id") != id)
+                filtered.push(item);
+        }
+        idx.set("graphs", filtered);
+        if (!saveIndex(idx)) {
+            if (err)
+                *err = "failed to write index.json";
+            return false;
+        }
+        return true;
+    }
 
     // ---- 保存：写 latest.json + 新的不可变版本快照 ----
-    // 返回新版本号
-    // save: 保存当前图并创建不可变快照版本
-    // 关键步骤：补齐 id/name -> 写 latest -> 写 versions/vN -> 更新索引版本计数
+    // 返回新版本号；失败返回 -1
+    // 关键步骤：持锁 -> 合并读 index -> 写 latest/snapshot/meta/HEAD -> 写 index
     int save(Graph&             g,
              const std::string& note          = "",
              int                parentVersion = 0,
@@ -93,10 +123,16 @@ class Store {
             return -1;
         if (g.name.empty())
             g.name = g.id;
+
+        ge::StoreLock lock(root_);
+        if (!lock.locked())
+            return -1;
+
         std::string dir = root_ + "/" + g.id;
         makeDir(dir);
         makeDir(dir + "/versions");
 
+        // 持锁后重新读 index，避免并发写互相覆盖
         Json  idx   = loadIndex();
         Json* entry = nullptr;
         for (auto& item : *idx["graphs"].a)
@@ -108,26 +144,43 @@ class Store {
         if (entry)
             version = (int)entry->num("versions") + 1;
 
-        // 大文件白板含大量 base64，只序列化一次
-        Json model = g.toJson();
-        ge::writeFile(dir + "/latest.json", model.dump(2));
+        // 大文件白板含大量 base64：toJson 一次，dump 一次，供 latest + snapshot 复用
+        Json        model     = g.toJson();
+        std::string modelDump = model.dump();
+        if (!ge::writeFileAtomic(dir + "/latest.json", modelDump))
+            return -1;
 
-        Json snap = Json::obj();
+        std::string savedAt = nowIso();
+        Json        snap    = Json::obj();
         snap.set("version", version);
-        snap.set("savedAt", nowIso());
+        snap.set("savedAt", savedAt);
         snap.set("note", note);
         snap.set("parent", parentVersion);
         if (!commitId.empty())
             snap.set("commitId", commitId);
+        // 复用 model 对象挂入快照；序列化时再 dump 整棵树一次（无法避免含 model）
         snap.set("model", model);
-        ge::writeFile(dir + "/versions/v" + std::to_string(version) + ".json",
-                      snap.dump(2));
+        std::string verPath =
+            dir + "/versions/v" + std::to_string(version) + ".json";
+        if (!ge::writeFileAtomic(verPath, snap.dump()))
+            return -1;
+
+        // 轻量 meta：history 优先读，避免全量解析大 snapshot
+        Json meta = Json::obj();
+        meta.set("version", version);
+        meta.set("savedAt", savedAt);
+        meta.set("note", note);
+        meta.set("nodes", (double)g.nodes.size());
+        meta.set("edges", (double)g.edges.size());
+        ge::writeFileAtomic(dir + "/versions/v" + std::to_string(version) +
+                                ".meta.json",
+                            meta.dump());
 
         if (entry) {
             entry->set("name", g.name);
             entry->set("type", g.type);
             entry->set("versions", version);
-            entry->set("updatedAt", nowIso());
+            entry->set("updatedAt", savedAt);
         }
         else {
             Json e = Json::obj();
@@ -135,19 +188,20 @@ class Store {
             e.set("name", g.name);
             e.set("type", g.type);
             e.set("versions", version);
-            e.set("createdAt", nowIso());
-            e.set("updatedAt", nowIso());
+            e.set("createdAt", savedAt);
+            e.set("updatedAt", savedAt);
             idx["graphs"].push(e);
         }
-        saveIndex(idx);
-        // 与 GraphVersionManager::writeHead 对齐，旧版 save/rollback 也更新
-        // HEAD
-        ge::writeFile(dir + "/HEAD", std::to_string(version));
+        if (!saveIndex(idx))
+            return -1;
+
+        // 与 GraphVersionManager::writeHead 对齐
+        if (!ge::writeFileAtomic(dir + "/HEAD", std::to_string(version)))
+            return -1;
         return version;
     }
 
     // ---- 加载 latest 或指定版本 ----
-    // load: 读取最新版本或指定版本；version<=0 表示 latest
     bool load(const std::string& id,
               Graph&             out,
               int                version = 0,
@@ -197,7 +251,7 @@ class Store {
     }
 
     // ---- 历史列表 ----
-    // history: 聚合指定图的版本元数据（时间、备注、节点/边数量）
+    // history: 优先读 vN.meta.json；缺失时回退全量 snapshot parse
     Json history(const std::string& id) const
     {
         Json list     = Json::arr();
@@ -207,6 +261,24 @@ class Store {
             if (item.str("id") == id)
                 versions = (int)item.num("versions");
         for (int v = 1; v <= versions; v++) {
+            std::string metaPath = root_ + "/" + id + "/versions/v" +
+                                   std::to_string(v) + ".meta.json";
+            std::string metaTxt  = ge::readFile(metaPath);
+            if (!metaTxt.empty()) {
+                std::string perr;
+                Json        mj = Json::parse(metaTxt, &perr);
+                if (perr.empty()) {
+                    Json e = Json::obj();
+                    e.set("version", v);
+                    e.set("savedAt", mj.str("savedAt"));
+                    e.set("note", mj.str("note"));
+                    e.set("nodes", mj.num("nodes"));
+                    e.set("edges", mj.num("edges"));
+                    list.push(e);
+                    continue;
+                }
+            }
+            // 兼容旧数据：全量 parse snapshot
             std::string txt = ge::readFile(root_ + "/" + id + "/versions/v" +
                                            std::to_string(v) + ".json");
             if (txt.empty())
@@ -234,7 +306,6 @@ class Store {
     }
 
     // ---- 回滚：将旧快照重新保存为最新版本 ----
-    // rollback: 基于旧版本重新 save 成新版本（非破坏式回滚）
     bool rollback(const std::string& id,
                   int                version,
                   int*               newVersion,

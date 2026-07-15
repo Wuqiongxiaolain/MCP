@@ -109,7 +109,7 @@ inline Json tableCreate(gts::TableStore& tables, const Json& a)
             "or table_import");
     for (auto& w : warnings)
         appendCompatWarning(out, w);
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 inline Json tableImport(gts::TableStore& tables, const Json& a)
@@ -133,7 +133,7 @@ inline Json tableImport(gts::TableStore& tables, const Json& a)
     out.set("rows", (double)t.rows.size());
     for (auto& w : warnings)
         appendCompatWarning(out, w);
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 inline Json tableExport(gts::TableStore& tables, const Json& a)
@@ -171,7 +171,7 @@ inline Json tableList(gts::TableStore& tables, const Json& a)
                 << (int)e.num("versions") << '\n';
         return textContent(oss.str());
     }
-    return textContent(idx.dump(2));
+    return textContent(idx.dump());
 }
 
 inline Json tableShow(gts::TableStore& tables, const Json& a)
@@ -194,7 +194,7 @@ inline Json tableShow(gts::TableStore& tables, const Json& a)
         out.set("truncated", true);
         out.set("total_rows", (double)t.rows.size());
     }
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 inline Json tableDelete(gts::TableStore& tables, const Json& a)
@@ -207,11 +207,11 @@ inline Json tableDelete(gts::TableStore& tables, const Json& a)
     Json out = Json::obj();
     out.set("status", "deleted");
     out.set("id", a.str("id"));
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 inline Json tableHistory(gts::TableStore& tables, const Json& a)
-{ return textContent(tables.history(a.str("id")).dump(2)); }
+{ return textContent(tables.history(a.str("id")).dump()); }
 
 inline Json tableRollback(gts::TableStore& tables, const Json& a)
 {
@@ -222,7 +222,7 @@ inline Json tableRollback(gts::TableStore& tables, const Json& a)
     Json out = Json::obj();
     out.set("status", "ok");
     out.set("new_version", (double)nv);
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 // applyTablePatches: 应用补丁；detail=true 时 details 收集逐格 before/after
@@ -404,14 +404,14 @@ inline Json tableUpdate(gts::TableStore& tables, const Json& a)
         out.set("details", details);
     if (dry_run) {
         out.set("status", "dry_run");
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
     int v = tables.save(t, a.str("note", "updated via MCP"), &err);
     if (v < 0)
         return textContent(err.empty() ? "failed to save table" : err, true);
     out.set("status", "updated");
     out.set("version", (double)v);
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 inline Json tableDiffTool(gts::TableStore& tables, const Json& a)
@@ -432,7 +432,7 @@ inline Json tableDiffTool(gts::TableStore& tables, const Json& a)
         if (!tables.load(a.str("id"), bT, v2, &err))
             return textContent(err, true);
     }
-    return textContent(gt::tableDiff(aT, bT).dump(2));
+    return textContent(gt::tableDiff(aT, bT).dump());
 }
 
 inline Json
@@ -473,7 +473,7 @@ tableFromGraphTool(gs::Store& store, gts::TableStore& tables, const Json& a)
                 "csv_preview truncated; use table_export for full content");
     }
     out.set("csv_preview", preview.toCsv());
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 inline Json
@@ -506,7 +506,7 @@ graphFromTableTool(gs::Store& store, gts::TableStore& tables, const Json& a)
     out.set("type", g.type);
     out.set("nodes", (double)g.nodes.size());
     out.set("edges", (double)g.edges.size());
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 inline Json tableAlignTool(gts::TableStore& tables, const Json& a)
@@ -528,7 +528,7 @@ inline Json tableAlignTool(gts::TableStore& tables, const Json& a)
     out.set("target_id", target.id);
     out.set("version", (double)v);
     out.set("align", align);
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 inline Json tableCheckTool(gts::TableStore& tables, const Json& a)
@@ -595,7 +595,7 @@ inline Json tableCheckTool(gts::TableStore& tables, const Json& a)
         out.set("report_id", report.id);
         out.set("version", (double)v);
     }
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 // tableRulesFromGraphTool: 导图 → 规则表 column/allowed/hint
@@ -625,7 +625,7 @@ inline Json tableRulesFromGraphTool(gs::Store&       store,
         out.set("id", t.id);
         out.set("version", (double)v);
     }
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 // tableFixEnumsTool: 按 check 报告写回 suggestion
@@ -693,7 +693,7 @@ inline Json tableFixEnumsTool(gts::TableStore& tables, const Json& a)
         out.set("skipped_version", (double)v);
     }
     out.set("skipped_csv", fix.skipped.toCsv());
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 // tableDeriveTool: 派生清单表
@@ -722,7 +722,7 @@ inline Json tableDeriveTool(gts::TableStore& tables, const Json& a)
         out.set("id", t.id);
         out.set("version", (double)v);
     }
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 // tableTransformColumnTool: 列变换（slug）
@@ -753,7 +753,7 @@ inline Json tableTransformColumnTool(gts::TableStore& tables, const Json& a)
                                true);
         out.set("version", (double)v);
     }
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 // tableSampleRowsTool: 追加占位样例行
@@ -785,7 +785,7 @@ inline Json tableSampleRowsTool(gts::TableStore& tables, const Json& a)
                                true);
         out.set("version", (double)v);
     }
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 // tableProposeRowsTool: 结构化对象行写入
@@ -817,7 +817,7 @@ inline Json tableProposeRowsTool(gts::TableStore& tables, const Json& a)
                                true);
         out.set("version", (double)v);
     }
-    return textContent(out.dump(2));
+    return textContent(out.dump());
 }
 
 }  // namespace tabletools

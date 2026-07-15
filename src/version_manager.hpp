@@ -88,24 +88,33 @@ class GraphVersionManager {
     // materializeDraft: 从 Draft 重建工作区 Graph（base + operations）
     Graph materializeDraft(const std::string& graphId)
     {
-        Draft draft = loadDraft(graphId);
-        if (draft.isEmpty()) {
+        Draft unused;
+        return materializeDraftWithDraft(graphId, unused);
+    }
+
+    // materializeDraftWithDraft: 一次读盘同时返回 Graph 与 Draft，避免二次 loadDraft
+    Graph materializeDraftWithDraft(const std::string& graphId, Draft& outDraft)
+    {
+        outDraft = loadDraft(graphId);
+        if (outDraft.isEmpty()) {
             // 无修改，直接返回 HEAD 版本
             std::string err;
             Graph       g;
             store_.load(graphId, g,
-                        draft.baseVersion > 0 ? draft.baseVersion : 0, &err);
+                        outDraft.baseVersion > 0 ? outDraft.baseVersion : 0,
+                        &err);
             return g;
         }
         Graph       base;
         std::string err;
         if (!store_.load(graphId, base,
-                         draft.baseVersion > 0 ? draft.baseVersion : 0, &err)) {
+                         outDraft.baseVersion > 0 ? outDraft.baseVersion : 0,
+                         &err)) {
             // base 不存在，从空图开始
             base    = Graph();
             base.id = graphId;
         }
-        return draft.materialize(base);
+        return outDraft.materialize(base);
     }
 
     // ==============================================================
@@ -634,7 +643,7 @@ class GraphVersionManager {
     void writeHead(const std::string& id, int version)
     {
         makeGraphDir(id);
-        ge::writeFile(headPath(id), std::to_string(version));
+        ge::writeFileAtomic(headPath(id), std::to_string(version));
     }
 };
 

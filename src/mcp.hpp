@@ -70,9 +70,14 @@ inline Json toolDef(const std::string& name,
     return t;
 }
 
-// toolList: 返回服务暴露的全部工具清单（26 个工具）
+// toolList: 返回服务暴露的全部工具清单（进程内缓存，schema 不可变）
 inline Json toolList()
 {
+    static Json cached;
+    static bool ready = false;
+    if (ready)
+        return cached;
+
     Json tools = Json::arr();
 
     // ── 1. graph_create ──────────────────────────────────────
@@ -920,7 +925,9 @@ inline Json toolList()
             p, req));
     }
 
-    return tools;
+    cached = tools;
+    ready  = true;
+    return cached;
 }
 
 // ---- OpenAPI 导出（代码即文档：以 toolList 为唯一 schema 源）----
@@ -1451,7 +1458,7 @@ class ToolRunner {
                 Json out = Json::obj();
                 out.set("status", "rejected");
                 out.set("issues", issuesToJson(issues));
-                return textContent(out.dump(2), true);
+                return textContent(out.dump(), true);
             }
         }
         if (doLayout)
@@ -1470,7 +1477,7 @@ class ToolRunner {
         out.set("edges", (double)g.edges.size());
         if (!issues.empty())
             out.set("warnings", issuesToJson(issues));
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // convert: 一次性格式转换
@@ -1478,9 +1485,18 @@ class ToolRunner {
     {
         Graph g = gp::parseAny(a.str("content"), a.str("format", "auto"));
         ge::ExportResult r = ge::exportGraph(g, a.str("to"));
+        if (r.timedOut)
+            return textContent(r.message, true);
         if (!r.ok)
             return textContent(r.message, true);
-        return textContent(r.content.empty() ? r.message : r.content);
+        std::string text = r.content.empty() ? r.message : r.content;
+        if (r.path.empty() && text.size() > ge::inlineExportMaxBytes())
+            return textContent(
+                "inline export exceeds GRAPHMCP_INLINE_MAX_BYTES (" +
+                    std::to_string(ge::inlineExportMaxBytes()) +
+                    "); provide path= to write file instead",
+                true);
+        return textContent(text);
     }
 
     // exportTool: 从存储导出
@@ -1491,11 +1507,20 @@ class ToolRunner {
         if (!store_.load(a.str("id"), g, (int)a.num("version", 0), &err))
             return textContent(err, true);
         ge::ExportResult r = ge::exportGraph(g, a.str("to"), a.str("path"));
+        if (r.timedOut)
+            return textContent(r.message, true);
         if (!r.ok)
             return textContent(r.message, true);
         std::string text = r.content.empty() ?
                                r.message :
                                (r.path.empty() ? r.content : r.message);
+        if (r.path.empty() && a.str("path").empty() &&
+            text.size() > ge::inlineExportMaxBytes())
+            return textContent(
+                "inline export exceeds GRAPHMCP_INLINE_MAX_BYTES (" +
+                    std::to_string(ge::inlineExportMaxBytes()) +
+                    "); provide path= to write file instead",
+                true);
         return textContent(text);
     }
 
@@ -1555,7 +1580,7 @@ class ToolRunner {
                     (editorPath.empty() ? "opened with system default handler" :
                                           "opened with editor: " + editorPath) :
                     "could not launch automatically; open the target manually");
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // importTool: 重新导入外部编辑后的图文件
@@ -1590,7 +1615,7 @@ class ToolRunner {
                 is.push(ji);
             }
             out.set("issues", is);
-            return textContent(out.dump(2), true);
+            return textContent(out.dump(), true);
         }
         gl::layout(imported);
         int  v   = store_.save(imported, "re-imported after external edit");
@@ -1614,7 +1639,7 @@ class ToolRunner {
         }
         out.set("hint", "use graph_open to edit again or graph_export to "
                         "save the updated diagram");
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // validateTool: 校验（增强：支持 strict 模式）
@@ -1643,7 +1668,7 @@ class ToolRunner {
             out.set("strictFailure", true);
             out.set("warningCount", (double)(issues.size()));
         }
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // list: 列出存储（增强：支持 type/filter + format）
@@ -1679,9 +1704,9 @@ class ToolRunner {
                 if (e.str("type") == filterType)
                     graphs.push(e);
             filtered.set("graphs", graphs);
-            return textContent(filtered.dump(2));
+            return textContent(filtered.dump());
         }
-        return textContent(idx.dump(2));
+        return textContent(idx.dump());
     }
 
     // history: 版本历史（增强：limit + format）
@@ -1721,7 +1746,7 @@ class ToolRunner {
             arr.push(e);
             shown++;
         }
-        return textContent(arr.dump(2));
+        return textContent(arr.dump());
     }
 
     // rollback: 回滚（保持向后兼容）
@@ -1735,7 +1760,7 @@ class ToolRunner {
         out.set("status", "rolled back");
         out.set("restoredFrom", a.num("version"));
         out.set("newVersion", (double)nv);
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // ==========================================================
@@ -1768,13 +1793,13 @@ class ToolRunner {
             out.set("status", "layout applied and saved");
             out.set("version", (double)v);
             out.set("nodes", (double)g.nodes.size());
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         Json out = Json::obj();
         out.set("status", "layout applied (not saved)");
         out.set("nodes", (double)g.nodes.size());
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // deleteGraph: 删除图
@@ -1789,19 +1814,16 @@ class ToolRunner {
         std::string dir = store_.root() + "/" + id;
         ge::removeDirectory(dir);
 
-        // Update index
-        Json idx       = store_.loadIndex();
-        Json newGraphs = Json::arr();
-        for (auto& e : *idx["graphs"].a)
-            if (e.str("id") != id)
-                newGraphs.push(e);
-        idx.set("graphs", newGraphs);
-        ge::writeFile(store_.root() + "/index.json", idx.dump(2));
+        // 持锁更新 index，避免与并发 save 互相覆盖
+        std::string ierr;
+        if (!store_.removeGraphFromIndex(id, &ierr))
+            return textContent(ierr.empty() ? "failed to update index" : ierr,
+                               true);
 
         Json out = Json::obj();
         out.set("status", "deleted");
         out.set("id", id);
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // show: 查看图/节点/边详情
@@ -1847,7 +1869,7 @@ class ToolRunner {
             }
             out.set("incomingEdges", inEdges);
             out.set("outgoingEdges", outEdges);
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         if (!a.str("edge").empty()) {
@@ -1867,7 +1889,7 @@ class ToolRunner {
             out.set("style", e->style);
             out.set("arrow", e->arrow);
             out.set("strokeColor", e->strokeColor);
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         // --path：显示 properties 子树
@@ -1879,7 +1901,7 @@ class ToolRunner {
             Json out = Json::obj();
             out.set("path", a.str("path"));
             out.set("value", *sub);
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         // 全图摘要
@@ -1921,7 +1943,7 @@ class ToolRunner {
             edgesArr.push(ej);
         }
         out.set("edgeList", edgesArr);
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // update: Cursor 更新操作
@@ -1929,11 +1951,13 @@ class ToolRunner {
     Json property(const Json& a)
     {
         std::string id = a.str("id");
-        Graph       g  = vm_.materializeDraft(id);
+        gv::Draft   draft;
+        Graph       g = vm_.materializeDraftWithDraft(id, draft);
         if (g.id.empty()) {
             std::string err;
             if (!store_.load(id, g, 0, &err))
                 return textContent(err, true);
+            draft = vm_.loadDraft(id);
         }
 
         std::string action = a.str("action", "get");
@@ -1941,8 +1965,7 @@ class ToolRunner {
         if (path.empty())
             return textContent("'path' parameter is required", true);
 
-        gv::Draft draft = vm_.loadDraft(id);
-        Json      out   = Json::obj();
+        Json out = Json::obj();
 
         if (action == "get") {
             const Json* val = gj::resolve(g.properties, path);
@@ -1955,7 +1978,7 @@ class ToolRunner {
             else if (val->isArr()) { out.set("value", val->dump(2)); out.set("type", "array"); }
             else if (val->isObj()) { out.set("value", val->dump(2)); out.set("type", "object"); }
             else out.set("type", "null");
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         if (action == "set") {
@@ -1995,7 +2018,7 @@ class ToolRunner {
             out.set("oldValue", oldStr);
             out.set("draftOperations", (double)draft.operations.size());
             vm_.saveDraft(id, draft);
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         if (action == "insert") {
@@ -2027,7 +2050,7 @@ class ToolRunner {
             out.set("path", path);
             out.set("draftOperations", (double)draft.operations.size());
             vm_.saveDraft(id, draft);
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         if (action == "delete") {
@@ -2051,7 +2074,7 @@ class ToolRunner {
             out.set("path", path);
             out.set("draftOperations", (double)draft.operations.size());
             vm_.saveDraft(id, draft);
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         return textContent("unknown action: " + action + ". Use get|set|insert|delete.", true);
@@ -2060,15 +2083,16 @@ class ToolRunner {
     Json update(const Json& a)
     {
         std::string id = a.str("id");
-        Graph       g  = vm_.materializeDraft(id);
+        gv::Draft   draft;
+        Graph       g = vm_.materializeDraftWithDraft(id, draft);
         if (g.id.empty()) {
             std::string err;
             if (!store_.load(id, g, 0, &err))
                 return textContent(err, true);
+            draft = vm_.loadDraft(id);
         }
 
-        gv::Draft draft = vm_.loadDraft(id);
-        auto      pairs = parseSetPairs(a);
+        auto pairs = parseSetPairs(a);
         if (pairs.empty())
             return textContent("no set pairs provided", true);
 
@@ -2108,21 +2132,22 @@ class ToolRunner {
         out.set("status", "updated");
         out.set("elementsAffected", (double)updated);
         out.set("draftOperations", (double)draft.operationCount());
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // insert: Cursor 插入操作
     Json insert(const Json& a)
     {
         std::string id = a.str("id");
-        Graph       g  = vm_.materializeDraft(id);
+        gv::Draft   draft;
+        Graph       g = vm_.materializeDraftWithDraft(id, draft);
         if (g.id.empty()) {
             std::string err;
             if (!store_.load(id, g, 0, &err))
                 return textContent(err, true);
+            draft = vm_.loadDraft(id);
         }
 
-        gv::Draft   draft   = vm_.loadDraft(id);
         std::string element = a.str("element", "node");
 
         Json out = Json::obj();
@@ -2178,22 +2203,23 @@ class ToolRunner {
 
         vm_.saveDraft(id, draft);
         out.set("draftOperations", (double)draft.operationCount());
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // deleteElement: Cursor 删除操作
     Json deleteElement(const Json& a)
     {
         std::string id = a.str("id");
-        Graph       g  = vm_.materializeDraft(id);
+        gv::Draft   draft;
+        Graph       g = vm_.materializeDraftWithDraft(id, draft);
         if (g.id.empty()) {
             std::string err;
             if (!store_.load(id, g, 0, &err))
                 return textContent(err, true);
+            draft = vm_.loadDraft(id);
         }
 
-        gv::Draft draft = vm_.loadDraft(id);
-        Json      out   = Json::obj();
+        Json out = Json::obj();
 
         if (!a.str("node").empty()) {
             if (!gv::deleteNode(g, &draft, a.str("node")))
@@ -2226,7 +2252,7 @@ class ToolRunner {
 
         vm_.saveDraft(id, draft);
         out.set("draftOperations", (double)draft.operationCount());
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // status: 版本状态
@@ -2247,7 +2273,7 @@ class ToolRunner {
         out.set("dirty", st.dirty);
         out.set("status",
                 st.dirty ? "uncommitted changes" : "working tree clean");
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // draft: Draft 查看/重置/状态对比
@@ -2257,13 +2283,13 @@ class ToolRunner {
         std::string action = a.str("action", "show");
 
         if (action == "status") {
-            return textContent(vm_.draftStatus(id).dump(2));
+            return textContent(vm_.draftStatus(id).dump());
         }
         if (action == "reset") {
             vm_.resetDraft(id);
             Json out = Json::obj();
             out.set("status", "draft discarded");
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         // show
@@ -2281,7 +2307,7 @@ class ToolRunner {
             ops.push(op);
         }
         out.set("operations", ops);
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // stage: Stage 管理
@@ -2294,7 +2320,7 @@ class ToolRunner {
             vm_.clearStage(id);
             Json out = Json::obj();
             out.set("status", "stage cleared");
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         if (action == "show") {
@@ -2309,7 +2335,7 @@ class ToolRunner {
                 indices.push(Json((double)idx));
             out.set("stagedOpIndices", indices);
             out.set("count", (double)s.stagedOpIndices.size());
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         // add
@@ -2339,7 +2365,7 @@ class ToolRunner {
         Json out = Json::obj();
         out.set("status", "staged");
         out.set("count", (double)s.stagedOpIndices.size());
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // commit: 提交
@@ -2365,7 +2391,7 @@ class ToolRunner {
         out.set("status", "committed");
         out.set("version", (double)nv);
         out.set("message", msg);
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // diff: 版本对比
@@ -2398,7 +2424,7 @@ class ToolRunner {
             out.set("added", (double)nAdd);
             out.set("modified", (double)nMod);
             out.set("deleted", (double)nDel);
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         // unified format
@@ -2439,7 +2465,7 @@ class ToolRunner {
         Json out = Json::obj();
         out.set("status", "checkout complete");
         out.set("headVersion", (double)ver);
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // ── 游标磁盘持久化工具（基于 gv::openCursor 等函数）─────
@@ -2450,7 +2476,7 @@ class ToolRunner {
             return textContent("cursor: 'id' is required", true);
         Json        r   = gv::openCursor(store_, id, a.str("target", "nodes"));
         const Json* err = r.find("error");
-        return textContent(err ? err->s : r.dump(2), err != nullptr);
+        return textContent(err ? err->s : r.dump(), err != nullptr);
     }
 
     Json cursorGet(const Json& a)
@@ -2460,7 +2486,7 @@ class ToolRunner {
             return textContent("cursor: 'id' and 'cursor' are required", true);
         Json        r   = gv::getCursor(store_, id, cid);
         const Json* err = r.find("error");
-        return textContent(err ? err->s : r.dump(2), err != nullptr);
+        return textContent(err ? err->s : r.dump(), err != nullptr);
     }
 
     Json cursorMove(const Json& a)
@@ -2471,7 +2497,7 @@ class ToolRunner {
             return textContent("cursor: 'id' and 'cursor' are required", true);
         Json        r   = gv::moveCursor(store_, id, cid, delta);
         const Json* err = r.find("error");
-        return textContent(err ? err->s : r.dump(2), err != nullptr);
+        return textContent(err ? err->s : r.dump(), err != nullptr);
     }
 
     Json cursorClose(const Json& a)
@@ -2481,7 +2507,7 @@ class ToolRunner {
             return textContent("cursor: 'id' and 'cursor' are required", true);
         Json        r   = gv::closeCursor(store_, id, cid);
         const Json* err = r.find("error");
-        return textContent(err ? err->s : r.dump(2), err != nullptr);
+        return textContent(err ? err->s : r.dump(), err != nullptr);
     }
 
     // ==========================================================

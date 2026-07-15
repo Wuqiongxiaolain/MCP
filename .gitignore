@@ -30,3 +30,10 @@ scripts/export-example-testout.ps1
 # 本地专属，不纳入版本控制
 .mcp.json
 traffic-light-mindmap.svg
+
+# 临时测试产物（SVG/DrawIO/Mermaid 导出测试）
+*.test.svg
+test-*.svg
+test-*.drawio
+test-*.mmd
+*.zip

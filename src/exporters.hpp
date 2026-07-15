@@ -2507,29 +2507,58 @@ inline std::string toSVG(Graph g)
             if (n.id == e.from || n.id == e.to)
                 continue;
             if (lineHitsRect(x1, y1, x2, y2,
-                             n.x - 4, n.y - 4, n.w + 8, n.h + 8)) {
+                             n.x - 6, n.y - 6, n.w + 12, n.h + 12)) {
                 blocked = true;
-                double safeX = (x1 + x2) / 2;
-                double safeY = (y1 + y2) / 2;
+                // 安全区：源和目标之间的层间空隙
+                double gapTop    = std::min(a->y + a->h, b->y + b->h);
+                double gapBottom = std::max(a->y, b->y);
+                double safeY = (gapTop + gapBottom) / 2;
+                if (safeY < y1 + 10 && safeY > y1 - 10) safeY = y1 + 40;
+                if (safeY < y2 + 10 && safeY > y2 - 10) safeY = y2 - 40;
                 if (std::abs(x2 - x1) < 8) {
-                    b1x = (safeX < n.x + n.w / 2)
-                              ? n.x - 16 : n.x + n.w + 16;
-                    b1y = y1;
-                    b2x = b1x;
-                    b2y = y2;
+                    // 近垂直线→走阻挡节点外侧, 限制不超出图边界
+                    double avoidX = (x1 < n.x + n.w / 2)
+                        ? n.x - 24 : n.x + n.w + 24;
+                    if (avoidX < 40) avoidX = n.x + n.w + 24;
+                    b1x = avoidX; b1y = y1;
+                    b2x = avoidX; b2y = y2;
                 } else if (std::abs(y2 - y1) < 8) {
-                    b1x = x1;
-                    b1y = (safeY < n.y + n.h / 2)
-                              ? n.y - 16 : n.y + n.h + 16;
-                    b2x = x2;
-                    b2y = b1y;
+                    double avoidY = (y1 < n.y + n.h / 2)
+                        ? n.y - 24 : n.y + n.h + 24;
+                    if (avoidY < 40) avoidY = n.y + n.h + 24;
+                    b1x = x1; b1y = avoidY;
+                    b2x = x2; b2y = avoidY;
                 } else {
-                    b1x = x1;
-                    b1y = safeY;
-                    b2x = x2;
-                    b2y = safeY;
+                    b1x = x1; b1y = safeY;
+                    b2x = x2; b2y = safeY;
                 }
                 break;
+            }
+        }
+
+        // 二次验证：绕行后3条线段是否仍有碰撞
+        if (blocked) {
+            auto segBlocked = [&](double sx, double sy, double ex, double ey) {
+                for (auto& n : g.nodes) {
+                    if (n.id == e.from || n.id == e.to) continue;
+                    if (lineHitsRect(sx, sy, ex, ey,
+                                     n.x - 8, n.y - 8, n.w + 16, n.h + 16))
+                        return true;
+                }
+                return false;
+            };
+            for (int retry = 0; retry < 3; retry++) {
+                bool s1 = segBlocked(x1, y1, b1x, b1y);
+                bool s2 = segBlocked(b1x, b1y, b2x, b2y);
+                bool s3 = segBlocked(b2x, b2y, x2, y2);
+                if (!s1 && !s2 && !s3) break;
+                double push = 20.0;
+                if (s1) { if (std::abs(b1x - x1) > std::abs(b1y - y1)) { b1x += (b1x > x1 ? push : -push); if (b1x < 20) b1x = 20; }
+                          else b1y += (b1y > y1 ? push : -push); }
+                if (s2) { if (std::abs(b2x - b1x) > std::abs(b2y - b1y)) { b1x += push/2; b2x += push/2; }
+                          else { b1y += push/2; b2y += push/2; } }
+                if (s3) { if (std::abs(x2 - b2x) > std::abs(y2 - b2y)) { b2x += (b2x > x2 ? push : -push); if (b2x < 20) b2x = 20; }
+                          else b2y += (b2y > y2 ? push : -push); }
             }
         }
 

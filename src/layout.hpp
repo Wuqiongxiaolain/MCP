@@ -972,7 +972,7 @@ inline void layout(Graph& g, bool force = false,
     layoutPlaceGroups(g);
     // 最终复查：全量节点重叠检测修复
     layoutFinalOverlapCheck(g, 60.0);
-    // 坐标居中 + 宽高比平衡
+    // 宽高比平衡：过宽时纵向堆叠 group，过窄时水平扩展
     if (!g.nodes.empty()) {
         double minX = 1e18, minY = 1e18, maxX = -1e18, maxY = -1e18;
         for (auto& n : g.nodes) {
@@ -980,11 +980,54 @@ inline void layout(Graph& g, bool force = false,
             maxX = std::max(maxX, n.x + n.w); maxY = std::max(maxY, n.y + n.h);
         }
         double w = maxX - minX, h = maxY - minY;
-        if (h > 0 && w / h < 0.5) {
+
+        if (h > 0 && w / h > 3.0) {
+            // 过宽 → 收集根 group，纵向堆叠
+            std::vector<gm::Node*> rootGrps;
+            std::set<std::string> allGrps;
+            for (auto& n : g.nodes)
+                if (n.shape == "group") allGrps.insert(n.id);
+            for (auto& n : g.nodes)
+                if (n.shape == "group" &&
+                    (n.parent.empty() || !allGrps.count(n.parent)))
+                    rootGrps.push_back(&n);
+            if (rootGrps.size() > 1) {
+                std::sort(rootGrps.begin(), rootGrps.end(),
+                    [](gm::Node* a, gm::Node* b) { return a->x < b->x; });
+                int cols = (int)std::ceil(std::sqrt((double)rootGrps.size()));
+                double colW = 0;
+                for (auto* g : rootGrps) colW = std::max(colW, g->w);
+                for (int i = 0; i < (int)rootGrps.size(); i++) {
+                    int cr = i / cols, cc = i % cols;
+                    double dx = minX + cc * (colW + 60) - rootGrps[i]->x;
+                    double dy = minY + cr * (h + 40) - rootGrps[i]->y;
+                    if (dx != 0 || dy != 0) {
+                        // 递归位移整个 group 子树
+                        for (auto& nd : g.nodes) {
+                            // 检查 nd 是否是 rootGrps[i] 的后代
+                            std::string p = nd.parent;
+                            bool isDesc = (p == rootGrps[i]->id);
+                            while (!isDesc && !p.empty()) {
+                                gm::Node* pn = g.findNode(p);
+                                if (!pn) break;
+                                if (pn->parent == rootGrps[i]->id)
+                                    { isDesc = true; break; }
+                                p = pn->parent;
+                            }
+                            if (isDesc || nd.id == rootGrps[i]->id)
+                                { nd.x += dx; nd.y += dy; }
+                        }
+                    }
+                }
+            }
+        } else if (h > 0 && w / h < 0.5) {
+            // 过窄 → 水平扩展
             double scale = 0.5 * h / std::max(w, 1.0);
             double cx = (minX + maxX) / 2;
             for (auto& n : g.nodes) n.x = cx + (n.x - cx) * scale;
         }
+
+        // 重新居中
         minX = 1e18; minY = 1e18; maxX = -1e18; maxY = -1e18;
         for (auto& n : g.nodes) {
             minX = std::min(minX, n.x); minY = std::min(minY, n.y);

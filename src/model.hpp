@@ -18,6 +18,16 @@ using gj::Json;
 // 可选值："flowchart" | "architecture" | "er" | "orgchart" | "mindmap" |
 // "whiteboard"
 
+// Layer: draw.io 图层 —— 同页内节点的垂直分组
+// id 为 draw.io mxCell id，name 为图层展示名
+struct Layer
+{
+    std::string id;
+    std::string name;
+    bool visible = true;
+    bool locked  = false;
+};
+
 // Node: 图中的"节点"实体（命名上 n 表示 node，id 为机器唯一标识，label
 // 为展示名）
 struct Node
@@ -25,8 +35,13 @@ struct Node
     std::string id;
     std::string label;
     std::string shape;  // 节点形状：rect | round | diamond | ellipse | circle |
-                        // stadium | group
+                        // stadium | hexagon | group |
+                        // process | document | cylinder | parallelogram |
+                        // delay | manualInput | display | cloud |
+                        // trapezoid | triangle | step | umlActor | note |
+                        // cube | message
     std::string              parent;  // 层级关系：父节点 id（空字符串表示根层）
+    std::string              layer;   // 所属图层名（空字符串表示默认图层）
     std::string style;  // 遗留/自由样式提示（非颜色；颜色用 fillColor/strokeColor）
     std::string fillColor;    // 填充色 (如 "#eef4ff"；空串用默认)
     std::string strokeColor;  // 描边色 (如 "#4a72b8"；空串用默认)
@@ -52,6 +67,10 @@ struct Edge
     // 序列图 / gitGraph 专用
     int  seqNum  = 0;      // 消息序号
     bool isAsync = false;  // 异步消息（->>）
+
+    // 边标签定位
+    double labelX = 0;  // 标签 X 偏移（相对边中点）
+    double labelY = 0;  // 标签 Y 偏移（相对边中点）
 };
 
 // Graph: 统一图模型容器（命名上 g 常用于 Graph 实例）
@@ -61,9 +80,11 @@ struct Graph
     std::string       name;
     std::string       type = "flowchart";
     std::string       rawMermaid;  // 不支持深度解析的 Mermaid 类型原始文本
-    std::vector<Node> nodes;
-    std::vector<Edge> edges;
-    std::vector<Json> elements;       // 原始白板元素（类似 excalidraw）
+    std::vector<Node>  nodes;
+    std::vector<Edge>  edges;
+    std::vector<Layer> layers;   // 图层列表（draw.io 多图层支持）
+    std::vector<Graph> pages;   // 多页支持（首行为首页，pages 存储附加页）
+    std::vector<Json>  elements;       // 原始白板元素（类似 excalidraw）
     Json files        = Json::obj();  // Excalidraw 顶层 files（image 附件）
     bool laidOut      = false;
     int  edgeCounter_ = 0;  // 自增边 ID 计数器
@@ -151,6 +172,8 @@ struct Graph
             jn.set("shape", n.shape);
             if (!n.parent.empty())
                 jn.set("parent", n.parent);
+            if (!n.layer.empty())
+                jn.set("layer", n.layer);
             if (!n.style.empty())
                 jn.set("style", n.style);
             if (!n.fillColor.empty())
@@ -180,7 +203,7 @@ struct Graph
                 je.set("label", e.label);
             je.set("style", e.style);
             je.set("arrow", e.arrow);
-            // 扩展箭头信息：仅当与默认值不同时才序列化，减少 JSON 冗余
+            // 扩展箭头信息：仅当与默认值不同时才序列化
             if (e.headStart != "none")
                 je.set("headStart", e.headStart);
             if (e.headEnd != "arrow")
@@ -191,9 +214,31 @@ struct Graph
                 je.set("isAsync", true);
             if (!e.strokeColor.empty())
                 je.set("strokeColor", e.strokeColor);
+            if (e.labelX != 0 || e.labelY != 0) {
+                je.set("labelX", e.labelX);
+                je.set("labelY", e.labelY);
+            }
             es.push(je);
         }
         j.set("edges", es);
+        if (!layers.empty()) {
+            Json ls = Json::arr();
+            for (auto& l : layers) {
+                Json jl = Json::obj();
+                jl.set("id", l.id);
+                jl.set("name", l.name);
+                jl.set("visible", l.visible);
+                jl.set("locked", l.locked);
+                ls.push(jl);
+            }
+            j.set("layers", ls);
+        }
+        if (!pages.empty()) {
+            Json ps = Json::arr();
+            for (auto& p : pages)
+                ps.push(p.toJson());
+            j.set("pages", ps);
+        }
         if (!elements.empty()) {
             Json els = Json::arr();
             for (auto& el : elements)
@@ -231,6 +276,7 @@ struct Graph
                     n.label       = jn.str("label");
                     n.shape       = jn.str("shape", "rect");
                     n.parent      = jn.str("parent");
+                    n.layer       = jn.str("layer");
                     n.style       = jn.str("style");
                     n.fillColor   = jn.str("fillColor");
                     n.strokeColor = jn.str("strokeColor");
@@ -256,17 +302,47 @@ struct Graph
                     e.to    = je.str("to");
                     e.label = je.str("label");
                     e.style = je.str("style", "solid");
-                    e.arrow = je.str("arrow", "arrow");
-                    // 扩展箭头信息：读新字段，若不存在则从 arrow 推导
-                    e.headStart = je.str(
-                        "headStart", (e.arrow == "both") ? "arrow" : "none");
-                    e.headEnd = je.str("headEnd",
-                                       (e.arrow == "none") ? "none" : "arrow");
+                    // 读 headStart/headEnd（优先），回退到旧 arrow 字段推导
+                    e.headStart = je.str("headStart", "");
+                    e.headEnd   = je.str("headEnd", "");
+                    if (e.headStart.empty() && e.headEnd.empty()) {
+                        // 仅含旧 arrow 字段，从 arrow 推导箭头
+                        std::string ar = je.str("arrow", "arrow");
+                        e.headStart = (ar == "both") ? "arrow" : "none";
+                        e.headEnd   = (ar == "none") ? "none" : "arrow";
+                        e.arrow     = ar;
+                    } else {
+                        // 已有 headStart/headEnd，从中计算兼容 arrow 字段
+                        if (e.headStart == "none" && e.headEnd == "none")
+                            e.arrow = "none";
+                        else if (e.headStart != "none" && e.headEnd != "none")
+                            e.arrow = "both";
+                        else
+                            e.arrow = "arrow";
+                    }
                     e.seqNum      = (int)je.num("seqNum", 0);
                     e.isAsync     = je.boolean("isAsync", false);
                     e.strokeColor = je.str("strokeColor");
+                    e.labelX      = je.num("labelX");
+                    e.labelY      = je.num("labelY");
                     g.edges.push_back(e);
                 }
+        }
+        if (const Json* ls = j.find("layers")) {
+            if (ls->isArr())
+                for (auto& jl : *ls->a) {
+                    Layer l;
+                    l.id      = jl.str("id");
+                    l.name    = jl.str("name");
+                    l.visible = jl.boolean("visible", true);
+                    l.locked  = jl.boolean("locked", false);
+                    g.layers.push_back(l);
+                }
+        }
+        if (const Json* ps = j.find("pages")) {
+            if (ps->isArr())
+                for (auto& jp : *ps->a)
+                    g.pages.push_back(Graph::fromJson(jp));
         }
         if (const Json* els = j.find("elements")) {
             if (els->isArr())
@@ -286,6 +362,15 @@ struct Graph
     }
 };
 
+// stripUtf8Bom: 去掉文本开头的 UTF-8 BOM（EF BB BF），避免关键字识别失败
+inline std::string stripUtf8Bom(std::string s)
+{
+    if (s.size() >= 3 && (unsigned char)s[0] == 0xEF &&
+        (unsigned char)s[1] == 0xBB && (unsigned char)s[2] == 0xBF)
+        return s.substr(3);
+    return s;
+}
+
 // ---- 小型通用工具函数 ----
 
 // trim: 去掉字符串首尾空白；命名直观表示"裁剪空白"
@@ -298,23 +383,12 @@ inline std::string trim(const std::string& s)
     return s.substr(b, e - b + 1);
 }
 
-// stripUtf8Bom: 去掉文本开头的 UTF-8 BOM（EF BB BF），避免关键字识别失败
-inline std::string stripUtf8Bom(std::string s)
-{
-    if (s.size() >= 3 && (unsigned char)s[0] == 0xEF &&
-        (unsigned char)s[1] == 0xBB && (unsigned char)s[2] == 0xBF)
-        s.erase(0, 3);
-    return s;
-}
-
 // splitLines: 按行拆分文本（兼容 \r\n），供解析器逐行处理
 inline std::vector<std::string> splitLines(const std::string& text)
 {
-    // 关键步骤：先剥 BOM -> 再按换行切分
-    std::string              src = stripUtf8Bom(text);
     std::vector<std::string> lines;
     std::string              cur;
-    for (char c : src) {
+    for (char c : text) {
         if (c == '\n') {
             lines.push_back(cur);
             cur.clear();
@@ -346,15 +420,14 @@ inline std::string genId(const std::string& prefix = "g")
 {
     static const char* al = "0123456789abcdefghijklmnopqrstuvwxyz";
     // 线程安全的随机引擎，以 time + rd 混合播种
-    static std::mt19937                       rng([]() {
+    static std::mt19937 rng([]() {
         std::random_device rd;
-        unsigned           seed = (unsigned)time(nullptr);
-        for (int i = 0; i < 4; i++)
-            seed ^= (unsigned)rd() << (i * 8);
+        unsigned seed = (unsigned)time(nullptr);
+        for (int i = 0; i < 4; i++) seed ^= (unsigned)rd() << (i * 8);
         return seed;
     }());
     static std::uniform_int_distribution<int> dist(0, 35);
-    unsigned long long v = (unsigned long long)time(nullptr);
+    unsigned long long v  = (unsigned long long)time(nullptr);
     std::string        s;
     while (v) {
         s += al[v % 36];
@@ -383,7 +456,15 @@ inline void defaultSize(Node& n)
         }
     double perChar = wide ? 14.0 : 8.5;
     n.w            = std::max(100.0, cps * perChar + 32.0);
-    n.h            = (n.shape == "diamond") ? 60.0 : 44.0;
+    n.h = 44.0;
+    if (n.shape == "diamond")
+        n.h = 60.0;
+    else if (n.shape == "cylinder")
+        n.h = 60.0;
+    else if (n.shape == "umlActor")
+        n.h = 80.0;
+    else if (n.shape == "note")
+        n.h = 50.0;
     if (n.shape == "circle") {
         n.w = std::max(n.w, n.h);
         n.h = n.w;

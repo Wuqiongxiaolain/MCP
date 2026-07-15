@@ -148,8 +148,8 @@ def main():
                     else ""
                 )
                 f.write(
-                    f"| {name} | {bl_val:.2f}{bl['unit']} | "
-                    f"{cur_val:.2f}{cur['unit']} | {emoji} {ratio:+.0f}% |\n"
+                    f"| {name} | {bl['value']:.2f}{bl['unit']} | "
+                    f"{cur['value']:.2f}{cur['unit']} | {emoji} {ratio:+.0f}% |\n"
                 )
             if missing:
                 f.write(f"\n🆕 新增 {len(missing)} 个指标，无基线数据\n")

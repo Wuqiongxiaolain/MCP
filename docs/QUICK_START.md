@@ -14,7 +14,9 @@
 
 把 `graphmcp.exe` 放到任意目录，比如 `C:\tools\graphmcp.exe`。
 
-> **不需要 clone 整个仓库。** `graphmcp.exe` 是单文件、零依赖、静态编译的，一个 exe 就是完整的 MCP 服务。qui
+> **不需要 clone 整个仓库。** `graphmcp.exe` 是单文件、零依赖、静态编译的，一个 exe 就是完整的 MCP 服务。
+
+> **安装 MCP ≠ 安装 Skill。** 防误用黄金路径已写入 exe 内 `tools/list`。Release 中可选附带 `skills/graphmcp/`，仅对支持 Skill 的宿主为增益；无 Skill 的验收见 [NO_SKILL_HOST_CHECKLIST.md](NO_SKILL_HOST_CHECKLIST.md)。
 
 ---
 

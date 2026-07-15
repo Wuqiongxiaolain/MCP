@@ -23,7 +23,7 @@ HDRS := src/json.hpp src/model.hpp src/parsers.hpp src/layout.hpp \
         src/table_storage.hpp src/table_xml.hpp \
         src/version_types.hpp src/cursor_types.hpp src/version_manager.hpp
 
-.PHONY: all test test-all test-version test-cursor bench bench-ci bench-baseline smoke mcp-smoke table-smoke clean export-testout export-table-examples export-table-collab-examples docs-api
+.PHONY: all test test-all test-version test-cursor bench bench-ci bench-baseline smoke mcp-smoke table-smoke perf-smoke clean export-testout export-table-examples export-table-collab-examples docs-api
 
 all: $(BIN)/graphmcp$(EXE) $(BIN)/graphmcp_tests$(EXE) \
      $(BIN)/graphmcp_version_tests$(EXE) $(BIN)/graphmcp_cursor_tests$(EXE)
@@ -86,6 +86,10 @@ smoke: $(BIN)/graphmcp$(EXE)
 
 mcp-smoke: $(BIN)/graphmcp$(EXE)
 	bash tests/mcp_smoke.sh $(BIN)/graphmcp$(EXE)
+
+# Windows 可用：并发 index 一致性 + commit(all) 冒烟（不依赖 bash）
+perf-smoke: $(BIN)/graphmcp$(EXE)
+	python scripts/mcp_perf_smoke.py $(BIN)/graphmcp$(EXE)
 
 table-smoke: $(BIN)/graphmcp$(EXE)
 	bash tests/table_smoke.sh $(BIN)/graphmcp$(EXE)

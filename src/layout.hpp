@@ -619,6 +619,43 @@ inline void layoutLayered(Graph& g)
         }
     }
 
+    // ---- 边标签位置：从路由路径中选最长直段，中点 + 垂直偏移 ----
+    for (auto& e : g.edges) {
+        if (e.label.empty()) continue;
+        const Node* src = g.findNode(e.from);
+        const Node* dst = g.findNode(e.to);
+        if (!src || !dst) continue;
+
+        // 构建完整路径：source 中心 → waypoints... → target 中心
+        std::vector<std::pair<double, double>> path;
+        path.push_back({src->x + src->w / 2.0, src->y + src->h / 2.0});
+        for (auto& wp : e.waypoints)
+            path.push_back(wp);
+        path.push_back({dst->x + dst->w / 2.0, dst->y + dst->h / 2.0});
+
+        // 找最长直段
+        size_t bestSeg = 0;
+        double bestLen = 0;
+        for (size_t i = 1; i < path.size(); i++) {
+            double dx = path[i].first - path[i - 1].first;
+            double dy = path[i].second - path[i - 1].second;
+            double len = std::sqrt(dx * dx + dy * dy);
+            if (len > bestLen) { bestLen = len; bestSeg = i; }
+        }
+        // 最长段中点
+        double mx = (path[bestSeg].first + path[bestSeg - 1].first) / 2.0;
+        double my = (path[bestSeg].second + path[bestSeg - 1].second) / 2.0;
+        // 垂直偏移（优先上方，若水平段则偏左）
+        double dx = path[bestSeg].first - path[bestSeg - 1].first;
+        double dy = path[bestSeg].second - path[bestSeg - 1].second;
+        double len = std::sqrt(dx * dx + dy * dy);
+        if (len < 1e-6) { dx = 1.0; dy = 0.0; len = 1.0; }
+        double perpX = -dy / len * 12.0;  // 逆时针旋转 90° × 12px
+        double perpY =  dx / len * 12.0;
+        e.labelX = mx + perpX;
+        e.labelY = my + perpY;
+    }
+
     // 清理：从 byRank 中踢掉虚拟节点（group 回填等步骤不应该看到它们）
     for (int r = 0; r <= maxRank; r++) {
         auto& row = byRank[r];

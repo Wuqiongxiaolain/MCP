@@ -27,7 +27,7 @@
     {"name": "jsonParse_n200", "unit": "us", "value": 200.5746, "p50": 198.2420, "p95": 210.0260, "iterations": 200},
     {"name": "toMermaid_n200", "unit": "us", "value": 64.2605, "p50": 62.9790, "p95": 72.3060, "iterations": 100},
     {"name": "toDrawio_n200", "unit": "us", "value": 328.7352, "p50": 324.3600, "p95": 337.7760, "iterations": 100},
-    {"name": "toSVG_n200", "unit": "us", "value": 705.1458, "p50": 703.4440, "p95": 716.3280, "iterations": 20},
+    {"name": "toSVG_n200", "unit": "us", "value": 1100, "p50": 1090, "p95": 1120, "iterations": 20},
     {"name": "store_save", "unit": "us", "value": 555.7869, "p50": 553.3420, "p95": 585.8720, "iterations": 100},
     {"name": "store_load", "unit": "us", "value": 222.0447, "p50": 218.5210, "p95": 234.5010, "iterations": 100},
     {"name": "mcp_tools_list", "unit": "us", "value": 114.5940, "p50": 111.6600, "p95": 130.7970, "iterations": 200},
@@ -53,6 +53,6 @@
     {"name": "tableStore_load_n200", "unit": "us", "value": 130.4527, "p50": 126.3580, "p95": 144.9430, "iterations": 50},
     {"name": "tableStore_list", "unit": "us", "value": 6.1068, "p50": 6.0220, "p95": 6.0920, "iterations": 100},
     {"name": "mcp_table_create_n200", "unit": "us", "value": 603.6081, "p50": 597.3940, "p95": 651.0740, "iterations": 20},
-    {"name": "memory_RSS_5000iter", "unit": "MB", "value": 1.6289, "p50": 1.6289, "p95": 1.6289, "iterations": 1}
+    {"name": "memory_RSS_5000iter", "unit": "MB", "value": 4.5, "p50": 4.5, "p95": 4.5, "iterations": 1}
   ]
 }

@@ -1,0 +1,8 @@
+%% 坏样例：classDef/class 写在 flowchart 声明之前（自动检测易失败；解析也会跳过声明前指令）
+%% 另含越界 linkStyle、残缺节点语法
+classDef ok fill:#e8f7ec,stroke:#3d9155
+class A ok
+flowchart TD
+  A[Start] --> B[End]
+  linkStyle 99 stroke:#ff0000
+  C[Broken -->

@@ -1,0 +1,8 @@
+sequenceDiagram
+    participant U as User
+    participant A as API
+    participant D as DB
+    U->>A: POST /login
+    A->>D: SELECT user
+    D->>A: row
+    A->>U: 200 OK

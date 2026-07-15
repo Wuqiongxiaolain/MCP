@@ -25,7 +25,15 @@ inline std::vector<Issue> validate(const Graph& g)
     auto err  = [&](const std::string& m) { issues.push_back({"error", m}); };
     auto warn = [&](const std::string& m) { issues.push_back({"warning", m}); };
 
-    if (g.nodes.empty() && g.elements.empty())
+    // rawMermaid 透传类型没有可验证的节点/边结构，跳过校验
+    if (!g.rawMermaid.empty())
+        return issues;
+
+    // properties 类型：有类型特定的结构化数据，不要求必须有 nodes
+    bool hasProperties = g.properties.isObj() && g.properties.o &&
+                         !g.properties.o->empty();
+
+    if (g.nodes.empty() && g.elements.empty() && !hasProperties)
         err("graph has no nodes or whiteboard elements");
 
     std::set<std::string> ids;
@@ -46,6 +54,9 @@ inline std::vector<Issue> validate(const Graph& g)
                 endpointIds.insert(eid);
         }
     }
+    // 状态图起始/终止标记 [*]：解析器不建 Node，但边端点可合法引用
+    if (g.type == "stateDiagram")
+        endpointIds.insert("[*]");
     for (auto& n : g.nodes) {
         if (!n.parent.empty() && !ids.count(n.parent))
             err("node '" + n.id + "' references missing parent '" + n.parent +
@@ -280,6 +291,11 @@ inline void layoutGrid(Graph& g)
 // 关键步骤：补默认尺寸 -> 策略分发 -> 坐标归一化到正区间
 inline void layout(Graph& g, bool force = false,
                    const std::string& strategy = "") {
+    // rawMermaid 透传类型无节点坐标可布局，直接标记完成
+    if (!g.rawMermaid.empty()) {
+        g.laidOut = true;
+        return;
+    }
     if (g.laidOut && !force)
         return;
     for (auto& n : g.nodes)
@@ -294,11 +310,16 @@ inline void layout(Graph& g, bool force = false,
     else if (strategy == "grid")
         layoutGrid(g);
     else if (strategy == "auto" || strategy.empty()) {
-        if (g.type == "mindmap")       layoutTree(g, true);
-        else if (g.type == "orgchart") layoutTree(g, false);
-        else if (g.edges.empty())      layoutGrid(g);
-        else                           layoutLayered(g);
-    } else {
+        if (g.type == "mindmap")
+            layoutTree(g, true);
+        else if (g.type == "orgchart")
+            layoutTree(g, false);
+        else if (g.edges.empty())
+            layoutGrid(g);
+        else
+            layoutLayered(g);
+    }
+    else {
         layoutLayered(g);  // 未知策略回退
     }
     // 坐标归一化到正区间

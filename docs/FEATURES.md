@@ -1,16 +1,35 @@
-# 🎯 graphmcp：一份图，任意格式进出
+# 🎯 graphmcp：一份图（和表），任意格式进出
 
-> latest update: v0.1.1, 2026-07-10
+> latest update: v0.2.0, 2026-07-14  
+> 能力口径以 [`openapi.yaml`](api_reference/openapi.yaml)（由 `toolList()` 生成）与当前源码为准。
 
-不管你手上是 Mermaid、Markdown、CSV、XML、Excalidraw 还是 draw.io，丢给 graphmcp，它都能读懂；不管你要 SVG、PNG、PDF、drawio 还是 Excalidraw，它都能吐给你。中间那道「先转 A 再转 B」的手工活，从此不用你自己干。
+不管你手上是 Mermaid、Markdown、CSV、XML、Excalidraw 还是 draw.io，丢给 graphmcp，它都能读懂；不管你要 SVG、PNG、PDF、drawio 还是 Excalidraw，它都能吐给你。中间那道「先转 A 再转 B」的手工活，从此不用你自己干。**Graph 模型与 Table 模型同为一等公民**：各自独立存取版本，再通过桥接工具协作（不是把业务宽表硬套成边表 CSV，也不是把表塞进图里凑合）。
 
 **你可能正在遇到这些事**：
 
 - ✍️ 写技术文档，Mermaid 流程图想导出成图片贴进去？
 - 🏗️ draw.io 里画好的架构图，想转成 PDF 塞进设计评审文档？
-- 🤖 用 Claude Code 写代码时，想让 AI 顺手把架构图也一起改了，不用自己再开一次 draw.io？
+- 🤖 用 Claude Code 写代码时，想让 AI 顺手把架构图 / 规则表也一起改了？
+- 📋 从思维导图抽校验规则，检查敌人表枚举是否合法，再一键修回去？
 
-一句话：格式的事交给 graphmcp，你只管画。
+一句话：格式与版本的事交给 graphmcp，你只管画（和填表）。
+
+### Graph 与 Table：两个一等公民
+
+系统里有两套并列的一等模型，**不是**「图为主、表为附」：
+
+| 模型 | 地位 | 存什么 | 典型入口 |
+|------|------|--------|----------|
+| **Graph** | 一等公民 | 统一图（节点/边/层级/白板元素/颜色…） | `create` / `graph_*` |
+| **Table** | 一等公民 | 通用业务表（列/行/hint/版本快照…） | `table create` / `table_*` |
+
+二者各自独立入库、独立版本、独立 MCP/CLI 表面；再通过**有损但可编排的协作链路**对接，例如：
+
+- **图 → 表**：`table_from_graph`（skeleton / edgelist 等投影）、`table_rules_from_graph`（导图抽校验规则）
+- **表 → 图**：`graph_from_table`（边表/层级列建图）
+- **表内协同**：`table_check` → `table_fix_enums`、`table_align`、`table_derive` / `propose_rows` 等
+
+因此：边表 CSV 进图、业务宽表进 Table——路径不同，地位对等；协作发生在桥接工具上，而不是把 Table 塞进 Graph 里凑合。
 
 <img src="images/pipeline.svg" alt="graphmcp 数据流水线" width="50%">
 
@@ -33,7 +52,15 @@
 </tr>
 </table>
 
-六种图共用同一套模型，格式之间随便转、不丢信息。
+六种业务图共用统一 Graph 模型（节点 / 边 / 层级 / 白板元素 + 颜色字段），格式之间可往返。
+
+### Mermaid 不只三种
+
+`create from-mermaid` / `graph_create` 已覆盖深解析（含但不限于）：
+
+`flowchart` · `mindmap` · `erDiagram` · `classDiagram` · `stateDiagram` · `sequenceDiagram` · `pie` · `requirementDiagram` · `gitGraph` · `kanban` · `journey` · `timeline` · `quadrantChart` · `xychart-beta` · `architecture-beta` · `packet-beta` …
+
+图级结构化扩展可通过 MCP **`graph_property`** 读写。未知类型会明确报错或走透传策略（见样例库硬失败 / 软失败约定）。
 
 ---
 
@@ -45,81 +72,123 @@ graphmcp export to-svg --id <graph-id> -o output.svg
 graphmcp serve                      # 作为 MCP 服务器接入 AI 客户端
 ```
 
-第一条建图，第二条导出，第三条把它接进 Claude Code / Claude Desktop。完整参数见 [CLI &amp; MCP 指令参考](CLI_MCP_REFERENCE.md)。
+第一条建图，第二条导出，第三条把它接进 Claude Code / Claude Desktop / Cursor。完整参数见 [CLI &amp; MCP 指令参考](CLI_MCP_REFERENCE.md)；机器可读契约见 [OpenAPI](api_reference/openapi.yaml)。
 
 ---
 
 ## 🧰 核心能力：格式，你不用操心
 
-原始诉求就是「别让我在多个工具之间手动倒腾文件」。
-
 ### 📥 丢进去就行，不用管它原来是什么格式
 
-Mermaid、Markdown 大纲、CSV、XML、Excalidraw、draw.io——统统直接丢给 `from-input`，graphmcp 自己认格式、自己猜图类型：给它一个 `.mmd` 就出流程图，给它一个 `.csv` 就出组织架构图。这意味着你再也不用为「先把 A 转成 B、再转成 C」这种破事浪费时间。
+Mermaid、Markdown 大纲、**图用** CSV（边表/层级表）、图 XML、Excalidraw、draw.io——可交给 `from-input` / `graph_create(format=auto)`，自动识别。  
+**业务宽表**请走 `table create`（CSV 或表 XML，根 `<table>`），不要用 `create from-csv`。
 
 <img src="images/cli-create.svg" alt="自动识别格式并入库" width="100%">
 
 ### 📤 一次建模，想要什么格式都有
 
-同一张图，一条命令换一种格式吐出来：drawio、Mermaid、Excalidraw、SVG、PNG、PDF、JSON，外加一条 mermaid.live 在线编辑链接。SVG 永远可靠；PNG/PDF 依赖本机是否装了 inkscape/rsvg/magick 或 Chrome/Edge——都没装也不会失败退出，而是自动帮你留一份 SVG 兜底。
+同一张图，一条命令换格式：`drawio` / `mermaid` / `excalidraw` / `svg` / `png` / `pdf` / `model`（JSON）/ `url`（mermaid.live）。  
+对应 MCP：`graph_convert`、`graph_export`。PNG/PDF 依赖本机转换器或浏览器；都没有也会 SVG 兜底，不硬崩。
 
 <img src="images/cli-export.svg" alt="一图多格式导出" width="100%">
 
 ### 📐 排版不用自己摆
 
-新建的图不需要你手动拖节点——流程图自动分层，思维导图自动长成树，组织架构图自动垂直排布，`layout auto` 会照着图的类型自己选策略。
+`layout auto` 按图类型选策略：分层 / 树水平 / 树垂直 / 网格。MCP：`graph_layout`。
 
 <img src="images/cli-layout.svg" alt="四种自动布局策略" width="100%">
 
 ### 🔄 GUI 里改完，一键存回来
 
-不想在命令行改标签？`edit with-drawio` 直接调起 draw.io，你在 GUI 里随便改，改完 `import` 一声，graphmcp 帮你解析、校验、存成新版本——图库版本 +1，改动全程留痕。
+`edit with-drawio` / `graph_open` 调起外部编辑器，改完 `import` / `graph_import`——校验、存新版本，改动留痕。
 
 <img src="images/cli-import.svg" alt="编辑闭环" width="100%">
 
 ### 🎨 白板转出转入，不失真
 
-Excalidraw 手绘的白板——笔迹、图片、字体——原样往返，不是重新画一遍：原始笔迹数据整份保留，导出时优先吐回原始轨迹，连离线字体都内嵌在文件里，换台电脑照样能看。
+Excalidraw 笔迹、图片、字体可原样往返：`elements` / `files` 保留，SVG 走精确路径，离线字体内嵌。
 
 <img src="images/type-whiteboard.svg" alt="Excalidraw 白板精确导出" height="200">
+
+### 🌈 节点/边颜色：一等字段，多格式往返
+
+模型字段：`fillColor` / `strokeColor`（空=默认）。
+
+- **导入**：Mermaid `classDef` / `class` / `style` / `linkStyle`；draw.io；Excalidraw  
+- **导出**：SVG / draw.io / Excalidraw / Mermaid（`flowchart` 声明后再写颜色指令）  
+- **编辑**：`graph_update` / `graph_insert`（OpenAPI 中均暴露颜色参数）
+
+示例：[`flowchart_colors.mmd`](../examples/example_input/flowchart_colors.mmd)。
 
 ---
 
 ## 🎯 进阶能力：让「改图」这件事可控
 
-多人协作、AI 代改的场景下，「改错了怎么办」比「能不能改」更重要——这组能力就是解决这个。
-
 ### ✅ 图哪里错了，一眼看出来
 
-重复 ID、边指向不存在的节点、层级成环、孤立节点——四条规则一跑就知道。退出码可以直接接 CI：`0` 干净放行，`3` 有硬错误拦截，`--strict` 连警告也当错误处理。
+重复 ID、悬空边、层级环、孤立节点；状态图允许 `[*]` 作为起始/终止端点。CLI 退出码可接 CI；MCP：`graph_validate`。
 
 <img src="images/cli-validate.svg" alt="结构校验与退出码" width="100%">
 
 ### 🗂 每一次修改都能回溯
 
-跟 Git 一个逻辑：改动先进草稿（draft），确认了再暂存（stage）、提交（commit）。谁在什么时候改了什么、旧值新值分别是什么，`diff` 精确到字段级，随时能 `checkout` 回任意历史版本。
+Draft → Stage → Commit；`diff` / `checkout` / `rollback`（另存为新版本）。MCP：`graph_draft` / `graph_stage` / `graph_commit` / `graph_diff` / `graph_checkout` / `graph_rollback` / `graph_history` / `graph_status`。
 
 <img src="images/cli-version.svg" alt="版本控制工作流" width="100%">
 
 ### ✏️ 改一个节点，不用重写整份文件
 
-想改一个标签、挪一个节点位置，不需要把整张图重新描述一遍——直接对着节点/边做增删改，还支持按属性批量改（比如把所有 `shape=rect` 一次性换成 `round`）。
+`graph_update` / `graph_insert` / `graph_delete_element`，支持选择器批量改；图级扩展数据用 `graph_property`。
 
 <img src="images/cli-edit.svg" alt="Draft 模式图编辑" width="100%">
 
 ### 🎯 一个节点、一个节点地推进
 
-游标语义搬到图上：打开、读当前项、走下一个、走上一个、关闭。特别适合 AI 客户端「读一个、判断一个、改一个」地啃一张大图，而不必把整张图都塞进上下文——状态存在磁盘上，跨进程也不丢。
+`graph_cursor_open` / `get` / `move` / `close`：适合 AI「读一项、判一项、改一项」，状态落盘跨进程不丢。
 
 <img src="images/cli-cursor.svg" alt="游标遍历" width="100%">
 
 ---
 
-## 🔌 高级玩法：让 AI 直接帮你改图
+## 📋 通用表（Table）：与 Graph 并列的一等公民
 
-### 🤖 MCP 服务器，39 个工具随时待命
+> OpenAPI：`/table_*`、`/graph_from_table`（表相关工具共 20 个）。Table **不是** Graph 的副产品，而是独立模型 + 独立存储（`graph-store/tables/`），再与 Graph 协作。
 
-`graphmcp serve` 把图能力与**通用 CSV 表**协作能力打包成 39 个 MCP 工具，通过 stdio 接进 Claude Code / Claude Desktop。AI 可读思维导图/规范图，再调用 `table_*` / `table_from_graph` / `graph_from_table` 完成图←→表对接（Excel 非目标；人侧可用 Excel「自文本/CSV」导入导出）。
+| 能力 | CLI / MCP | 说明 |
+|------|-----------|------|
+| 建表 / 导入导出 | `table_create` · `table_import` · `table_export` | CSV、表 XML（`<table>`）、model JSON；**默认不覆盖**已有 id（可 `force`） |
+| 查看与版本 | `table_list` · `table_show` · `table_history` · `table_diff` · `table_rollback` | 表侧同样有版本快照 |
+| 批量改表 | `table_update` | `dry_run` / `detail`；单元格按列名或列索引 |
+| 图 → 表 | `table_from_graph` | skeleton / edgelist 等有损投影 |
+| 表 → 图 | `graph_from_table` | 从边/层级列建图 |
+| 跨表对齐 | `table_align` | 按主键补行 |
+| 规则与修复 | `table_rules_from_graph` · `table_check` · `table_fix_enums` | 导图抽规则 → 校验 → 按 suggestion 修枚举 |
+| 派生与生成 | `table_derive` · `table_transform_column` · `table_sample_rows` · `table_propose_rows` | 如 animation checklist、slug、占位行、结构化提案行 |
+
+人侧可用 Excel「从文本/CSV」互操作；**不实现** Excel 全量 `.xlsx` 读写。样例见 [`examples/README.md`](../examples/README.md)。
+
+---
+
+## 🔌 高级玩法：让 AI 直接帮你改图（和表）
+
+### 🤖 MCP 服务器，46 个工具随时待命
+
+`graphmcp serve` 通过 JSON-RPC 2.0 / stdio 暴露 **46** 个工具（与 OpenAPI `paths` 一一对应）：
+
+| 分组 | 工具（摘要） |
+|------|----------------|
+| 图生命周期 | `graph_create` · `convert` · `export` · `open` · `import` · `validate` · `list` · `delete` · `layout` |
+| 图查看 / 属性 | `graph_show` · `history` · `diff` · `status` · **`graph_property`** |
+| Draft 编辑 | `graph_update` · `insert` · `delete_element` |
+| 版本 | `graph_draft` · `stage` · `commit` · `rollback` · `checkout` |
+| 游标 | `graph_cursor_open` · `get` · `move` · `close` |
+| 通用表 + 图↔表 | 上表全部 `table_*` / `graph_from_table` |
+
+契约从运行中的 `toolList()` 导出，勿手改 OpenAPI：
+
+```bash
+make docs-api    # 或 graphmcp dump-tools --format openapi -o docs/api_reference/openapi.yaml
+```
 
 <img src="images/mcp-handshake.svg" alt="MCP 握手与工具列表" width="100%">
 
@@ -131,12 +200,18 @@ Excalidraw 手绘的白板——笔迹、图片、字体——原样往返，不
 
 ## 🔧 技术规格（供技术选型参考）
 
-> 技术规格版本以根目录 VERSION 为准
+> 版本以根目录 `VERSION` 为准（当前文档对齐 OpenAPI `info.version`）
 
-JSON/XML 解析器、Base64 编解码全部手写，一条 `g++` 命令构建完毕——不需要装 Node.js/npm，不需要 Python 运行时，也不用等 JVM 启动。Windows 下静态链接 libgcc/libstdc++，MCP 客户端用被裁剪的 PATH 拉起它也不会缺 DLL。
+| 项 | 现状 |
+|----|------|
+| 语言 / 产物 | C++17，单可执行文件，零第三方依赖（JSON/XML/Base64 内置） |
+| 入口 | CLI 15 命令族 + `serve`；Windows 可静态链接运行时，利于 MCP 裁剪 PATH |
+| 契约 | OpenAPI 3.0 由 `dump-tools` 生成，CI 防漂移；升版本用 Actions `Bump version` 写回（不自动打 tag） |
+| 性能基线 | CI `bench-ci` 仅比对；按需 Actions `Update bench baseline` 写回 |
+| CD | 推送 `v*` tag 触发多平台 Release；或 CD `workflow_dispatch` 试运行 |
 
 <img src="images/build.svg" alt="零依赖构建与测试" width="100%">
 
 ---
 
-完整命令与参数见 [CLI &amp; MCP 指令参考](CLI_MCP_REFERENCE.md)，设计细节见 [应用运作逻辑](APPLICATION_LOGIC.md)。
+完整命令与参数见 [CLI &amp; MCP 指令参考](CLI_MCP_REFERENCE.md)，设计细节见 [应用运作逻辑](APPLICATION_LOGIC.md)，机器契约见 [OpenAPI](api_reference/openapi.yaml)。

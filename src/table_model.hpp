@@ -25,11 +25,11 @@ using gcsv::splitCsvLine;
 // Table: 通用记录矩阵（列名 + 矩形行）
 struct Table
 {
-    std::string                            id;
-    std::string                            name;
-    bool                                   hasHintRow = false;
-    std::vector<std::string>               columns;
-    std::vector<std::vector<std::string>>  rows;
+    std::string                           id;
+    std::string                           name;
+    bool                                  hasHintRow = false;
+    std::vector<std::string>              columns;
+    std::vector<std::vector<std::string>> rows;
 
     // normalize: 将所有行补齐到 columns.size()
     void normalize()
@@ -172,7 +172,7 @@ struct Table
             lines.pop_back();
         if (lines.empty())
             throw TableError("empty csv input");
-        Table t;
+        Table       t;
         std::string header = lines[0];
         // Excel“CSV UTF-8”常带 BOM，需剥离避免首列匹配失败
         if (header.size() >= 3 && (unsigned char)header[0] == 0xEF &&
@@ -216,8 +216,8 @@ struct Table
     static Table fromJson(const Json& j)
     {
         Table t;
-        t.id   = j.str("id");
-        t.name = j.str("name");
+        t.id         = j.str("id");
+        t.name       = j.str("name");
         t.hasHintRow = j.boolean("hasHintRow", false);
         if (const Json* cols = j.find("columns")) {
             if (cols->isArr())
@@ -249,7 +249,7 @@ inline Json tableDiff(const Table& a, const Table& b)
     out.set("cols_a", (double)a.columns.size());
     out.set("cols_b", (double)b.columns.size());
 
-    Json addedCols = Json::arr();
+    Json addedCols   = Json::arr();
     Json removedCols = Json::arr();
     for (auto& c : b.columns)
         if (a.colIndex(c) < 0)
@@ -260,8 +260,8 @@ inline Json tableDiff(const Table& a, const Table& b)
     out.set("added_columns", addedCols);
     out.set("removed_columns", removedCols);
 
-    int cellChanges = 0;
-    size_t commonRows = std::min(a.rows.size(), b.rows.size());
+    int    cellChanges = 0;
+    size_t commonRows  = std::min(a.rows.size(), b.rows.size());
     for (size_t r = 0; r < commonRows; r++) {
         for (auto& c : a.columns) {
             int ib = b.colIndex(c);

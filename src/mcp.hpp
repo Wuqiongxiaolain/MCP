@@ -70,7 +70,7 @@ inline Json toolDef(const std::string& name,
     return t;
 }
 
-// toolList: 返回服务暴露的全部工具清单（24 个工具）
+// toolList: 返回服务暴露的全部工具清单（26 个工具）
 inline Json toolList()
 {
     Json tools = Json::arr();
@@ -293,12 +293,48 @@ inline Json toolList()
         p.set("id", prop("string", "graph id"));
         p.set("node", prop("string", "show details for a specific node id"));
         p.set("edge", prop("string", "show details for a specific edge id"));
+        p.set("path",
+              prop("string",
+                   "JSON path into properties to show only a subtree, "
+                   "e.g. sequence.participants"));
         Json req = Json::arr();
         req.push(Json("id"));
         tools.push(toolDef("graph_show",
                            "Show graph summary, node details, or edge details. "
                            "Without node/edge params, returns the full "
-                           "structure (nodes + edges list).",
+                           "structure (nodes + edges list). "
+                           "Use --path to show only a properties subtree.",
+                           p, req));
+    }
+
+    // ── 11b. graph_property 🆕 ────────────────────────────────
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "graph id"));
+        p.set("action",
+              prop("string", "action: get|set|insert|delete (default get)"));
+        p.set("path",
+              prop("string",
+                   "JSON path into properties, e.g. "
+                   "sequence.participants[0].label "
+                   "or gantt.sections[0].tasks"));
+        p.set("value",
+              prop("string",
+                   "New value (for set/insert). "
+                   "JSON string, number, or object string."));
+        p.set("index",
+              prop("number", "Insertion index (default: append to end)"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("action"));
+        req.push(Json("path"));
+        tools.push(toolDef("graph_property",
+                           "Read, set, insert, or delete properties sub-data. "
+                           "Use --action get to read a value at a path. "
+                           "Use --action set to write a value at a path. "
+                           "Use --action insert to push into an array. "
+                           "Use --action delete to remove at a path. "
+                           "Changes go to the draft.",
                            p, req));
     }
 
@@ -313,7 +349,10 @@ inline Json toolList()
             prop("string", "batch selector: shape=rect|label~=Step|parent=g1"));
         p.set("set",
               prop("string",
-                   "field=value pairs (can be specified multiple times)"));
+                   "field=value pairs (can be specified multiple times); "
+                   "node fields include label/shape/parent/style/fillColor/"
+                   "strokeColor/x/y/w/h; edge fields include from/to/label/"
+                   "style/arrow/strokeColor"));
         Json req = Json::arr();
         req.push(Json("id"));
         req.push(Json("set"));
@@ -322,7 +361,7 @@ inline Json toolList()
             "Update node/edge attributes via cursor operation. Changes go to "
             "the draft. "
             "Use --node/--edge for single element or --selector for batch. "
-            "Multiple --set flags allowed.",
+            "Multiple --set flags allowed (supports fillColor/strokeColor).",
             p, req));
     }
 
@@ -346,14 +385,20 @@ inline Json toolList()
               prop("string", "edge style: solid|dashed|thick (default solid)"));
         p.set("arrow",
               prop("string", "edge arrow: arrow|none|both (default arrow)"));
+        p.set("fillColor",
+              prop("string", "node fill color (e.g. #eef4ff); empty = default"));
+        p.set("strokeColor",
+              prop("string",
+                   "node/edge stroke color (e.g. #4a72b8); empty = default"));
         Json req = Json::arr();
         req.push(Json("id"));
         req.push(Json("element"));
         tools.push(toolDef(
             "graph_insert",
             "Insert a node or edge into the graph. Changes go to the draft. "
-            "For nodes: specify type, label, position, size, parent. "
-            "For edges: specify from, to, label, style, arrow.",
+            "For nodes: specify type, label, position, size, parent, "
+            "fillColor, strokeColor. "
+            "For edges: specify from, to, label, style, arrow, strokeColor.",
             p, req));
     }
 
@@ -540,15 +585,15 @@ inline Json toolList()
               prop("string",
                    "table source: CSV, table XML (<table>), or model JSON"));
         p.set("format",
-              prop("string",
-                   "csv|xml|model (default csv; not auto)"));
+              prop("string", "csv|xml|model (default csv; not auto)"));
         p.set("name", prop("string", "table display name"));
         p.set("id", prop("string", "optional table id"));
-        p.set("force",
-              prop("boolean",
-                   "allow create to overwrite existing table id (default false; "
-                   "GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT=1|true restores upsert "
-                   "without force)"));
+        p.set(
+            "force",
+            prop("boolean",
+                 "allow create to overwrite existing table id (default false; "
+                 "GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT=1|true restores upsert "
+                 "without force)"));
         p.set("note", prop("string", "version note"));
         Json req = Json::arr();
         req.push(Json("content"));
@@ -560,12 +605,12 @@ inline Json toolList()
     }
     {
         Json p = Json::obj();
-        p.set("id", prop("string", "existing table id to overwrite (optional)"));
+        p.set("id",
+              prop("string", "existing table id to overwrite (optional)"));
         p.set("content",
               prop("string",
                    "table source: CSV, table XML (<table>), or model JSON"));
-        p.set("format",
-              prop("string", "csv|xml|model (default csv)"));
+        p.set("format", prop("string", "csv|xml|model (default csv)"));
         p.set("name", prop("string", "table name"));
         p.set("note", prop("string", "version note"));
         Json req = Json::arr();
@@ -598,7 +643,8 @@ inline Json toolList()
     {
         Json p = Json::obj();
         p.set("id", prop("string", "table id"));
-        p.set("limit", prop("number", "max data rows to include (default all)"));
+        p.set("limit",
+              prop("number", "max data rows to include (default all)"));
         p.set("version", prop("number", "version (default latest)"));
         Json req = Json::arr();
         req.push(Json("id"));
@@ -649,12 +695,20 @@ inline Json toolList()
               prop("string", "JSON array of {name,default?} objects"));
         p.set("set_column_values",
               prop("string", "JSON {column, values:[...]} fill column"));
+        p.set("dry_run",
+              prop("boolean",
+                   "if true, compute changes without saving (default false)"));
+        p.set("detail",
+              prop("boolean",
+                   "if true, include per-cell before/after in details "
+                   "(default false)"));
         Json req = Json::arr();
         req.push(Json("id"));
         tools.push(toolDef(
             "table_update",
             "Apply batch patches to a table and save a new version; returns "
-            "an audit summary of changes.",
+            "an audit summary of changes. Use dry_run to preview; detail for "
+            "per-cell before/after.",
             p, req));
     }
     {
@@ -678,10 +732,9 @@ inline Json toolList()
     {
         Json p = Json::obj();
         p.set("graph_id", prop("string", "source graph id"));
-        p.set("mode",
-              prop("string",
-                   "skeleton|edgelist|hierarchylist|nodelist (default "
-                   "skeleton)"));
+        p.set("mode", prop("string",
+                           "skeleton|edgelist|hierarchylist|nodelist (default "
+                           "skeleton)"));
         p.set("with_hint_row",
               prop("boolean", "skeleton: add enum/hint second row"));
         p.set("name", prop("string", "output table name"));
@@ -692,18 +745,19 @@ inline Json toolList()
                    "include hint)"));
         Json req = Json::arr();
         req.push(Json("graph_id"));
-        tools.push(toolDef(
-            "table_from_graph",
-            "Lossy projection from graph to table (skeleton/edgelist/"
-            "hierarchylist/nodelist).",
-            p, req));
+        tools.push(
+            toolDef("table_from_graph",
+                    "Lossy projection from graph to table (skeleton/edgelist/"
+                    "hierarchylist/nodelist).",
+                    p, req));
     }
     {
         Json p = Json::obj();
         p.set("table_id", prop("string", "source table id"));
-        p.set("content",
-              prop("string",
-                   "optional CSV / table XML / model JSON instead of table_id"));
+        p.set(
+            "content",
+            prop("string",
+                 "optional CSV / table XML / model JSON instead of table_id"));
         p.set("format",
               prop("string", "csv|xml|model for content (default csv)"));
         p.set("from_col", prop("string", "edge list from column"));
@@ -746,11 +800,12 @@ inline Json toolList()
         p.set("rules_id", prop("string", "optional rules table id "
                                          "(columns: column/field, allowed)"));
         p.set("save", prop("boolean", "save report as a new table"));
-        p.set("ignore_hint_row",
-              prop("boolean",
-                   "skip first row when target.hasHintRow (default true if "
-                   "target has hint row; GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1|true "
-                   "forces default false)"));
+        p.set(
+            "ignore_hint_row",
+            prop("boolean",
+                 "skip first row when target.hasHintRow (default true if "
+                 "target has hint row; GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1|true "
+                 "forces default false)"));
         p.set("name", prop("string", "report table name"));
         Json req = Json::arr();
         req.push(Json("id"));
@@ -758,6 +813,110 @@ inline Json toolList()
             "table_check",
             "Validate table cells against allowed enums; returns a violation "
             "report table (row,field,actual,expected,suggestion).",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("graph_id", prop("string", "source mindmap/graph id"));
+        p.set("name", prop("string", "rules table name"));
+        p.set("id", prop("string", "optional rules table id"));
+        p.set("save", prop("boolean", "save rules table (default true)"));
+        Json req = Json::arr();
+        req.push(Json("graph_id"));
+        tools.push(toolDef(
+            "table_rules_from_graph",
+            "Extract enum rules table (column,allowed,hint) from mindmap "
+            "skeleton heuristics (leaves=columns, children=allowed).",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "target table id"));
+        p.set("allowed",
+              prop("string",
+                   "JSON object {column:[values]|\"a|b\"} of allowed enums"));
+        p.set("rules_id", prop("string", "optional rules table id"));
+        p.set("ignore_hint_row",
+              prop("boolean", "skip first row when target.hasHintRow"));
+        p.set("save", prop("boolean", "save fixed table (default true)"));
+        p.set("save_skipped",
+              prop("boolean", "save skipped violations report (default true)"));
+        p.set("note", prop("string", "version note"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        tools.push(toolDef(
+            "table_fix_enums",
+            "Auto-fix enum violations using table_check suggestions; empty "
+            "suggestion rows go to skipped report with reason.",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("source_id", prop("string", "source table id"));
+        p.set("mode",
+              prop("string", "derive mode (only animation_checklist in v1)"));
+        p.set("name", prop("string", "output table name"));
+        p.set("id", prop("string", "optional output table id"));
+        p.set("save", prop("boolean", "save derived table (default true)"));
+        Json req = Json::arr();
+        req.push(Json("source_id"));
+        tools.push(toolDef(
+            "table_derive",
+            "Derive a new table from source. animation_checklist: columns "
+            "containing 动画 with cell value √ become checklist rows.",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "table id"));
+        p.set("source_column", prop("string", "source column name"));
+        p.set("target_column",
+              prop("string", "target column (created if missing)"));
+        p.set("transform", prop("string", "transform type (only slug in v1)"));
+        p.set("save", prop("boolean", "save table (default true)"));
+        p.set("note", prop("string", "version note"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("source_column"));
+        req.push(Json("target_column"));
+        tools.push(toolDef(
+            "table_transform_column",
+            "Transform a column into another (slug: deterministic ASCII key).",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "table id"));
+        p.set("count", prop("number", "number of sample rows (default 1)"));
+        p.set("rules_id", prop("string", "optional rules table for enums"));
+        p.set("save", prop("boolean", "save table (default true)"));
+        p.set("note", prop("string", "version note"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        tools.push(toolDef(
+            "table_sample_rows",
+            "Append conservative placeholder rows (enum first allowed / 动画 "
+            "default x / other TODO). Response sets placeholder=true.",
+            p, req));
+    }
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "table id"));
+        p.set("rows",
+              prop("string", "JSON array of objects keyed by column name"));
+        p.set("rules_id",
+              prop("string",
+                   "optional rules: non-empty cells validated; batch rejected "
+                   "on illegal enum"));
+        p.set("save", prop("boolean", "save table (default true)"));
+        p.set("note", prop("string", "version note"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("rows"));
+        tools.push(toolDef(
+            "table_propose_rows",
+            "Append structured object rows aligned to columns; optional enum "
+            "validation via rules_id (no NL parsing).",
             p, req));
     }
 
@@ -821,20 +980,17 @@ inline std::string yamlQuote(const std::string& s)
 
 // yamlScalar: 按需引号输出 YAML 标量
 inline std::string yamlScalar(const std::string& s)
-{
-    return yamlNeedsQuotes(s) ? yamlQuote(s) : s;
-}
+{ return yamlNeedsQuotes(s) ? yamlQuote(s) : s; }
 
 // indentSpaces: 生成 YAML 缩进空白
 inline std::string indentSpaces(int n)
-{
-    return std::string((size_t)n, ' ');
-}
+{ return std::string((size_t)n, ' '); }
 
 // jsonToYaml: 将 Json 树序列化为 YAML 文本（保持键序）
-// 参数 j: 待序列化值；out: 输出流；indent: 当前缩进空格数；inline_hint: 是否紧跟在 key: 后
-inline void jsonToYaml(const Json& j, std::ostringstream& out, int indent,
-                       bool after_key)
+// 参数 j: 待序列化值；out: 输出流；indent: 当前缩进空格数；inline_hint:
+// 是否紧跟在 key: 后
+inline void
+jsonToYaml(const Json& j, std::ostringstream& out, int indent, bool after_key)
 {
     if (j.isNull()) {
         if (!after_key)
@@ -1012,7 +1168,7 @@ inline Json toolsToOpenApi()
         Json responses = Json::obj();
         responses.set("200", resp200);
 
-        Json media = Json::obj();
+        Json        media  = Json::obj();
         const Json* schema = tool.find("inputSchema");
         if (schema)
             media.set("schema", *schema);
@@ -1158,7 +1314,8 @@ class ToolRunner {
   public:
     explicit ToolRunner(gs::Store& store)
         : store_(store), tables_(store.root()), vm_(store.root())
-    {}
+    {
+    }
 
     // call: 工具分发总入口，统一捕获异常并返回 isError 文本
     Json call(const std::string& name, const Json& args)
@@ -1190,6 +1347,8 @@ class ToolRunner {
                 return deleteGraph(args);
             if (name == "graph_show")
                 return show(args);
+            if (name == "graph_property")
+                return property(args);
             if (name == "graph_update")
                 return update(args);
             if (name == "graph_insert")
@@ -1246,6 +1405,18 @@ class ToolRunner {
                 return tableAlignTool(args);
             if (name == "table_check")
                 return tableCheckTool(args);
+            if (name == "table_rules_from_graph")
+                return tableRulesFromGraphTool(args);
+            if (name == "table_fix_enums")
+                return tableFixEnumsTool(args);
+            if (name == "table_derive")
+                return tableDeriveTool(args);
+            if (name == "table_transform_column")
+                return tableTransformColumnTool(args);
+            if (name == "table_sample_rows")
+                return tableSampleRowsTool(args);
+            if (name == "table_propose_rows")
+                return tableProposeRowsTool(args);
             return textContent("unknown tool: " + name, true);
         }
         catch (const std::exception& e) {
@@ -1654,6 +1825,8 @@ class ToolRunner {
             out.set("shape", n->shape);
             out.set("parent", n->parent);
             out.set("style", n->style);
+            out.set("fillColor", n->fillColor);
+            out.set("strokeColor", n->strokeColor);
             out.set("x", n->x);
             out.set("y", n->y);
             out.set("w", n->w);
@@ -1693,6 +1866,19 @@ class ToolRunner {
             out.set("label", e->label);
             out.set("style", e->style);
             out.set("arrow", e->arrow);
+            out.set("strokeColor", e->strokeColor);
+            return textContent(out.dump(2));
+        }
+
+        // --path：显示 properties 子树
+        if (!a.str("path").empty()) {
+            const Json* sub = gj::resolve(g.properties, a.str("path"));
+            if (!sub)
+                return textContent(
+                    "path not found in properties: " + a.str("path"), true);
+            Json out = Json::obj();
+            out.set("path", a.str("path"));
+            out.set("value", *sub);
             return textContent(out.dump(2));
         }
 
@@ -1714,6 +1900,10 @@ class ToolRunner {
             nj.set("shape", n.shape);
             if (!n.parent.empty())
                 nj.set("parent", n.parent);
+            if (!n.fillColor.empty())
+                nj.set("fillColor", n.fillColor);
+            if (!n.strokeColor.empty())
+                nj.set("strokeColor", n.strokeColor);
             nodesArr.push(nj);
         }
         out.set("nodeList", nodesArr);
@@ -1726,6 +1916,8 @@ class ToolRunner {
             if (!ed.label.empty())
                 ej.set("label", ed.label);
             ej.set("style", ed.style);
+            if (!ed.strokeColor.empty())
+                ej.set("strokeColor", ed.strokeColor);
             edgesArr.push(ej);
         }
         out.set("edgeList", edgesArr);
@@ -1733,6 +1925,138 @@ class ToolRunner {
     }
 
     // update: Cursor 更新操作
+    // property: graph_property 工具实现（get/set/insert/delete）
+    Json property(const Json& a)
+    {
+        std::string id = a.str("id");
+        Graph       g  = vm_.materializeDraft(id);
+        if (g.id.empty()) {
+            std::string err;
+            if (!store_.load(id, g, 0, &err))
+                return textContent(err, true);
+        }
+
+        std::string action = a.str("action", "get");
+        std::string path   = a.str("path");
+        if (path.empty())
+            return textContent("'path' parameter is required", true);
+
+        gv::Draft draft = vm_.loadDraft(id);
+        Json      out   = Json::obj();
+
+        if (action == "get") {
+            const Json* val = gj::resolve(g.properties, path);
+            if (!val)
+                return textContent("path not found: " + path, true);
+            out.set("path", path);
+            if (val->isStr()) { out.set("value", val->s); out.set("type", "string"); }
+            else if (val->isNum()) { out.set("value", val->n); out.set("type", "number"); }
+            else if (val->isBool()) { out.set("value", val->b); out.set("type", "bool"); }
+            else if (val->isArr()) { out.set("value", val->dump(2)); out.set("type", "array"); }
+            else if (val->isObj()) { out.set("value", val->dump(2)); out.set("type", "object"); }
+            else out.set("type", "null");
+            return textContent(out.dump(2));
+        }
+
+        if (action == "set") {
+            std::string valStr = a.str("value");
+            if (valStr.empty())
+                return textContent("'value' parameter required for set action", true);
+
+            // 尝试解析为 JSON，失败则当作纯字符串
+            Json val;
+            std::string parseErr;
+            val = Json::parse(valStr, &parseErr);
+            if (!parseErr.empty() || val.isNull()) {
+                // 解析失败，当作字符串值
+                val = Json(valStr);
+            }
+
+            // 读取旧值
+            const Json* old = gj::resolve(g.properties, path);
+            std::string oldStr = old ? (old->isStr() ? old->s : old->dump()) : "";
+
+            if (!gj::pathSet(g.properties, path, val))
+                return textContent(
+                    "set failed: invalid path or index out of bounds: " + path,
+                    true);
+
+            // 记录 operation
+            gv::Operation op;
+            op.type       = gv::OpType::PROPERTY_SET;
+            op.targetType = "graph";
+            op.targetId   = id;
+            op.path       = path;
+            op.value      = val;
+            draft.operations.push_back(op);
+
+            out.set("status", "updated");
+            out.set("path", path);
+            out.set("oldValue", oldStr);
+            out.set("draftOperations", (double)draft.operations.size());
+            vm_.saveDraft(id, draft);
+            return textContent(out.dump(2));
+        }
+
+        if (action == "insert") {
+            std::string valStr = a.str("value");
+            if (valStr.empty())
+                return textContent("'value' parameter required for insert action", true);
+
+            Json val;
+            std::string parseErr;
+            val = Json::parse(valStr, &parseErr);
+            if (!parseErr.empty() || val.isNull())
+                val = Json(valStr);
+
+            int index = (int)a.num("index", -1);
+            bool ok = gj::pathInsert(g.properties, path, val, index);
+
+            if (!ok)
+                return textContent("insert failed at path: " + path, true);
+
+            gv::Operation op;
+            op.type       = gv::OpType::PROPERTY_INSERT;
+            op.targetType = "graph";
+            op.targetId   = id;
+            op.path       = path;
+            op.value      = val;
+            draft.operations.push_back(op);
+
+            out.set("status", "inserted");
+            out.set("path", path);
+            out.set("draftOperations", (double)draft.operations.size());
+            vm_.saveDraft(id, draft);
+            return textContent(out.dump(2));
+        }
+
+        if (action == "delete") {
+            const Json* old = gj::resolve(g.properties, path);
+            if (!old)
+                return textContent("path not found: " + path, true);
+
+            bool ok = gj::pathDelete(g.properties, path);
+            if (!ok)
+                return textContent("delete failed at path: " + path, true);
+
+            gv::Operation op;
+            op.type       = gv::OpType::PROPERTY_DELETE;
+            op.targetType = "graph";
+            op.targetId   = id;
+            op.path       = path;
+            op.value      = *old; // 保存旧值便于 revert
+            draft.operations.push_back(op);
+
+            out.set("status", "deleted");
+            out.set("path", path);
+            out.set("draftOperations", (double)draft.operations.size());
+            vm_.saveDraft(id, draft);
+            return textContent(out.dump(2));
+        }
+
+        return textContent("unknown action: " + action + ". Use get|set|insert|delete.", true);
+    }
+
     Json update(const Json& a)
     {
         std::string id = a.str("id");
@@ -1822,9 +2146,12 @@ class ToolRunner {
                     h = std::atof(sizeStr.substr(sp + 1).c_str());
                 }
             }
-            std::string parent = a.str("parent");
-            std::string nid =
-                gv::insertNode(g, &draft, shape, label, x, y, w, h, parent);
+            std::string parent      = a.str("parent");
+            std::string fillColor   = a.str("fillColor");
+            std::string strokeColor = a.str("strokeColor");
+            std::string nid         = gv::insertNode(g, &draft, shape, label, x,
+                                                     y, w, h, parent, "",
+                                                     fillColor, strokeColor);
             out.set("status", "inserted");
             out.set("elementType", "node");
             out.set("elementId", nid);
@@ -1835,11 +2162,12 @@ class ToolRunner {
             if (from.empty() || to.empty())
                 return textContent("edge insert requires 'from' and 'to'",
                                    true);
-            std::string label = a.str("label");
-            std::string style = a.str("style", "solid");
-            std::string arrow = a.str("arrow", "arrow");
-            std::string eid =
-                gv::insertEdge(g, &draft, from, to, label, style, arrow);
+            std::string label       = a.str("label");
+            std::string style       = a.str("style", "solid");
+            std::string arrow       = a.str("arrow", "arrow");
+            std::string strokeColor = a.str("strokeColor");
+            std::string eid = gv::insertEdge(g, &draft, from, to, label, style,
+                                             arrow, strokeColor);
             out.set("status", "inserted");
             out.set("elementType", "edge");
             out.set("elementId", eid);
@@ -2201,6 +2529,24 @@ class ToolRunner {
 
     Json tableCheckTool(const Json& a)
     { return tabletools::tableCheckTool(tables_, a); }
+
+    Json tableRulesFromGraphTool(const Json& a)
+    { return tabletools::tableRulesFromGraphTool(store_, tables_, a); }
+
+    Json tableFixEnumsTool(const Json& a)
+    { return tabletools::tableFixEnumsTool(tables_, a); }
+
+    Json tableDeriveTool(const Json& a)
+    { return tabletools::tableDeriveTool(tables_, a); }
+
+    Json tableTransformColumnTool(const Json& a)
+    { return tabletools::tableTransformColumnTool(tables_, a); }
+
+    Json tableSampleRowsTool(const Json& a)
+    { return tabletools::tableSampleRowsTool(tables_, a); }
+
+    Json tableProposeRowsTool(const Json& a)
+    { return tabletools::tableProposeRowsTool(tables_, a); }
 };
 
 // ---- JSON-RPC 通信处理 ----

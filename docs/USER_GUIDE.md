@@ -1,6 +1,6 @@
 # graphmcp 用户手册
 
-> latest update: v0.1.1, 2026-07-10
+> latest update: v0.1.1, 2026-07-14
 
 > 用户手册（版本以根目录 VERSION 为准）  
 > 命令与参数速查（表格）：[CLI & MCP 指令参考](CLI_MCP_REFERENCE.md)
@@ -89,7 +89,7 @@ graphmcp export to-url --id g7abc
 graphmcp <命令族> <子命令> [参数...]
 ```
 
-共 **10 个命令族**（含新增的 import 编辑回导）。以下按族逐一说明。
+共 **15 个命令族**（含 `table`、`dump-tools` 与 `import` 编辑回导）。以下按族逐一说明。
 
 ---
 
@@ -101,7 +101,7 @@ graphmcp <命令族> <子命令> [参数...]
 
 | 子命令 | 输入格式 | 示例文件 |
 |--------|---------|---------|
-| `from-mermaid` | Mermaid 文本 (flowchart/mindmap/erDiagram) | `examples/flowchart.mmd` |
+| `from-mermaid` | Mermaid 文本（支持 flowchart/mindmap/er/class/state/sequence/pie 等） | `examples/flowchart.mmd` |
 | `from-markdown` | Markdown 大纲 (标题+列表) | `examples/mindmap.md` |
 | `from-csv` | CSV 边表或层级表 | `examples/orgchart.csv` |
 | `from-xml` | XML 图描述 | `examples/architecture.xml` |
@@ -438,6 +438,12 @@ graphmcp graph update --selector "shape=rect" --set shape=round <图ID>
 # 批量更新：parent=g1 的所有子节点
 graphmcp graph update --selector "parent=g1" --set style="fill:blue" <图ID>
 
+# 设置节点填充色 / 描边色（颜色用专用字段，勿塞进 style）
+graphmcp graph update --node A --set fillColor=#eef4ff --set strokeColor=#4a72b8 <图ID>
+
+# 设置边描边色
+graphmcp graph update --edge e1 --set strokeColor=#ff6600 <图ID>
+
 # 模糊匹配：label 包含 "Step" 的节点
 graphmcp graph update --selector "label~=Step" --set shape=diamond <图ID>
 ```
@@ -453,6 +459,9 @@ graphmcp graph insert --node --type diamond --label "判断" --position 400 200 
 
 # 带父节点
 graphmcp graph insert --node --type round --label "子项" --parent A <图ID>
+
+# 带填充色 / 描边色
+graphmcp graph insert --node --type rect --label "高亮" --fillColor #eef4ff --strokeColor #4a72b8 <图ID>
 
 # 插入边
 graphmcp graph insert --edge --from A --to n10 --label "下一步" <图ID>
@@ -512,6 +521,8 @@ Claude Desktop 配置：
 ## 输入格式速查
 
 ### Mermaid 流程图
+
+> 颜色：可用 `classDef` / `class` / `style` / `linkStyle`；模型字段为 `fillColor`/`strokeColor`。样例见 `examples/example_input/flowchart_colors.mmd`。
 
 ```mermaid
 flowchart TD
@@ -591,7 +602,48 @@ graphmcp table from-table --file examples/example_input/skill_relations.csv
 - `table create`：若指定 `--id` 且已存在，默认拒绝；需 `--force` 才允许覆盖（建议常用 `table import` 做更新导入）。临时兼容：`GRAPHMCP_TABLE_CREATE_LEGACY_UPSERT=1`（仅 `1`/`true` 生效）。
 - `table update`：`set_cells`（MCP）支持 `column` 或 `col_index`；弃用别名 `col` 仍可用并返回去重后的 `compat_warnings`。
 - `table from-graph`：`csv_preview` 默认前 20 行；截断时含 `hint`，完整内容用 `table export`。
-- `table check`：有 hint 行时默认跳过首行；`GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1`（或 `true`）可使缺省不跳过。也可显式 `--ignore-hint-row` / `--ignore-hint-row=false`。
+- `table_check`：有 hint 行时默认跳过首行；`GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1`（或 `true`）可使缺省不跳过。也可显式 `--ignore-hint-row` / `--ignore-hint-row=false`。
+
+### 导图 → 规则表 → 校验 / 自动修复（用户故事 1、2、7）
+
+典型编排：
+
+```sh
+# 1) 从思维导图抽出规则表（column / allowed / hint）
+graphmcp table rules-from-graph --graph-id <mindmap-id>
+
+# 2) 对照规则校验业务表
+graphmcp table check <enemy-table-id> --rules <rules-table-id>
+
+# 3) 按 suggestion 自动写回非法枚举（空 suggestion 记入 skipped）
+graphmcp table fix-enums <enemy-table-id> --rules-id <rules-table-id>
+```
+
+MCP 对应工具：`table_rules_from_graph` → `table_check` → `table_fix_enums`。规则表约定与 `table_check` 一致：`allowed` 用 `|` 分隔。
+
+### 表派生与稳定键（用户故事 9、10）
+
+```sh
+# 动画列为 √ 的单元格 → 清单表（编号/名称/动画字段/需求）
+graphmcp table derive --source-id <enemy-id> --mode animation_checklist
+
+# 确定性 ASCII slug（不做拼音/翻译）；空结果回退 col_<行号>
+graphmcp table transform-column <id> --source-column 名称 --target-column key --transform slug
+```
+
+### 改表预览（用户故事 6）
+
+MCP `table_update` 支持 `dry_run=true`（不落盘）与 `detail=true`（逐格 `before`/`after`）。CLI：`table update … --dry-run`。自然语言→补丁仍由客户端 Agent 完成，本工具只负责可审计写入。
+
+### 占位样例与结构化写入（用户故事 1、8）
+
+```sh
+# 保守占位：枚举取 allowed 首值；列名含「动画」默认 x；其余 TODO
+graphmcp table sample-rows <id> --count 1 --rules-id <rules-id>
+
+# 对象行写入；提供 rules 时非法枚举整批拒绝（不解析自然语言）
+graphmcp table propose-rows <id> --rows '[{"编号":"9","名称":"测试","层级":"小怪"}]' --rules-id <rules-id>
+```
 
 ### 通用表 XML（模式 A，非图 XML）
 

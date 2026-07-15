@@ -1,0 +1,75 @@
+{
+  "id": "",
+  "name": "",
+  "type": "sequenceDiagram",
+  "laidOut": true,
+  "nodes": [],
+  "edges": [],
+  "files": {},
+  "properties": {
+    "sequence": {
+      "autonumber": false,
+      "participants": [
+        {
+          "id": "User",
+          "label": "U",
+          "type": "participant",
+          "order": 0
+        },
+        {
+          "id": "API",
+          "label": "A",
+          "type": "participant",
+          "order": 1
+        },
+        {
+          "id": "DB",
+          "label": "D",
+          "type": "participant",
+          "order": 2
+        }
+      ],
+      "messages": [
+        {
+          "from": "U",
+          "to": "A",
+          "label": "POST /login",
+          "type": "async",
+          "seqNum": 1,
+          "headEnd": "arrow",
+          "isReturn": false
+        },
+        {
+          "from": "A",
+          "to": "D",
+          "label": "SELECT user",
+          "type": "async",
+          "seqNum": 2,
+          "headEnd": "arrow",
+          "isReturn": false
+        },
+        {
+          "from": "D",
+          "to": "A",
+          "label": "row",
+          "type": "async",
+          "seqNum": 3,
+          "headEnd": "arrow",
+          "isReturn": true
+        },
+        {
+          "from": "A",
+          "to": "U",
+          "label": "200 OK",
+          "type": "async",
+          "seqNum": 4,
+          "headEnd": "arrow",
+          "isReturn": true
+        }
+      ],
+      "fragments": []
+    }
+  },
+  "edgeCounter": 0,
+  "nodeCounter": 0
+}

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="190" viewBox="0 0 480 190">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <line x1="120" y1="42" x2="180" y2="42" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text class="elabel" x="150" y="38" text-anchor="middle">start</text>
+  <line x1="280" y1="42" x2="340" y2="42" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text class="elabel" x="310" y="38" text-anchor="middle">pause</text>
+  <line x1="340" y1="42" x2="280" y2="42" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text class="elabel" x="310" y="38" text-anchor="middle">resume</text>
+  <line x1="180" y1="42" x2="120" y2="42" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text class="elabel" x="150" y="38" text-anchor="middle">stop</text>
+  <ellipse cx="70" cy="42" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="70" y="47" text-anchor="middle">Idle</text>
+  <ellipse cx="230" cy="42" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="230" y="47" text-anchor="middle">Running</text>
+  <ellipse cx="390" cy="42" rx="50" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="390" y="47" text-anchor="middle">Paused</text>
+</svg>

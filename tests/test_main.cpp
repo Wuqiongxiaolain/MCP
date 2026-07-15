@@ -13,7 +13,8 @@
 #include <string>
 
 // EnvGuard: 测试内临时设置环境变量，析构时恢复（避免污染后续用例）
-struct EnvGuard {
+struct EnvGuard
+{
     std::string name_;
     std::string old_;
 
@@ -779,7 +780,7 @@ static void testMcpToolsRemaining()
         Json ob = Json::parse(
             R"({"jsonrpc":"2.0","id":24,"method":"tools/call","params":{
             "name":"graph_open","arguments":{"id":")" +
-            gid + R"(","editor":"browser","launch":false}}})",
+                gid + R"(","editor":"browser","launch":false}}})",
             &err);
         CHECK(mcp::handleMessage(ob, store, resp));
         Json obj = Json::parse(mcpText(resp), &err);
@@ -791,7 +792,7 @@ static void testMcpToolsRemaining()
         Json od = Json::parse(
             R"({"jsonrpc":"2.0","id":25,"method":"tools/call","params":{
             "name":"graph_open","arguments":{"id":")" +
-            gid + R"(","editor":"drawio","launch":false}}})",
+                gid + R"(","editor":"drawio","launch":false}}})",
             &err);
         CHECK(mcp::handleMessage(od, store, resp));
         Json odj = Json::parse(mcpText(resp), &err);
@@ -804,7 +805,7 @@ static void testMcpToolsRemaining()
         Json oe = Json::parse(
             R"({"jsonrpc":"2.0","id":26,"method":"tools/call","params":{
             "name":"graph_open","arguments":{"id":")" +
-            gid + R"(","editor":"excalidraw","launch":false}}})",
+                gid + R"(","editor":"excalidraw","launch":false}}})",
             &err);
         CHECK(mcp::handleMessage(oe, store, resp));
         Json oej = Json::parse(mcpText(resp), &err);
@@ -816,8 +817,8 @@ static void testMcpToolsRemaining()
         Json os = Json::parse(
             R"({"jsonrpc":"2.0","id":27,"method":"tools/call","params":{
             "name":"graph_open","arguments":{"id":")" +
-            gid +
-            R"(","editor":"svg","editorPath":"/usr/bin/code","launch":false}}})",
+                gid +
+                R"(","editor":"svg","editorPath":"/usr/bin/code","launch":false}}})",
             &err);
         CHECK(mcp::handleMessage(os, store, resp));
         Json osj = Json::parse(mcpText(resp), &err);
@@ -832,9 +833,8 @@ static void testMcpToolsRemaining()
             "name":"graph_open","arguments":{"id":"nonexistent-id","launch":false}}})",
             &err);
         CHECK(mcp::handleMessage(onf, store, resp));
-        CHECK(resp.find("result")->find("content")->a->at(0)
-                  .str("text")
-                  .find("graph not found") != std::string::npos);
+        CHECK(resp.find("result")->find("content")->a->at(0).str("text").find(
+                  "graph not found") != std::string::npos);
     }
 
     // ── graph_import MCP 冒烟（编辑回导闭环）
@@ -843,7 +843,7 @@ static void testMcpToolsRemaining()
         Json ia = Json::parse(
             R"({"jsonrpc":"2.0","id":29,"method":"tools/call","params":{
             "name":"graph_import","arguments":{"id":")" +
-            gid + R"("}}})",
+                gid + R"("}}})",
             &err);
         CHECK(mcp::handleMessage(ia, store, resp));
         Json iaj = Json::parse(mcpText(resp), &err);
@@ -856,8 +856,8 @@ static void testMcpToolsRemaining()
         Json ic = Json::parse(
             R"({"jsonrpc":"2.0","id":30,"method":"tools/call","params":{
             "name":"graph_import","arguments":{"id":")" +
-            gid +
-            R"(","content":"flowchart TD\nX-->Y-->Z","format":"mermaid"}}})",
+                gid +
+                R"(","content":"flowchart TD\nX-->Y-->Z","format":"mermaid"}}})",
             &err);
         CHECK(mcp::handleMessage(ic, store, resp));
         Json icj = Json::parse(mcpText(resp), &err);
@@ -871,9 +871,8 @@ static void testMcpToolsRemaining()
             "name":"graph_import","arguments":{"id":"nonexistent-id"}}})",
             &err);
         CHECK(mcp::handleMessage(inf, store, resp));
-        CHECK(resp.find("result")->find("content")->a->at(0)
-                  .str("text")
-                  .find("graph not found") != std::string::npos);
+        CHECK(resp.find("result")->find("content")->a->at(0).str("text").find(
+                  "graph not found") != std::string::npos);
     }
 
     Json copen = Json::parse(
@@ -1023,6 +1022,13 @@ static void testValidate()
         if (i.message.find("cycle") != std::string::npos)
             cycle = true;
     CHECK(cycle);
+
+    // 状态图起始/终止标记 [*]：边可引用，不必出现在 nodes 中
+    Graph st = gp::parseMermaid(
+        "stateDiagram-v2\n[*] --> Idle\nIdle --> Running : start\nIdle --> "
+        "[*]\n");
+    auto sti = gl::validate(st);
+    CHECK(!gl::hasErrors(sti));
 }
 
 static void testLayout()
@@ -1159,11 +1165,30 @@ static void testMcpProtocol()
     Json note = Json::parse(
         R"({"jsonrpc":"2.0","method":"notifications/initialized"})", &err);
     CHECK(!mcp::handleMessage(note, store, resp));
-    // tools/list
+    // tools/list：断言关键工具存在（避免工具数硬编码随功能增减而脆断）
     Json tl =
         Json::parse(R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})", &err);
     CHECK(mcp::handleMessage(tl, store, resp));
-    CHECK(resp.find("result")->find("tools")->size() == 39);
+    const Json* tools = resp.find("result")->find("tools");
+    CHECK(tools != nullptr && tools->isArr());
+    auto has_tool = [&](const std::string& name) {
+        if (!tools || !tools->a)
+            return false;
+        for (auto& t : *tools->a)
+            if (t.str("name") == name)
+                return true;
+        return false;
+    };
+    CHECK(has_tool("graph_create"));
+    CHECK(has_tool("table_check"));
+    CHECK(has_tool("table_rules_from_graph"));
+    CHECK(has_tool("table_fix_enums"));
+    CHECK(has_tool("table_derive"));
+    CHECK(has_tool("table_transform_column"));
+    CHECK(has_tool("table_sample_rows"));
+    CHECK(has_tool("table_propose_rows"));
+    CHECK(has_tool("table_update"));
+    CHECK(tools->size() >= 45);
     // tools/call graph_create
     Json call = Json::parse(
         R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
@@ -1286,6 +1311,161 @@ static void testMcpProtocol()
     CHECK(mcp::handleMessage(del, store, resp));
     text = resp.find("result")->find("content")->a->at(0).str("text");
     CHECK(text.find("deleted") != std::string::npos);
+}
+
+// testColors: 节点/边颜色全链路（解析、往返、Draft update、JSON）
+static void testColors()
+{
+    // Mermaid classDef / style / linkStyle 导入
+    Graph g = gp::parseMermaid(
+        "flowchart TD\n"
+        "A[Alpha] --> B[Beta]\n"
+        "B --> C[Gamma]\n"
+        "classDef blue fill:#eef4ff,stroke:#4a72b8\n"
+        "class A,B blue\n"
+        "style C fill:rgb(255,0,0),stroke:hsl(120,50%,40%)\n"
+        "linkStyle 0 stroke:#ff6600\n");
+    CHECK(g.findNode("A") != nullptr);
+    CHECK(g.findNode("A")->fillColor == "#eef4ff");
+    CHECK(g.findNode("A")->strokeColor == "#4a72b8");
+    CHECK(g.findNode("B")->fillColor == "#eef4ff");
+    CHECK(g.findNode("C")->fillColor == "rgb(255,0,0)");
+    CHECK(g.findNode("C")->strokeColor == "hsl(120,50%,40%)");
+    CHECK(g.edges.size() >= 1);
+    CHECK(g.edges[0].strokeColor == "#ff6600");
+
+    // toMermaid：classDef/linkStyle 必须在 flowchart 之后，且可再导入
+    std::string mmd = ge::toMermaid(g);
+    size_t      posFlow = mmd.find("flowchart TD");
+    size_t      posCls  = mmd.find("classDef");
+    size_t      posLink = mmd.find("linkStyle");
+    CHECK(posFlow != std::string::npos);
+    CHECK(posCls != std::string::npos && posCls > posFlow);
+    CHECK(posLink != std::string::npos && posLink > posFlow);
+    Graph g2 = gp::parseMermaid(mmd);
+    CHECK(g2.findNode("A")->fillColor == "#eef4ff");
+    CHECK(g2.findNode("A")->strokeColor == "#4a72b8");
+    CHECK(!g2.edges.empty());
+    CHECK(g2.edges[0].strokeColor == "#ff6600");
+
+    // JSON 往返
+    Json   j  = g.toJson();
+    Graph  g3 = Graph::fromJson(j);
+    CHECK(g3.findNode("A")->fillColor == "#eef4ff");
+    CHECK(g3.edges[0].strokeColor == "#ff6600");
+
+    // draw.io 颜色往返
+    Graph gd;
+    gd.type                 = "flowchart";
+    Node& na                = gd.ensureNode("n1", "Colored");
+    na.shape                = "rect";
+    na.fillColor            = "#aabbcc";
+    na.strokeColor          = "#112233";
+    na.x = 10;
+    na.y = 20;
+    na.w = 100;
+    na.h = 40;
+    Node& nb                = gd.ensureNode("n2", "Other");
+    nb.shape                = "rect";
+    nb.x = 200;
+    nb.y = 20;
+    nb.w = 100;
+    nb.h = 40;
+    gd.addEdge("n1", "n2", "", "solid");
+    gd.edges.back().strokeColor = "#990000";
+    std::string dx              = ge::toDrawio(gd);
+    CHECK(dx.find("fillColor=#aabbcc") != std::string::npos);
+    CHECK(dx.find("strokeColor=#112233") != std::string::npos);
+    CHECK(dx.find("strokeColor=#990000") != std::string::npos);
+    Graph gd2 = gp::parseDrawio(dx);
+    CHECK(gd2.findNode("n1")->fillColor == "#aabbcc");
+    CHECK(gd2.findNode("n1")->strokeColor == "#112233");
+    CHECK(!gd2.edges.empty());
+    CHECK(gd2.edges[0].strokeColor == "#990000");
+
+    // SVG 颜色写入并转义
+    std::string svg = ge::toSVG(g);
+    CHECK(svg.find("#eef4ff") != std::string::npos);
+    CHECK(svg.find("#ff6600") != std::string::npos);
+
+    // Draft/Cursor：graph_update 风格的 setNodeField / materialize
+    gv::Draft draft;
+    draft.graphId = "color-test";
+    Graph base;
+    base.type  = "flowchart";
+    base.id    = "color-test";
+    Node& n    = base.ensureNode("X", "NodeX");
+    n.shape    = "rect";
+    base.addEdge("X", "X", "", "solid");  // self-edge ok for field test
+    auto nc = gv::selectNode(base, &draft, "X");
+    CHECK(nc.valid());
+    nc.set("fillColor", "#112233");
+    nc.set("strokeColor", "#445566");
+    CHECK(base.findNode("X")->fillColor == "#112233");
+    CHECK(base.findNode("X")->strokeColor == "#445566");
+    // INSERT snapshot 含颜色
+    Graph gIns;
+    gIns.type = "flowchart";
+    gv::Draft dIns;
+    std::string nid =
+        gv::insertNode(gIns, &dIns, "rect", "Ins", 0, 0, 120, 44, "", "",
+                       "#fedcba", "#abcdef");
+    CHECK(gIns.findNode(nid)->fillColor == "#fedcba");
+    CHECK(dIns.operations.size() == 1);
+    CHECK(dIns.operations[0].snapshot.str("fillColor") == "#fedcba");
+    Graph rebuilt = dIns.materialize(Graph());
+    CHECK(rebuilt.findNode(nid) != nullptr);
+    CHECK(rebuilt.findNode(nid)->fillColor == "#fedcba");
+    CHECK(rebuilt.findNode(nid)->strokeColor == "#abcdef");
+
+    // Excalidraw 结构化导入颜色
+    Graph gEx = gp::parseExcalidraw(R"({
+      "type":"excalidraw","version":2,"elements":[
+        {"id":"r1","type":"rectangle","x":0,"y":0,"width":80,"height":40,
+         "backgroundColor":"#ffeecc","strokeColor":"#335577"},
+        {"id":"r2","type":"rectangle","x":120,"y":0,"width":80,"height":40,
+         "backgroundColor":"transparent","strokeColor":"#000000"},
+        {"id":"a1","type":"arrow","x":0,"y":0,"width":100,"height":0,
+         "strokeColor":"#cc0000","strokeStyle":"solid",
+         "startArrowhead":null,"endArrowhead":"arrow",
+         "startBinding":{"elementId":"r1","focus":0,"gap":1},
+         "endBinding":{"elementId":"r2","focus":0,"gap":1}}
+      ]})");
+    CHECK(gEx.findNode("r1")->fillColor == "#ffeecc");
+    CHECK(gEx.findNode("r1")->strokeColor == "#335577");
+    CHECK(gEx.findNode("r2")->fillColor.empty());
+    CHECK(!gEx.edges.empty());
+    CHECK(gEx.edges[0].strokeColor == "#cc0000");
+
+    // linkStyle 逗号列表 / 区间 / default
+    Graph gLs = gp::parseMermaid(
+        "flowchart TD\n"
+        "A-->B\n"
+        "B-->C\n"
+        "C-->D\n"
+        "linkStyle 0,2 stroke:#aa0000\n"
+        "linkStyle 1-1 stroke:#bb0000\n");
+    CHECK(gLs.edges.size() == 3);
+    CHECK(gLs.edges[0].strokeColor == "#aa0000");
+    CHECK(gLs.edges[1].strokeColor == "#bb0000");
+    CHECK(gLs.edges[2].strokeColor == "#aa0000");
+    Graph gDef = gp::parseMermaid(
+        "flowchart TD\n"
+        "A-->B\n"
+        "B-->C\n"
+        "linkStyle default stroke:#00cc00\n");
+    CHECK(gDef.edges.size() == 2);
+    CHECK(gDef.edges[0].strokeColor == "#00cc00");
+    CHECK(gDef.edges[1].strokeColor == "#00cc00");
+
+    // UTF-8 BOM 不应阻断 Mermaid 关键字识别
+    std::string bom =
+        std::string("\xEF\xBB\xBF") + "flowchart TD\nA[Start]-->B[End]\n";
+    CHECK(gp::detectFormat(bom) == "mermaid");
+    Graph gBom = gp::parseMermaid(bom);
+    CHECK(gBom.findNode("A") != nullptr);
+    CHECK(gBom.findNode("B") != nullptr);
+
 }
 
 static void testParseDrawio()
@@ -1451,7 +1631,6 @@ static void testDrawioLayerRoundTrip()
     n3.x = 300; n3.y = 100; n3.w = 120; n3.h = 60;
 
     g.addEdge("n1", "n2", "link", "solid", "arrow");
-
     std::string dx = ge::toDrawio(g);
     CHECK(!dx.empty());
     CHECK(dx.find("<mxfile") != std::string::npos);
@@ -1603,37 +1782,48 @@ static void testMcpGraphImport()
 {
     gs::Store   store("test-store-tmp");
     std::string err;
-    Json call1 = Json::parse(R"({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"graph_create","arguments":{"content":"flowchart TD\nA-->B","name":"import-test"}}})", &err);
+    Json        call1 = Json::parse(
+        R"({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"graph_create","arguments":{"content":"flowchart TD\nA-->B","name":"import-test"}}})",
+        &err);
     CHECK(err.empty());
     Json resp1;
     CHECK(mcp::handleMessage(call1, store, resp1));
     const Json* res1 = resp1.find("result");
     CHECK(res1 != nullptr);
-    const Json* ct1 = res1->find("content") ? &res1->find("content")->a->at(0) : nullptr;
-    CHECK(ct1 != nullptr);
-    Json j1 = Json::parse(ct1->str("text"), &err);
+    if (!res1)
+        return;
+    const Json* content1 = res1->find("content");
+    CHECK(content1 != nullptr && content1->isArr() && content1->a &&
+          !content1->a->empty());
+    if (!content1 || !content1->a || content1->a->empty())
+        return;
+    Json        j1  = Json::parse(content1->a->at(0).str("text"), &err);
     std::string gid = j1.str("id");
     CHECK(!gid.empty());
     Graph g;
     CHECK(store.load(gid, g, 0, &err));
     std::string fpath = store.root() + "/" + gid + "/open.drawio";
     CHECK(ge::writeFile(fpath, ge::toDrawio(g)));
-    Json call2 = Json::parse(R"({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"graph_import","arguments":{"id":")" + gid + R"("}}})", &err);
+    Json call2 = Json::parse(
+        R"({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"graph_import","arguments":{"id":")" +
+            gid + R"("}}})",
+        &err);
     Json resp2;
     CHECK(mcp::handleMessage(call2, store, resp2));
     const Json* res2 = resp2.find("result");
-    const Json* ct2 = res2 && res2->find("content") ? &res2->find("content")->a->at(0) : nullptr;
-    Json j2 = Json::parse(ct2 ? ct2->str("text") : "", &err);
+    const Json* ct2  = res2 && res2->find("content") ?
+                           &res2->find("content")->a->at(0) :
+                           nullptr;
+    Json        j2   = Json::parse(ct2 ? ct2->str("text") : "", &err);
     CHECK(j2.str("status") == "imported");
     CHECK((int)j2.num("version") == 2);
 }
 
 static void testTableModel()
 {
-    gt::Table t = gt::Table::fromCsv(
-        "from,to,label\n"
-        "A,B,\"x,y\"\n"
-        "B,C,\n");
+    gt::Table t = gt::Table::fromCsv("from,to,label\n"
+                                     "A,B,\"x,y\"\n"
+                                     "B,C,\n");
     CHECK(t.columns.size() == 3);
     CHECK(t.rows.size() == 2);
     CHECK(t.cell(0, 2) == "x,y");
@@ -1646,7 +1836,7 @@ static void testTableModel()
     gt::Table   t2  = gt::Table::fromCsv(csv);
     CHECK(t2.rows.size() == 2);
     CHECK(t2.cell(0, 2) == "x,y");
-    Json j = t.toJson();
+    Json      j  = t.toJson();
     gt::Table t3 = gt::Table::fromJson(j);
     CHECK(t3.columns.size() == 4);
 
@@ -1665,9 +1855,10 @@ static void testTableStoreAndBridge()
 #endif
     ge::removeDirectory("test-table-store-tmp");
     gts::TableStore ts("test-table-store-tmp");
-    gt::Table       t = gt::Table::fromCsv("id,label,parent\nceo,CEO,\ncto,CTO,ceo\n");
-    t.name            = "org";
-    int v1            = ts.save(t, "init");
+    gt::Table       t =
+        gt::Table::fromCsv("id,label,parent\nceo,CEO,\ncto,CTO,ceo\n");
+    t.name = "org";
+    int v1 = ts.save(t, "init");
     CHECK(v1 == 1);
     gt::Table loaded;
     CHECK(ts.load(t.id, loaded));
@@ -1731,6 +1922,219 @@ static std::string readExampleInput(const std::string& name)
     return {};
 }
 
+// testTableCollabEnhance: P0–P3
+// 图&表协同增强（rules/fix/derive/slug/dry_run/sample/propose）
+static void testTableCollabEnhance()
+{
+    using gm::Node;
+
+    // 导图：根 → 层级(列) → 小怪|Boss
+    Graph g;
+    g.id   = "mm-rules";
+    g.name = "enemy-spec";
+    g.type = "mindmap";
+    {
+        Node root;
+        root.id    = "root";
+        root.label = "敌人规范";
+        Node col;
+        col.id     = "c_level";
+        col.label  = "层级";
+        col.parent = "root";
+        Node a;
+        a.id     = "v_mob";
+        a.label  = "小怪";
+        a.parent = "c_level";
+        Node b;
+        b.id     = "v_boss";
+        b.label  = "Boss";
+        b.parent = "c_level";
+        g.nodes  = {root, col, a, b};
+    }
+
+    gt::Table rules = gtb::tableRulesFromGraph(g);
+    CHECK(rules.columns.size() == 3);
+    CHECK(rules.columns[0] == "column");
+    CHECK(rules.columns[1] == "allowed");
+    CHECK(rules.columns[2] == "hint");
+    CHECK(rules.rows.size() == 1);
+    CHECK(rules.cell(0, 0) == "层级");
+    CHECK(rules.cell(0, 1).find("小怪") != std::string::npos);
+    CHECK(rules.cell(0, 1).find("Boss") != std::string::npos);
+
+    gt::Table           bad = gt::Table::fromCsv("层级\n小怪\n精英\n神秘\n");
+    gtb::FixEnumsResult fix = gtb::tableFixEnums(bad, Json(), &rules, false);
+    CHECK(fix.fixed_count == 2);
+    CHECK(bad.cell(1, 0) == "小怪");  // suggestion 取导图保序首值
+    CHECK(bad.cell(2, 0) == "小怪");
+    gt::Table after = gtb::tableCheck(bad, Json(), &rules, false);
+    CHECK(after.rows.size() == 0);
+
+    // 规则列 allowed 为空：该列不参与校验（不会产生 violation / 也不会假写回）
+    // empty_suggestion 仅在 report 已有行但 suggestion 为空时触发（防御路径）；
+    // 经 tableCheck 正常输出时 suggestion 恒为保序首项，故此处覆盖“空规则不误伤”。
+    gt::Table emptyAllowedRules;
+    emptyAllowedRules.columns = {"column", "allowed"};
+    emptyAllowedRules.appendRow({"层级", ""});
+    gt::Table bad2 = gt::Table::fromCsv("层级\n精英\n");
+    gt::Table none = gtb::tableCheck(bad2, Json(), &emptyAllowedRules, false);
+    CHECK(none.rows.size() == 0);
+    gtb::FixEnumsResult noFix =
+        gtb::tableFixEnums(bad2, Json(), &emptyAllowedRules, false);
+    CHECK(noFix.fixed_count == 0);
+    CHECK(noFix.skipped_count == 0);
+    CHECK(bad2.cell(0, 0) == "精英");
+
+    // 无规则/空 allowed：MCP table_fix_enums 应拒绝
+    {
+#ifdef _WIN32
+        _putenv_s("GRAPHMCP_STORE", "test-table-fix-validate-tmp");
+#else
+        setenv("GRAPHMCP_STORE", "test-table-fix-validate-tmp", 1);
+#endif
+        ge::removeDirectory("test-table-fix-validate-tmp");
+        gs::Store       store("test-table-fix-validate-tmp");
+        mcp::ToolRunner runner(store);
+        Json            c = Json::obj();
+        c.set("content", "层级\n精英\n");
+        c.set("name", "need-rules");
+        std::string err;
+        Json        cr = runner.call("table_create", c);
+        Json body =
+            Json::parse(cr.find("content")->a->at(0).str("text"), &err);
+        Json fx = Json::obj();
+        fx.set("id", body.str("id"));
+        fx.set("allowed", "{}");
+        Json fr = runner.call("table_fix_enums", fx);
+        CHECK(fr.boolean("isError", false));
+        ge::removeDirectory("test-table-fix-validate-tmp");
+    }
+
+    // 合法行不触发修复
+    gt::Table           okTab = gt::Table::fromCsv("层级\n小怪\n");
+    gtb::FixEnumsResult z = gtb::tableFixEnums(okTab, Json(), &rules, false);
+    CHECK(z.fixed_count == 0);
+    CHECK(z.skipped_count == 0);
+
+    // sample_rows：枚举取管道保序首值
+    gt::Table sample = gt::Table::fromCsv("编号,名称,层级,生成动画？\n");
+    gtb::tableSampleRows(sample, 1, &rules);
+    CHECK(sample.rows.size() == 1);
+    CHECK(sample.cell(0, 2) == "小怪");
+    CHECK(sample.cell(0, 3) == "x");
+    CHECK(sample.cell(0, 0) == "TODO");
+
+    // derive animation_checklist
+    std::string enemy_csv = readExampleInput("enemy_sample.csv");
+    CHECK(!enemy_csv.empty());
+    if (!enemy_csv.empty()) {
+        gt::Table enemy = gt::Table::fromCsv(enemy_csv);
+        gt::Table list  = gtb::tableDerive(enemy, "animation_checklist");
+        CHECK(list.columns.size() == 4);
+        CHECK(list.rows.size() >= 4);
+        CHECK(list.colIndex("动画字段") >= 0);
+    }
+
+    // slug
+    gt::Table names = gt::Table::fromCsv("名称\nHello World\n!!!\nFoo-Bar_1\n");
+    gtb::tableTransformColumnSlug(names, "名称", "key");
+    CHECK(names.colIndex("key") >= 0);
+    CHECK(names.cell(0, 1) == "Hello_World");
+    CHECK(names.cell(1, 1) == "col_1");
+    CHECK(names.cell(2, 1) == "FooBar_1");
+
+    // propose_rows
+    gt::Table prop = gt::Table::fromCsv("编号,名称,层级\n");
+    Json      rows = Json::arr();
+    Json      r0   = Json::obj();
+    r0.set("编号", "9");
+    r0.set("名称", "测试怪");
+    r0.set("层级", "小怪");
+    rows.push(r0);
+    gtb::tableProposeRows(prop, rows, &rules);
+    CHECK(prop.rows.size() == 1);
+    CHECK(prop.cell(0, 2) == "小怪");
+    Json badRows = Json::arr();
+    Json rBad    = Json::obj();
+    rBad.set("层级", "非法");
+    badRows.push(rBad);
+    bool threw = false;
+    try {
+        gtb::tableProposeRows(prop, badRows, &rules);
+    }
+    catch (const gt::TableError&) {
+        threw = true;
+    }
+    CHECK(threw);
+}
+
+static void testTableUpdateDryRun()
+{
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_STORE", "test-table-dryrun-tmp");
+#else
+    setenv("GRAPHMCP_STORE", "test-table-dryrun-tmp", 1);
+#endif
+    ge::removeDirectory("test-table-dryrun-tmp");
+    gs::Store       store("test-table-dryrun-tmp");
+    mcp::ToolRunner runner(store);
+    Json            c = Json::obj();
+    c.set("content", "a,b\n1,2\n");
+    c.set("name", "dry");
+    std::string err;
+    Json        cr = runner.call("table_create", c);
+    Json body = Json::parse(cr.find("content")->a->at(0).str("text"), &err);
+    std::string tid = body.str("id");
+
+    Json u = Json::obj();
+    u.set("id", tid);
+    u.set("dry_run", true);
+    u.set("detail", true);
+    u.set("set_cells", R"([{"row":0,"column":"a","value":"9"}])");
+    Json ur = runner.call("table_update", u);
+    CHECK(!ur.boolean("isError", false));
+    Json ub = Json::parse(ur.find("content")->a->at(0).str("text"), &err);
+    CHECK(ub.boolean("dry_run", false));
+    CHECK(ub.str("status") == "dry_run");
+    CHECK(ub.find("details") != nullptr);
+    CHECK(ub.find("version") == nullptr);
+
+    // 未落盘：历史仍为单版本
+    Json hi = Json::obj();
+    hi.set("id", tid);
+    Json hr = runner.call("table_history", hi);
+    Json hb = Json::parse(hr.find("content")->a->at(0).str("text"), &err);
+    CHECK(hb.isArr());
+    CHECK(hb.size() == 1);
+
+    // rules_from_graph MCP
+    Graph g;
+    g.id   = "g1";
+    g.type = "mindmap";
+    {
+        gm::Node root;
+        root.id    = "r";
+        root.label = "R";
+        gm::Node col;
+        col.id     = "c";
+        col.label  = "层级";
+        col.parent = "r";
+        gm::Node v;
+        v.id     = "v";
+        v.label  = "小怪";
+        v.parent = "c";
+        g.nodes  = {root, col, v};
+    }
+    store.save(g, "mind");
+    Json rf = Json::obj();
+    rf.set("graph_id", g.id);
+    rf.set("name", "rules");
+    Json rr = runner.call("table_rules_from_graph", rf);
+    CHECK(!rr.boolean("isError", false));
+
+    ge::removeDirectory("test-table-dryrun-tmp");
+}
+
 static void testTableFixtures()
 {
     // enemy_sample：通用表列与枚举校验
@@ -1774,7 +2178,7 @@ static void testTableMcpTools()
     setenv("GRAPHMCP_STORE", "test-table-mcp-tmp", 1);
 #endif
     ge::removeDirectory("test-table-mcp-tmp");
-    gs::Store store("test-table-mcp-tmp");
+    gs::Store       store("test-table-mcp-tmp");
     mcp::ToolRunner runner(store);
     Json            args = Json::obj();
     args.set("content", "from,to,label\nA,B,go\n");
@@ -1782,7 +2186,7 @@ static void testTableMcpTools()
     Json res = runner.call("table_create", args);
     CHECK(!res.boolean("isError", false));
     std::string err;
-    Json        body = Json::parse(res.find("content")->a->at(0).str("text"), &err);
+    Json body = Json::parse(res.find("content")->a->at(0).str("text"), &err);
     CHECK(err.empty());
     std::string tid = body.str("id");
     CHECK(!tid.empty());
@@ -1840,8 +2244,10 @@ static void testTableMcpTools()
     CHECK(!colRes.boolean("isError", false));
     Json colBody =
         Json::parse(colRes.find("content")->a->at(0).str("text"), &err);
-    CHECK(colBody.find("compat_warnings") != nullptr);
-    CHECK(colBody.find("compat_warnings")->size() == 1);
+    const Json* cw = colBody.find("compat_warnings");
+    CHECK(cw != nullptr);
+    if (cw)
+        CHECK(cw->size() == 1);
 
     Json gf = Json::obj();
     gf.set("table_id", tid);
@@ -1870,8 +2276,7 @@ static void testTableMcpTools()
         hintCreate.set("name", "hint-check");
         Json hc = runner.call("table_create", hintCreate);
         CHECK(!hc.boolean("isError", false));
-        Json hcb =
-            Json::parse(hc.find("content")->a->at(0).str("text"), &err);
+        Json hcb = Json::parse(hc.find("content")->a->at(0).str("text"), &err);
         std::string hid = hcb.str("id");
         // 标记 hasHintRow：通过 from_graph skeleton 更自然，这里直接 update
         // 存盘字段——用 table_export model / 再 import 太重，改为底层 store
@@ -1893,8 +2298,7 @@ static void testTableMcpTools()
         ck.set("allowed", allowed.dump());
         Json ckr = runner.call("table_check", ck);
         CHECK(!ckr.boolean("isError", false));
-        Json ckj =
-            Json::parse(ckr.find("content")->a->at(0).str("text"), &err);
+        Json ckj = Json::parse(ckr.find("content")->a->at(0).str("text"), &err);
         CHECK((int)ckj.num("violations") == 0);
 
         EnvGuard legacyHint("GRAPHMCP_TABLE_CHECK_LEGACY_HINT", "1");
@@ -1924,8 +2328,7 @@ static void testTableMcpTools()
         imp.set("name", "edges-imported");
         Json ir = runner.call("table_import", imp);
         CHECK(!ir.boolean("isError", false));
-        Json ib =
-            Json::parse(ir.find("content")->a->at(0).str("text"), &err);
+        Json ib = Json::parse(ir.find("content")->a->at(0).str("text"), &err);
         CHECK(ib.str("status") == "imported");
         CHECK(ib.str("id") == tid);
         CHECK((int)ib.num("version") >= 2);
@@ -1959,8 +2362,7 @@ static void testTableMcpTools()
         pCreate.set("name", "align-primary");
         Json pr = runner.call("table_create", pCreate);
         CHECK(!pr.boolean("isError", false));
-        Json pb =
-            Json::parse(pr.find("content")->a->at(0).str("text"), &err);
+        Json pb = Json::parse(pr.find("content")->a->at(0).str("text"), &err);
         std::string pid = pb.str("id");
 
         Json tCreate = Json::obj();
@@ -1968,8 +2370,7 @@ static void testTableMcpTools()
         tCreate.set("name", "align-target");
         Json tr = runner.call("table_create", tCreate);
         CHECK(!tr.boolean("isError", false));
-        Json tb =
-            Json::parse(tr.find("content")->a->at(0).str("text"), &err);
+        Json tb = Json::parse(tr.find("content")->a->at(0).str("text"), &err);
         std::string tgt = tb.str("id");
 
         Json al = Json::obj();
@@ -1979,8 +2380,7 @@ static void testTableMcpTools()
         al.set("target_key", "key");
         Json ar = runner.call("table_align", al);
         CHECK(!ar.boolean("isError", false));
-        Json ab =
-            Json::parse(ar.find("content")->a->at(0).str("text"), &err);
+        Json ab = Json::parse(ar.find("content")->a->at(0).str("text"), &err);
         CHECK(ab.str("status") == "ok");
         CHECK((int)ab.find("align")->num("added_rows") == 2);
     }
@@ -1992,8 +2392,7 @@ static void testTableMcpTools()
         multi.set("name", "show-limit");
         Json mr = runner.call("table_create", multi);
         CHECK(!mr.boolean("isError", false));
-        Json mb =
-            Json::parse(mr.find("content")->a->at(0).str("text"), &err);
+        Json mb = Json::parse(mr.find("content")->a->at(0).str("text"), &err);
         std::string mid = mb.str("id");
 
         Json sh = Json::obj();
@@ -2001,8 +2400,7 @@ static void testTableMcpTools()
         sh.set("limit", 2);
         Json sr = runner.call("table_show", sh);
         CHECK(!sr.boolean("isError", false));
-        Json sb =
-            Json::parse(sr.find("content")->a->at(0).str("text"), &err);
+        Json sb = Json::parse(sr.find("content")->a->at(0).str("text"), &err);
         CHECK(sb.boolean("truncated", false));
         CHECK((int)sb.num("total_rows") == 5);
         CHECK(sb.find("rows")->size() == 2);
@@ -2017,8 +2415,7 @@ static void testTableMcpTools()
         del.set("force", true);
         Json d2 = runner.call("table_delete", del);
         CHECK(!d2.boolean("isError", false));
-        Json db =
-            Json::parse(d2.find("content")->a->at(0).str("text"), &err);
+        Json db = Json::parse(d2.find("content")->a->at(0).str("text"), &err);
         CHECK(db.str("status") == "deleted");
     }
 
@@ -2071,8 +2468,8 @@ static void testTableXml()
 
     // 无 columns 时属性按出现序（非字典序）：z 应在 a 前
     {
-        gt::Table inferred = gtx::fromXml(
-            "<table><row z=\"1\" a=\"2\"/></table>");
+        gt::Table inferred =
+            gtx::fromXml("<table><row z=\"1\" a=\"2\"/></table>");
         CHECK(inferred.columns.size() == 2);
         CHECK(inferred.columns[0] == "z");
         CHECK(inferred.columns[1] == "a");
@@ -2081,7 +2478,7 @@ static void testTableXml()
     // 重复列名去重 + warning
     {
         std::vector<std::string> warns;
-        gt::Table dup = gtx::fromXml(
+        gt::Table                dup = gtx::fromXml(
             "<table><columns><col>a</col><col>a</col><col>b</col></columns>"
             "<row><a>1</a><b>2</b></row></table>",
             &warns);
@@ -2089,7 +2486,8 @@ static void testTableXml()
         CHECK(dup.columns[0] == "a");
         CHECK(dup.columns[1] == "b");
         CHECK(!warns.empty());
-        CHECK(warns[0].find("duplicate") != std::string::npos);
+        if (!warns.empty())
+            CHECK(warns[0].find("duplicate") != std::string::npos);
     }
 
     // 不安全列名拒绝
@@ -2113,7 +2511,8 @@ static void testTableXml()
         }
         catch (const gt::TableError& e) {
             bad = true;
-            CHECK(std::string(e.what()).find("unsupported") != std::string::npos);
+            CHECK(std::string(e.what()).find("unsupported") !=
+                  std::string::npos);
         }
         CHECK(bad);
         bad = false;
@@ -2134,7 +2533,8 @@ static void testTableXml()
         }
         catch (const gt::TableError& e) {
             bad = true;
-            CHECK(std::string(e.what()).find("table xml:") != std::string::npos);
+            CHECK(std::string(e.what()).find("table xml:") !=
+                  std::string::npos);
         }
         CHECK(bad);
     }
@@ -2169,8 +2569,7 @@ static void testTableXml()
     // 更深嵌套应报错
     bool threw = false;
     try {
-        gtx::fromXml(
-            "<table><row><a><b><c>z</c></b></a></row></table>");
+        gtx::fromXml("<table><row><a><b><c>z</c></b></a></row></table>");
     }
     catch (const gt::TableError&) {
         threw = true;
@@ -2207,13 +2606,11 @@ static void testTableXml()
         std::string     err;
         Json            imp = Json::obj();
         imp.set("format", "xml");
-        imp.set("content",
-                "<table name=\"x\"><columns><col>a</col></columns>"
-                "<row><a>1</a></row></table>");
+        imp.set("content", "<table name=\"x\"><columns><col>a</col></columns>"
+                           "<row><a>1</a></row></table>");
         Json ir = runner.call("table_import", imp);
         CHECK(!ir.boolean("isError", false));
-        Json ib =
-            Json::parse(ir.find("content")->a->at(0).str("text"), &err);
+        Json ib = Json::parse(ir.find("content")->a->at(0).str("text"), &err);
         std::string tid = ib.str("id");
         CHECK(!tid.empty());
 
@@ -2272,12 +2669,15 @@ int runAll()
     testMcpProtocol();
     testTableModel();
     testTableStoreAndBridge();
+    testTableCollabEnhance();
+    testTableUpdateDryRun();
     testTableFixtures();
     testTableMcpTools();
     testTableXml();
     testMcpExtended();
     testMcpToolsRemaining();
     testMcpErrors();
+    testColors();
     testParseDrawio();
     testDrawioRoundTrip();
     testDrawioLayerRoundTrip();

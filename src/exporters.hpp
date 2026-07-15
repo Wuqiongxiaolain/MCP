@@ -214,10 +214,9 @@ inline bool writeFile(const std::string& path, const std::string& content)
 // writeFileAtomic: 先写唯一 tmp 再原子替换到 path；失败时清理残留
 inline bool writeFileAtomic(const std::string& path, const std::string& content)
 {
-    auto stamp =
-        std::chrono::steady_clock::now().time_since_epoch().count();
+    auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
 #ifdef _WIN32
-    unsigned long pid = GetCurrentProcessId();
+    unsigned long pid        = GetCurrentProcessId();
     auto          toWidePath = [](const std::string& s) {
         int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
         std::wstring w((size_t)(n > 0 ? n - 1 : 0), L'\0');
@@ -268,20 +267,23 @@ inline std::string readFile(const std::string& path)
 }
 
 // removeDirectory: 递归删除目录及其内容（不使用 shell，避免注入风险）
-inline bool removeDirectory(const std::string& dirPath) {
+inline bool removeDirectory(const std::string& dirPath)
+{
 #ifdef _WIN32
     auto toWide = [](const std::string& s) {
         int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
         std::wstring w((size_t)(n > 0 ? n - 1 : 0), L'\0');
-        if (n > 0) MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &w[0], n);
+        if (n > 0)
+            MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &w[0], n);
         return w;
     };
-    std::wstring wpath = toWide(dirPath);
-    std::wstring searchPath = wpath + L"\\*";
+    std::wstring     wpath      = toWide(dirPath);
+    std::wstring     searchPath = wpath + L"\\*";
     WIN32_FIND_DATAW fd;
-    HANDLE hFind = FindFirstFileW(searchPath.c_str(), &fd);
+    HANDLE           hFind = FindFirstFileW(searchPath.c_str(), &fd);
     if (hFind == INVALID_HANDLE_VALUE) {
-        if (DeleteFileW(wpath.c_str())) return true;
+        if (DeleteFileW(wpath.c_str()))
+            return true;
         return RemoveDirectoryW(wpath.c_str()) != 0;
     }
     do {
@@ -296,7 +298,8 @@ inline bool removeDirectory(const std::string& dirPath) {
                 WideCharToMultiByte(CP_UTF8, 0, child.c_str(), -1,
                                     &childUtf8[0], clen, nullptr, nullptr);
             removeDirectory(childUtf8);
-        } else {
+        }
+        else {
             DeleteFileW(child.c_str());
         }
     } while (FindNextFileW(hFind, &fd));
@@ -304,7 +307,8 @@ inline bool removeDirectory(const std::string& dirPath) {
     return RemoveDirectoryW(wpath.c_str()) != 0;
 #else
     DIR* dir = opendir(dirPath.c_str());
-    if (!dir) return remove(dirPath.c_str()) == 0;
+    if (!dir)
+        return remove(dirPath.c_str()) == 0;
     struct dirent* entry;
     while ((entry = readdir(dir)) != nullptr) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
@@ -312,8 +316,10 @@ inline bool removeDirectory(const std::string& dirPath) {
         std::string child = dirPath + "/" + entry->d_name;
         struct stat st;
         if (stat(child.c_str(), &st) == 0) {
-            if (S_ISDIR(st.st_mode)) removeDirectory(child);
-            else remove(child.c_str());
+            if (S_ISDIR(st.st_mode))
+                removeDirectory(child);
+            else
+                remove(child.c_str());
         }
     }
     closedir(dir);
@@ -1298,6 +1304,602 @@ inline std::string sanitizeMermaidId(const std::string& id)
 // 关键步骤：按图类型分支（mindmap/er/flowchart）-> 输出节点 -> 输出边
 inline std::string toMermaid(const Graph& g)
 {
+    // properties 类型：从结构化数据重建 Mermaid
+    if (g.properties.isObj() && g.properties.o) {
+        // gantt 导出
+        if (const Json* gantt = g.properties.find("gantt")) {
+            std::ostringstream os;
+            os << "gantt\n";
+            std::string df = gantt->str("dateFormat");
+            if (!df.empty())
+                os << "    dateFormat " << df << "\n";
+            std::string t = gantt->str("title");
+            if (!t.empty())
+                os << "    title " << t << "\n";
+            if (const Json* secs = gantt->find("sections")) {
+                if (secs->isArr())
+                    for (auto& sec : *secs->a) {
+                        std::string sn = sec.str("name");
+                        if (!sn.empty())
+                            os << "    section " << sn << "\n";
+                        if (const Json* tasks = sec.find("tasks")) {
+                            if (tasks->isArr())
+                                for (auto& tk : *tasks->a) {
+                                    os << "    " << tk.str("label") << " :";
+                                    std::string st = tk.str("status");
+                                    if (!st.empty())
+                                        os << " " << st << ",";
+                                    std::string tid = tk.str("id");
+                                    if (!tid.empty())
+                                        os << " " << tid << ",";
+                                    std::string start = tk.str("start");
+                                    if (!start.empty())
+                                        os << " " << start << ",";
+                                    std::string end = tk.str("end");
+                                    if (!end.empty())
+                                        os << " " << end;
+                                    std::string after = tk.str("after");
+                                    if (!after.empty())
+                                        os << " after " << after;
+                                    os << "\n";
+                                }
+                        }
+                    }
+            }
+            return os.str();
+        }
+        // pie 导出
+        if (const Json* pie = g.properties.find("pie")) {
+            std::ostringstream os;
+            os << "pie";
+            std::string title = pie->str("title");
+            if (!title.empty())
+                os << " title " << title;
+            os << "\n";
+            if (pie->boolean("showData", false))
+                os << "    showData\n";
+            if (const Json* entries = pie->find("entries")) {
+                if (entries->isArr())
+                    for (auto& e : *entries->a) {
+                        std::string lbl = e.str("label");
+                        os << "    \"" << lbl << "\" : " << e.num("value", 0)
+                           << "\n";
+                    }
+            }
+            return os.str();
+        }
+        // sequenceDiagram 导出
+        if (const Json* seq = g.properties.find("sequence")) {
+            std::ostringstream os;
+            os << "sequenceDiagram\n";
+            if (seq->boolean("autonumber", false))
+                os << "    autonumber\n";
+            // participants
+            if (const Json* parts = seq->find("participants")) {
+                if (parts->isArr())
+                    for (auto& p : *parts->a) {
+                        std::string type = p.str("type");
+                        if (type.empty())
+                            type = "participant";
+                        os << "    " << type << " " << p.str("label");
+                        std::string pid = p.str("id");
+                        if (!pid.empty() && pid != p.str("label"))
+                            os << " as " << pid;
+                        os << "\n";
+                    }
+            }
+            // 辅助：输出消息
+            auto emitMsg = [&](const Json& m, int indent) {
+                std::string prefix(indent * 4, ' ');
+                std::string mType   = m.str("type");
+                std::string headEnd = m.str("headEnd");
+                // 构建箭头：dash(es) + head symbol
+                bool        isReturn = (mType == "return");
+                std::string dash     = isReturn ? "--" : "-";
+                std::string head;
+                if (headEnd == "cross")
+                    head = "x";
+                else if (headEnd == "open")
+                    head = ")";
+                else
+                    head = ">>";  // arrow (default)
+                std::string arrow = dash + head;
+                os << prefix << m.str("from") << arrow << m.str("to");
+                if (!m.str("label").empty())
+                    os << ": " << m.str("label");
+                os << "\n";
+            };
+            // 输出顶层消息和片段
+            // 递归处理消息和嵌套 fragment
+            std::function<void(const Json&, int)> emitItem;
+            emitItem = [&](const Json& item, int depth) {
+                // 判断是嵌套 fragment（有 type + messages）还是消息（有
+                // from/to）
+                if (item.isObj() && item.find("messages")) {
+                    // 嵌套 fragment
+                    std::string prefix(depth * 4, ' ');
+                    os << prefix << item.str("type");
+                    if (!item.str("label").empty())
+                        os << " " << item.str("label");
+                    os << "\n";
+                    if (const Json* inner = item.find("messages")) {
+                        if (inner->isArr())
+                            for (auto& m : *inner->a)
+                                emitItem(m, depth + 1);
+                    }
+                    os << prefix << "end\n";
+                }
+                else {
+                    emitMsg(item, depth);
+                }
+            };
+            auto emitFrag = [&](const Json& frag, int depth) {
+                emitItem(frag, depth);
+            };
+            // 先输出顶层消息，遇到 fragment 就嵌套
+            const Json* frags = seq->find("fragments");
+            if (const Json* ms = seq->find("messages")) {
+                if (ms->isArr())
+                    for (auto& m : *ms->a)
+                        emitMsg(m, 1);
+            }
+            if (frags && frags->isArr())
+                for (auto& f : *frags->a)
+                    emitFrag(f, 1);
+            // notes
+            if (const Json* nts = seq->find("notes")) {
+                if (nts->isArr())
+                    for (auto& nt : *nts->a) {
+                        os << "    Note " << nt.str("placement") << " of ";
+                        if (const Json* tgt = nt.find("targets")) {
+                            if (tgt->isArr()) {
+                                bool firstT = true;
+                                for (auto& t : *tgt->a) {
+                                    if (!firstT)
+                                        os << ",";
+                                    os << t.s;
+                                    firstT = false;
+                                }
+                            }
+                        }
+                        os << ": " << nt.str("text") << "\n";
+                    }
+            }
+            return os.str();
+        }
+        if (const Json* rd = g.properties.find("requirementDiagram")) {
+            // requirementDiagram 导出
+            std::ostringstream os;
+            os << "requirementDiagram\n";
+            if (const Json* els = rd->find("elements")) {
+                if (els->isArr())
+                    for (auto& el : *els->a) {
+                        std::string type = el.str("type");
+                        std::string id   = el.str("id");
+                        if (type.empty())
+                            type = "requirement";
+                        os << "    " << type << " " << id << " {\n";
+                        // 输出 el 的所有自定义属性（除了 id 和 type）
+                        if (el.isObj() && el.o)
+                            for (auto& kv : *el.o) {
+                                if (kv.first == "id" || kv.first == "type")
+                                    continue;
+                                if (kv.second.isStr())
+                                    os << "        " << kv.first << ": \""
+                                       << kv.second.s << "\"\n";
+                                else
+                                    os << "        " << kv.first << ": "
+                                       << kv.second.dump() << "\n";
+                            }
+                        os << "    }\n";
+                    }
+            }
+            if (const Json* rels = rd->find("relations")) {
+                if (rels->isArr())
+                    for (auto& rel : *rels->a) {
+                        os << "    " << rel.str("from") << " - "
+                           << rel.str("type") << " -> " << rel.str("to")
+                           << "\n";
+                    }
+            }
+            return os.str();
+        }
+        // sankey-beta 导出
+        if (const Json* sk = g.properties.find("sankey")) {
+            std::ostringstream os;
+            os << "sankey-beta\n";
+            if (sk->boolean("showValues", false))
+                os << "    showValues\n";
+            if (const Json* flows = sk->find("flows")) {
+                if (flows->isArr())
+                    for (auto& f : *flows->a) {
+                        os << "    " << f.str("from") << "," << f.str("to")
+                           << "," << f.num("value", 0) << "\n";
+                    }
+            }
+            return os.str();
+        }
+        // architecture-beta 导出
+        if (const Json* arch = g.properties.find("architecture")) {
+            std::ostringstream os;
+            os << "architecture-beta\n";
+            // 输出 groups
+            if (const Json* grps = arch->find("groups")) {
+                if (grps->isArr())
+                    for (auto& grp : *grps->a) {
+                        os << "    group " << grp.str("id");
+                        if (!grp.str("icon").empty())
+                            os << "(" << grp.str("icon") << ")";
+                        if (!grp.str("label").empty())
+                            os << "[" << grp.str("label") << "]";
+                        if (!grp.str("groupId").empty())
+                            os << " in " << grp.str("groupId");
+                        os << "\n";
+                    }
+            }
+            // 输出 services
+            if (const Json* svcs = arch->find("services")) {
+                if (svcs->isArr())
+                    for (auto& svc : *svcs->a) {
+                        os << "    service " << svc.str("id");
+                        if (!svc.str("icon").empty())
+                            os << "(" << svc.str("icon") << ")";
+                        if (!svc.str("label").empty())
+                            os << "[" << svc.str("label") << "]";
+                        if (!svc.str("groupId").empty())
+                            os << " in " << svc.str("groupId");
+                        os << "\n";
+                    }
+            }
+            // 输出 junctions
+            if (const Json* jns = arch->find("junctions")) {
+                if (jns->isArr())
+                    for (auto& jn : *jns->a) {
+                        os << "    junction " << jn.str("id");
+                        if (!jn.str("groupId").empty())
+                            os << " in " << jn.str("groupId");
+                        os << "\n";
+                    }
+            }
+            // 输出 edges
+            if (const Json* aEdges = arch->find("edges")) {
+                if (aEdges->isArr())
+                    for (auto& ae : *aEdges->a) {
+                        bool        bidi  = ae.boolean("bidi", false);
+                        std::string arrow = bidi ? "<-->" :
+                                            ae.boolean("directed", false) ?
+                                                   "-->" :
+                                                   "--";
+                        os << "    " << ae.str("from");
+                        if (!ae.str("fromPort").empty())
+                            os << ":" << ae.str("fromPort");
+                        os << " " << arrow << " ";
+                        if (!ae.str("toPort").empty())
+                            os << ae.str("toPort") << ":";
+                        os << ae.str("to") << "\n";
+                    }
+            }
+            return os.str();
+        }
+        // kanban 导出
+        if (const Json* kb = g.properties.find("kanban")) {
+            std::ostringstream os;
+            os << "kanban\n";
+            if (const Json* cols = kb->find("columns")) {
+                if (cols->isArr())
+                    for (auto& col : *cols->a) {
+                        os << "    " << col.str("id") << "[" << col.str("title")
+                           << "]\n";
+                        if (const Json* cards = col.find("cards")) {
+                            if (cards->isArr())
+                                for (auto& card : *cards->a) {
+                                    os << "        " << card.str("id") << "["
+                                       << card.str("title") << "]";
+                                    // 元数据
+                                    bool hasMeta = false;
+                                    if (card.isObj() && card.o) {
+                                        for (auto& kv : *card.o)
+                                            if (kv.first != "id" &&
+                                                kv.first != "title") {
+                                                hasMeta = true;
+                                                break;
+                                            }
+                                    }
+                                    if (hasMeta) {
+                                        os << "@{ ";
+                                        bool firstKv = true;
+                                        for (auto& kv : *card.o) {
+                                            if (kv.first == "id" ||
+                                                kv.first == "title")
+                                                continue;
+                                            if (!firstKv)
+                                                os << ", ";
+                                            os << kv.first << ": '";
+                                            if (kv.second.isStr())
+                                                os << kv.second.s;
+                                            else if (kv.second.isNum())
+                                                os << kv.second.as_num();
+                                            else if (kv.second.isBool())
+                                                os << (kv.second.b ? "true" :
+                                                                     "false");
+                                            else
+                                                os << kv.second.dump();
+                                            os << "'";
+                                            firstKv = false;
+                                        }
+                                        os << " }";
+                                    }
+                                    os << "\n";
+                                }
+                        }
+                    }
+            }
+            return os.str();
+        }
+        // gitGraph 导出
+        if (const Json* gg = g.properties.find("gitGraph")) {
+            std::ostringstream os;
+            os << "gitGraph\n";
+            // 按 order 排序 commits
+            std::map<int, const Json*> sorted;
+            if (const Json* commits = gg->find("commits")) {
+                if (commits->isArr())
+                    for (auto& cm : *commits->a)
+                        sorted[(int)cm.num("order", 0)] = &cm;
+            }
+            std::string curBranch;
+            for (auto& kv : sorted) {
+                auto&       cm = *kv.second;
+                std::string b  = cm.str("branch");
+                if (b != curBranch && !b.empty()) {
+                    os << "    checkout " << b << "\n";
+                    curBranch = b;
+                }
+                std::string ctype = cm.str("type");
+                if (ctype == "MERGE")
+                    os << "    merge " << cm.str("label") << "\n";
+                else if (ctype == "CHERRY_PICK")
+                    os << "    cherry-pick " << cm.str("label") << "\n";
+                else {
+                    os << "    commit";
+                    std::string cid = cm.str("id");
+                    if (!cid.empty())
+                        os << " id:\"" << cid << "\"";
+                    std::string tag = cm.str("tag");
+                    if (!tag.empty())
+                        os << " tag:\"" << tag << "\"";
+                    os << "\n";
+                }
+            }
+            return os.str();
+        }
+        // journey 导出
+        if (const Json* jn = g.properties.find("journey")) {
+            std::ostringstream os;
+            os << "journey\n";
+            std::string t = jn->str("title");
+            if (!t.empty())
+                os << "    title " << t << "\n";
+            if (const Json* secs = jn->find("sections")) {
+                if (secs->isArr())
+                    for (auto& sec : *secs->a) {
+                        std::string sn = sec.str("name");
+                        if (!sn.empty())
+                            os << "    section " << sn << "\n";
+                        if (const Json* tasks = sec.find("tasks")) {
+                            if (tasks->isArr())
+                                for (auto& tk : *tasks->a) {
+                                    os << "        " << tk.str("label") << ": "
+                                       << (int)tk.num("score", 0) << ": ";
+                                    if (const Json* actors =
+                                            tk.find("actors")) {
+                                        if (actors->isArr()) {
+                                            bool firstA = true;
+                                            for (auto& a : *actors->a) {
+                                                if (!firstA)
+                                                    os << ", ";
+                                                os << a.s;
+                                                firstA = false;
+                                            }
+                                        }
+                                    }
+                                    os << "\n";
+                                }
+                        }
+                    }
+            }
+            return os.str();
+        }
+        // timeline 导出
+        if (const Json* tl = g.properties.find("timeline")) {
+            std::ostringstream os;
+            os << "timeline\n";
+            std::string t = tl->str("title");
+            if (!t.empty())
+                os << "    title " << t << "\n";
+            if (const Json* secs = tl->find("sections")) {
+                if (secs->isArr())
+                    for (auto& sec : *secs->a) {
+                        std::string sn = sec.str("name");
+                        if (!sn.empty())
+                            os << "    section " << sn << "\n";
+                        if (const Json* events = sec.find("events")) {
+                            if (events->isArr())
+                                for (auto& evt : *events->a) {
+                                    os << "        " << evt.str("period")
+                                       << " :";
+                                    if (const Json* elist =
+                                            evt.find("events")) {
+                                        if (elist->isArr() &&
+                                            elist->a->size() > 0) {
+                                            for (size_t ei = 0;
+                                                 ei < elist->a->size(); ei++) {
+                                                os << " " << (*elist->a)[ei].s;
+                                                if (ei + 1 < elist->a->size())
+                                                    os << " :";
+                                            }
+                                        }
+                                    }
+                                    os << "\n";
+                                }
+                        }
+                    }
+            }
+            return os.str();
+        }
+        // quadrantChart 导出
+        if (const Json* qc = g.properties.find("quadrantChart")) {
+            std::ostringstream os;
+            os << "quadrantChart\n";
+            std::string t = qc->str("title");
+            if (!t.empty())
+                os << "    title " << t << "\n";
+            std::string xl = qc->str("xLeft"), xr = qc->str("xRight");
+            if (!xl.empty() || !xr.empty())
+                os << "    x-axis " << xl << " --> " << xr << "\n";
+            std::string yb = qc->str("yBottom"), yt = qc->str("yTop");
+            if (!yb.empty() || !yt.empty())
+                os << "    y-axis " << yb << " --> " << yt << "\n";
+            for (int qi = 1; qi <= 4; qi++) {
+                std::string qkey = "q" + std::to_string(qi);
+                std::string qv   = qc->str(qkey);
+                if (!qv.empty())
+                    os << "    quadrant-" << qi << ": " << qv << "\n";
+            }
+            if (const Json* pts = qc->find("points")) {
+                if (pts->isArr())
+                    for (auto& pt : *pts->a)
+                        os << "    " << pt.str("label") << ": ["
+                           << pt.num("x", 0) << ", " << pt.num("y", 0) << "]\n";
+            }
+            return os.str();
+        }
+        // xychart 导出
+        if (const Json* xy = g.properties.find("xychart")) {
+            std::ostringstream os;
+            os << "xychart-beta\n";
+            std::string t = xy->str("title");
+            if (!t.empty())
+                os << "    title \"" << t << "\"\n";
+            if (xy->boolean("horizontal", false))
+                os << "    horizontal\n";
+            if (const Json* xa = xy->find("xAxis")) {
+                os << "    x-axis ";
+                if (xa->str("type") == "categorical") {
+                    os << "[";
+                    if (const Json* cats = xa->find("categories")) {
+                        bool firstC = true;
+                        if (cats->isArr())
+                            for (auto& c : *cats->a) {
+                                if (!firstC)
+                                    os << ", ";
+                                os << "\"" << c.s << "\"";
+                                firstC = false;
+                            }
+                    }
+                    os << "]";
+                }
+                else {
+                    os << xa->str("label");
+                }
+                os << "\n";
+            }
+            if (const Json* ya = xy->find("yAxis"))
+                os << "    y-axis " << ya->str("label") << "\n";
+            if (const Json* ser = xy->find("series")) {
+                if (ser->isArr())
+                    for (auto& s : *ser->a) {
+                        os << "    " << s.str("type");
+                        std::string sn = s.str("label");
+                        if (!sn.empty())
+                            os << " \"" << sn << "\"";
+                        os << " [";
+                        if (const Json* data = s.find("data")) {
+                            if (data->isArr()) {
+                                bool firstV = true;
+                                for (auto& v : *data->a) {
+                                    if (!firstV)
+                                        os << ", ";
+                                    os << v.as_num();
+                                    firstV = false;
+                                }
+                            }
+                        }
+                        os << "]\n";
+                    }
+            }
+            return os.str();
+        }
+        // block-beta 导出
+        if (const Json* bl = g.properties.find("block")) {
+            std::ostringstream os;
+            os << "block-beta\n";
+            int cols = (int)bl->num("columns", 0);
+            if (cols > 0)
+                os << "    columns " << cols << "\n";
+            if (const Json* blks = bl->find("blocks")) {
+                if (blks->isArr())
+                    for (auto& bk : *blks->a) {
+                        os << "    " << bk.str("id");
+                        std::string shape = bk.str("shape");
+                        if (shape == "round")
+                            os << "(" << bk.str("label") << ")";
+                        else if (shape == "diamond")
+                            os << "{" << bk.str("label") << "}";
+                        else
+                            os << "[" << bk.str("label") << "]";
+                        // 不额外输出 label（已在括号语法中）
+                        int cs = (int)bk.num("colSpan", 1);
+                        if (cs > 1)
+                            os << ":" << cs;
+                        os << "\n";
+                    }
+            }
+            if (const Json* bedges = bl->find("edges")) {
+                if (bedges->isArr())
+                    for (auto& e : *bedges->a) {
+                        std::string arrow =
+                            e.boolean("directed", false) ? "-->" : "---";
+                        os << "    " << e.str("from") << " " << arrow << " "
+                           << e.str("to") << "\n";
+                    }
+            }
+            return os.str();
+        }
+        // packet-beta 导出
+        if (const Json* pk = g.properties.find("packet")) {
+            std::ostringstream os;
+            os << "packet-beta\n";
+            std::string t = pk->str("title");
+            if (!t.empty())
+                os << "    title " << t << "\n";
+            if (const Json* flds = pk->find("fields")) {
+                int offset = 0;
+                if (flds->isArr())
+                    for (auto& f : *flds->a) {
+                        int bits  = (int)f.num("bits", 0);
+                        int start = (int)f.num("start", -1);
+                        int end   = (int)f.num("end", -1);
+                        if (start >= 0 && end >= 0)
+                            os << "    " << start << "-" << end;
+                        else if (bits > 0) {
+                            os << "    " << offset << "-"
+                               << (offset + bits - 1);
+                            offset += bits;
+                        }
+                        else
+                            os << "    0-7";
+                        os << ": \"" << f.str("label") << "\"\n";
+                    }
+            }
+            return os.str();
+        }
+    }
+
+    // 透传模式：如果存有原始 Mermaid 文本（无法深度解析的类型），直接返回
+    if (!g.rawMermaid.empty())
+        return g.rawMermaid;
+
     std::ostringstream os;
     if (g.type == "mindmap") {
         os << "mindmap\n";
@@ -1341,7 +1943,56 @@ inline std::string toMermaid(const Graph& g)
         }
         return os.str();
     }
+    if (g.type == "classDiagram") {
+        os << "classDiagram\n";
+        // 输出关系边
+        for (auto& e : g.edges) {
+            os << "    " << sanitizeMermaidId(e.from);
+            // 根据 label 推断关系箭头
+            std::string rel = e.label;
+            if (rel == "inheritance")
+                os << " <|-- ";
+            else if (rel == "composition")
+                os << " *-- ";
+            else if (rel == "aggregation")
+                os << " o-- ";
+            else if (rel == "bidirectional")
+                os << " <--> ";
+            else if (rel == "realization")
+                os << " ..|> ";
+            else if (rel == "dependency")
+                os << " ..> ";
+            else if (rel == "dotted")
+                os << " .. ";
+            else if (rel == "link")
+                os << " -- ";
+            else
+                os << " --> ";
+            os << sanitizeMermaidId(e.to) << " : \"" << rel << "\"\n";
+        }
+        // 输出类定义
+        for (auto& n : g.nodes) {
+            os << "    class " << sanitizeMermaidId(n.id) << " {\n";
+            for (auto& a : n.attrs)
+                os << "        " << a << "\n";
+            os << "    }\n";
+        }
+        return os.str();
+    }
+    if (g.type == "stateDiagram") {
+        os << "stateDiagram-v2\n";
+        // 输出转移
+        for (auto& e : g.edges) {
+            os << "    " << sanitizeMermaidId(e.from) << " --> "
+               << sanitizeMermaidId(e.to);
+            if (!e.label.empty())
+                os << " : " << e.label;
+            os << "\n";
+        }
+        return os.str();
+    }
     // flowchart / architecture / orgchart / whiteboard 统一导出为 flowchart TD
+    // 顺序：图声明 → 节点/边 → classDef/class/linkStyle（保证再导入可被解析）
     os << "flowchart TD\n";
     std::map<std::string, std::vector<const Node*>> byGroup;
     for (auto& n : g.nodes) {
@@ -1409,6 +2060,41 @@ inline std::string toMermaid(const Graph& g)
             os << "|" << e.label << "|";
         os << " " << sanitizeMermaidId(e.to) << "\n";
     }
+    // 输出节点颜色 classDef / class（必须在 flowchart 声明之后）
+    {
+        std::map<std::string, int> colorClass;  // "fill:stroke" → classIdx
+        int                        classIdx = 0;
+        for (auto& n : g.nodes) {
+            if (n.fillColor.empty() && n.strokeColor.empty())
+                continue;
+            std::string key = n.fillColor + ":" + n.strokeColor;
+            if (!colorClass.count(key)) {
+                colorClass[key] = ++classIdx;
+                os << "classDef c" << classIdx << " ";
+                if (!n.fillColor.empty())
+                    os << "fill:" << n.fillColor;
+                if (!n.strokeColor.empty()) {
+                    if (!n.fillColor.empty())
+                        os << ",";
+                    os << "stroke:" << n.strokeColor;
+                }
+                os << "\n";
+            }
+        }
+        for (auto& n : g.nodes) {
+            if (n.fillColor.empty() && n.strokeColor.empty())
+                continue;
+            std::string key = n.fillColor + ":" + n.strokeColor;
+            os << "class " << sanitizeMermaidId(n.id) << " c" << colorClass[key]
+               << "\n";
+        }
+    }
+    // 输出边的颜色（Mermaid linkStyle 按 0 起编号）
+    for (size_t ei = 0; ei < g.edges.size(); ++ei) {
+        if (!g.edges[ei].strokeColor.empty())
+            os << "linkStyle " << ei << " stroke:" << g.edges[ei].strokeColor
+               << "\n";
+    }
     return os.str();
 }
 
@@ -1417,21 +2103,34 @@ inline std::string toMermaid(const Graph& g)
 // drawioStyle: 将统一 shape 映射为 draw.io 样式字符串
 inline std::string drawioStyle(const Node& n)
 {
+    // 构建颜色扩展（fillColor / strokeColor）
+    std::string extra;
+    if (!n.fillColor.empty())
+        extra += "fillColor=" + n.fillColor + ";";
+    if (!n.strokeColor.empty())
+        extra += "strokeColor=" + n.strokeColor + ";";
+
     // 特殊逻辑：group 和 ER entity 不走通用映射表
-    if (n.shape == "group")
-        return "rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor="
-               "none;dashed=1;";
+    if (n.shape == "group") {
+        // group 固定透明填充 + 虚线；自定义描边通过 extra 拼接
+        std::string gs =
+            "rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor="
+            "none;dashed=1;";
+        if (!n.strokeColor.empty())
+            gs += "strokeColor=" + n.strokeColor + ";";
+        return gs;
+    }
     if (!n.attrs.empty())
         return "shape=table;startSize=30;container=1;collapsible=0;"
-               "whiteSpace=wrap;html=1;";
+               "whiteSpace=wrap;html=1;" + extra;
 
     // round/stadium 需要动态 arcSize，单独处理
     if (n.shape == "round")
-        return "rounded=1;arcSize=10;whiteSpace=wrap;html=1;";
+        return "rounded=1;arcSize=10;whiteSpace=wrap;html=1;" + extra;
     if (n.shape == "stadium")
-        return "rounded=1;arcSize=50;whiteSpace=wrap;html=1;";
+        return "rounded=1;arcSize=50;whiteSpace=wrap;html=1;" + extra;
 
-    // 通用形状映射表：统一形状名 → draw.io 样式字符串
+    // 通用形状映射表：统一形状名 → draw.io 样式（不含颜色扩展）
     static const std::map<std::string, std::string> kShapeStyleMap = {
         {"diamond",       "rhombus;whiteSpace=wrap;html=1;"},
         {"ellipse",       "ellipse;whiteSpace=wrap;html=1;"},
@@ -1455,10 +2154,10 @@ inline std::string drawioStyle(const Node& n)
     };
     auto it = kShapeStyleMap.find(n.shape);
     if (it != kShapeStyleMap.end())
-        return it->second;
+        return it->second + extra;
 
     // 默认：普通矩形
-    return "rounded=0;whiteSpace=wrap;html=1;";
+    return "rounded=0;whiteSpace=wrap;html=1;" + extra;
 }
 
 // toDrawio: 导出 draw.io XML（支持多页）
@@ -1541,6 +2240,8 @@ inline std::string toDrawio(Graph g)
             style += "endArrow=none;";
         if (e.arrow == "both")
             style += "startArrow=classic;";
+        if (!e.strokeColor.empty())
+            style += "strokeColor=" + e.strokeColor + ";";
         os << "        <mxCell id=\"edge" << ++ei << "\" value=\""
            << xmlEscape(e.label) << "\" style=\"" << style
            << "\" edge=\"1\" parent=\"1\" source=\"" << xmlEscape(e.from)
@@ -1662,6 +2363,10 @@ inline std::string toExcalidraw(Graph g)
             if (n.shape == "diamond")
                 ty = "diamond";
             Json el = excalidrawBase(n.id, ty, n.x, n.y, n.w, n.h, ++seed);
+            if (!n.fillColor.empty())
+                el.set("backgroundColor", n.fillColor);
+            if (!n.strokeColor.empty())
+                el.set("strokeColor", n.strokeColor);
             if (n.shape == "group") {
                 el.set("backgroundColor", "transparent");
                 el.set("strokeStyle", "dashed");
@@ -1729,6 +2434,8 @@ inline std::string toExcalidraw(Graph g)
             el.set("endArrowhead", e.arrow == "none" ? Json() : Json("arrow"));
             if (e.style == "dashed")
                 el.set("strokeStyle", "dashed");
+            if (!e.strokeColor.empty())
+                el.set("strokeColor", e.strokeColor);
             els.push(el);
         }
     }
@@ -1750,6 +2457,31 @@ inline std::string toExcalidraw(Graph g)
 // 关键步骤：白板走 elements 原样渲染；其它图走 nodes/edges 布局渲染
 inline std::string toSVG(Graph g)
 {
+    // rawMermaid 类型：生成嵌入式 SVG（提示使用 mermaid.live 或 PNG 导出查看）
+    if (!g.rawMermaid.empty()) {
+        std::ostringstream os;
+        os << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"800\" "
+              "height=\"200\""
+              " viewBox=\"0 0 800 200\">\n";
+        os << "  <rect width=\"800\" height=\"200\" fill=\"#fafafa\" "
+              "rx=\"8\"/>\n";
+        os << "  <text x=\"400\" y=\"60\" text-anchor=\"middle\" "
+              "font-size=\"18\""
+              " fill=\"#333\" font-family=\"sans-serif\">";
+        os << "Mermaid Diagram (" << xmlEscape(g.type) << ")</text>\n";
+        os << "  <text x=\"400\" y=\"100\" text-anchor=\"middle\" "
+              "font-size=\"13\""
+              " fill=\"#666\" font-family=\"sans-serif\">";
+        os << "Use 'graph_export to=png' for rendered output, or 'to=url' for "
+              "mermaid.live</text>\n";
+        os << "  <text x=\"400\" y=\"140\" text-anchor=\"middle\" "
+              "font-size=\"11\""
+              " fill=\"#999\" font-family=\"monospace\">";
+        os << xmlEscape(g.type) << " (" << g.rawMermaid.size()
+           << " bytes)</text>\n";
+        os << "</svg>\n";
+        return os.str();
+    }
     if (isWhiteboardElements(g))
         return toSVGExcalidraw(g);
 
@@ -1801,8 +2533,9 @@ inline std::string toSVG(Graph g)
         clip(ax, ay, a->w, a->h, bx, by, x1, y1);
         clip(bx, by, b->w, b->h, ax, ay, x2, y2);
         os << "  <line x1=\"" << x1 << "\" y1=\"" << y1 << "\" x2=\"" << x2
-           << "\" y2=\"" << y2 << "\" stroke=\"#333\" stroke-width=\""
-           << (e.style == "thick" ? 3 : 1.5) << "\"";
+           << "\" y2=\"" << y2 << "\" stroke=\""
+           << xmlEscape(e.strokeColor.empty() ? "#333" : e.strokeColor)
+           << "\" stroke-width=\"" << (e.style == "thick" ? 3 : 1.5) << "\"";
         if (e.style == "dashed")
             os << " stroke-dasharray=\"6,4\"";
         if (e.arrow != "none")
@@ -1820,12 +2553,18 @@ inline std::string toSVG(Graph g)
     }
     // 再绘制节点
     for (auto& n : g.nodes) {
-        std::string fill   = n.shape == "group" ? "none" : "#eef4ff";
-        std::string stroke = "#4a72b8";
+        // fc/sc: 空串回退默认色，写入属性前统一 xmlEscape
+        auto fc = [&](const char* def) {
+            return xmlEscape(n.fillColor.empty() ? def : n.fillColor);
+        };
+        auto sc = [&](const char* def) {
+            return xmlEscape(n.strokeColor.empty() ? def : n.strokeColor);
+        };
         if (n.shape == "group") {
             os << "  <rect x=\"" << n.x << "\" y=\"" << n.y << "\" width=\""
-               << n.w << "\" height=\"" << n.h
-               << "\" fill=\"none\" stroke=\"#999\" "
+               << n.w << "\" height=\"" << n.h << "\" fill=\"none\" stroke=\""
+               << sc("#999")
+               << "\" "
                   "stroke-dasharray=\"5,4\" rx=\"6\"/>\n";
             os << "  <text class=\"lbl\" x=\"" << n.x + 8 << "\" y=\""
                << n.y + 18 << "\" fill=\"#777\">" << xmlEscape(n.label)
@@ -1836,18 +2575,19 @@ inline std::string toSVG(Graph g)
         if (n.shape == "diamond") {
             os << "  <polygon points=\"" << cx << "," << n.y << " " << n.x + n.w
                << "," << cy << " " << cx << "," << n.y + n.h << " " << n.x
-               << "," << cy << "\" fill=\"#fff7e0\" stroke=\"#c9a227\"/>\n";
+               << "," << cy << "\" fill=\"" << fc("#fff7e0") << "\" stroke=\""
+               << sc("#c9a227") << "\"/>\n";
         }
         else if (n.shape == "ellipse" || n.shape == "circle" ||
                  n.shape == "round" || n.shape == "stadium") {
             os << "  <ellipse cx=\"" << cx << "\" cy=\"" << cy << "\" rx=\""
-               << n.w / 2 << "\" ry=\"" << n.h / 2
-               << "\" fill=\"#e8f7ec\" stroke=\"#3d9155\"/>\n";
+               << n.w / 2 << "\" ry=\"" << n.h / 2 << "\" fill=\""
+               << fc("#e8f7ec") << "\" stroke=\"" << sc("#3d9155") << "\"/>\n";
         }
         else {
             os << "  <rect x=\"" << n.x << "\" y=\"" << n.y << "\" width=\""
-               << n.w << "\" height=\"" << n.h << "\" rx=\"4\" fill=\"" << fill
-               << "\" stroke=\"" << stroke << "\"/>\n";
+               << n.w << "\" height=\"" << n.h << "\" rx=\"4\" fill=\""
+               << fc("#eef4ff") << "\" stroke=\"" << sc("#4a72b8") << "\"/>\n";
         }
         if (n.attrs.empty()) {
             os << "  <text class=\"lbl\" x=\"" << cx << "\" y=\"" << cy + 5
@@ -1860,7 +2600,7 @@ inline std::string toSVG(Graph g)
                << xmlEscape(n.label) << "</text>\n";
             os << "  <line x1=\"" << n.x << "\" y1=\"" << n.y + 28 << "\" x2=\""
                << n.x + n.w << "\" y2=\"" << n.y + 28 << "\" stroke=\""
-               << stroke << "\"/>\n";
+               << sc("#4a72b8") << "\"/>\n";
             double ty = n.y + 46;
             for (auto& a : n.attrs) {
                 os << "  <text class=\"lbl\" x=\"" << n.x + 10 << "\" y=\""
@@ -1897,8 +2637,9 @@ inline std::string toSVG(Graph g)
 // toMermaidLiveUrl: 生成可直接打开的 mermaid.live 编辑链接
 inline std::string toMermaidLiveUrl(const Graph& g)
 {
-    Json payload = Json::obj();
-    payload.set("code", toMermaid(g));
+    std::string code    = g.rawMermaid.empty() ? toMermaid(g) : g.rawMermaid;
+    Json        payload = Json::obj();
+    payload.set("code", code);
     payload.set("mermaid", "{\"theme\":\"default\"}");
     payload.set("autoSync", true);
     payload.set("updateDiagram", true);
@@ -2145,6 +2886,99 @@ inline std::string rasterize(const std::string& svgPathIn,
     return "";
 }
 
+// toMermaidBrowserPage: 为 rawMermaid 类型生成内嵌 Mermaid.js 的完整 HTML 页面
+// 可由浏览器渲染 SVG，进而截图/打印为 PNG/PDF
+inline std::string toMermaidBrowserPage(const Graph& g)
+{
+    std::string code = g.rawMermaid.empty() ? toMermaid(g) : g.rawMermaid;
+    std::string escaped;
+    for (char c : code) {
+        switch (c) {
+            case '<': escaped += "&lt;"; break;
+            case '&': escaped += "&amp;"; break;
+            default: escaped += c;
+        }
+    }
+    return R"(<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>graphmcp Mermaid</title>
+<style>
+  body{margin:0;padding:20px;background:#fff;font-family:sans-serif;}
+  .mermaid{display:flex;justify-content:center;}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({startOnLoad:true,theme:'default',securityLevel:'loose'});
+</script>
+</head>
+<body>
+<pre class="mermaid">
+)" + escaped +
+           R"(
+</pre>
+</body>
+</html>)";
+}
+
+// rasterizeMermaid: 将 rawMermaid 图表通过 headless 浏览器渲染为 PNG 或 PDF
+// 关键步骤：生成 HTML -> 写临时文件 -> 浏览器截图/打印 -> 校验输出
+inline std::string rasterizeMermaid(const Graph&       g,
+                                    const std::string& outPath,
+                                    const std::string& fmt)
+{
+    std::string html     = toMermaidBrowserPage(g);
+    std::string htmlPath = outPath + ".mermaid.html";
+    if (!writeFile(htmlPath, html))
+        return "";
+
+    std::string absOut  = absPath(outPath);
+    std::string browser = findBrowser();
+    if (browser.empty()) {
+        std::remove(htmlPath.c_str());
+        return "";
+    }
+
+    std::string tmp = getEnvVar("TEMP");
+    if (tmp.empty())
+        tmp = getEnvVar("TMP");
+    std::string profile = (!tmp.empty() ? tmp + "/graphmcp-chrome-profile" :
+                                          outPath + ".chromeprofile");
+
+    int         w = 1400, h = 1000;
+    std::string url  = fileUrl(htmlPath);
+    std::string args = "--headless=new --disable-gpu --no-sandbox "
+                       "--virtual-time-budget=5000 "
+                       "--user-data-dir=\"" +
+                       profile + "\" ";
+    if (fmt == "pdf") {
+        args += "--no-pdf-header-footer --print-to-pdf=\"" + absOut + "\" \"" +
+                url + "\"";
+    }
+    else {
+        args +=
+            "--force-device-scale-factor=2 --window-size=" + std::to_string(w) +
+            "," + std::to_string(h) + " --screenshot=\"" + absOut + "\" \"" +
+            url + "\"";
+    }
+
+    std::remove(outPath.c_str());
+    launchBrowser(browser, args);
+    std::remove(htmlPath.c_str());
+
+    std::ifstream check(outPath, std::ios::binary);
+    if (check.good() && check.peek() != std::ifstream::traits_type::eof()) {
+#ifdef _WIN32
+        return browser.find("msedge") != std::string::npos ? "edge" : "chrome";
+#else
+        return "chromium";
+#endif
+    }
+    return "";
+}
+
 // --------------------------------------------------------------- 分发入口 --
 
 // ExportResult: 导出结果对象（ok/message/content/path 四元信息）
@@ -2184,6 +3018,25 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
     }
     else if (to == "png" || to == "pdf") {
         std::string base = outPath.empty() ? ("graph_export." + to) : outPath;
+        // rawMermaid 类型：通过浏览器渲染 Mermaid.js -> 截图/打印
+        if (!g.rawMermaid.empty()) {
+            std::string tool = rasterizeMermaid(g, base, to);
+            if (!tool.empty()) {
+                r.ok      = true;
+                r.path    = base;
+                r.message = to + " written via " + tool +
+                            " (mermaid browser render): " + base;
+                return r;
+            }
+            // 降级：生成 Mermaid 文本
+            std::string fallback = base + ".mmd";
+            writeFile(fallback, g.rawMermaid);
+            r.message =
+                "no browser found for mermaid render; wrote raw mermaid to " +
+                fallback + " - open in mermaid.live to view";
+            r.path = fallback;
+            return r;
+        }
         // PNG/PDF：统一走精确 SVG 再栅格化（不尝试近似 rough 叠加）。
         std::string svg     = toSVG(g);
         std::string svgPath = base + ".tmp.svg";
@@ -2332,8 +3185,14 @@ inline std::string readOpenFile(const std::string& storeRoot,
                                 std::string&       format)
 {
     std::string base = storeRoot + "/" + graphId + "/open";
-    struct { const char* ext; const char* fmt; } cands[] = {
-        {".drawio", "drawio"}, {".excalidraw", "excalidraw"}, {".svg", "svg"},
+    struct
+    {
+        const char* ext;
+        const char* fmt;
+    } cands[] = {
+        {".drawio", "drawio"},
+        {".excalidraw", "excalidraw"},
+        {".svg", "svg"},
     };
     for (auto& c : cands) {
         std::string text = readFile(base + c.ext);
@@ -2365,8 +3224,8 @@ inline bool openExternal(const std::string& target,
         if (reinterpret_cast<INT_PTR>(h) > 32)
             return true;
         // 降级：用系统默认关联重试
-        h = ShellExecuteW(nullptr, L"open", wtarget.c_str(), nullptr,
-                          nullptr, SW_SHOWNORMAL);
+        h = ShellExecuteW(nullptr, L"open", wtarget.c_str(), nullptr, nullptr,
+                          SW_SHOWNORMAL);
         return reinterpret_cast<INT_PTR>(h) > 32;
     }
     HINSTANCE h = ShellExecuteW(nullptr, L"open", wtarget.c_str(), nullptr,
@@ -2379,7 +3238,8 @@ inline bool openExternal(const std::string& target,
         if (dotApp != std::string::npos)
             appPath = appPath.substr(0, dotApp + 4);
         if (std::system(
-                ("open -a \"" + appPath + "\" \"" + target + "\"").c_str()) == 0)
+                ("open -a \"" + appPath + "\" \"" + target + "\"").c_str()) ==
+            0)
             return true;
         if (std::system(
                 ("\"" + editor + "\" \"" + target + "\" >/dev/null 2>&1")
@@ -2394,11 +3254,11 @@ inline bool openExternal(const std::string& target,
         if (std::system(
                 ("\"" + editor + "\" \"" + target + "\"" + quiet).c_str()) == 0)
             return true;
-        return std::system(("xdg-open \"" + target + "\"" + quiet).c_str()) == 0;
+        return std::system(("xdg-open \"" + target + "\"" + quiet).c_str()) ==
+               0;
     }
     return std::system(("xdg-open \"" + target + "\"" + quiet).c_str()) == 0;
 #endif
 }
 
 }  // namespace ge
-

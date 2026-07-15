@@ -4,25 +4,28 @@
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="QGHtzW7MvDySRoxTS57Wr" value="kfc疯狂星期四" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="QGHtzW7MvDySRoxTS57Wr" value="kfc疯狂星期四" style="rounded=0;whiteSpace=wrap;html=1;strokeColor=#1e1e1e;" vertex="1" parent="1">
           <mxGeometry x="605" y="161.333" width="242.667" height="69.3333" as="geometry"/>
         </mxCell>
-        <mxCell id="Ny5QjgOcDuE77g3vsTU3p" value="v我50" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="Ny5QjgOcDuE77g3vsTU3p" value="v我50" style="rounded=0;whiteSpace=wrap;html=1;strokeColor=#1e1e1e;" vertex="1" parent="1">
           <mxGeometry x="355" y="568" width="257.333" height="77.3333" as="geometry"/>
         </mxCell>
-        <mxCell id="b4wZeVHo0n6NiLv7nKkLZ" value="有群u？" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="b4wZeVHo0n6NiLv7nKkLZ" value="有群u？" style="rhombus;whiteSpace=wrap;html=1;strokeColor=#1e1e1e;" vertex="1" parent="1">
           <mxGeometry x="618.333" y="302" width="214.667" height="115.333" as="geometry"/>
         </mxCell>
-        <mxCell id="pPn1kn_WRFnyiLvbKTmBB" value="哭哭" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="pPn1kn_WRFnyiLvbKTmBB" value="哭哭" style="rounded=0;whiteSpace=wrap;html=1;strokeColor=#1e1e1e;" vertex="1" parent="1">
           <mxGeometry x="635.667" y="548.667" width="183.333" height="118" as="geometry"/>
         </mxCell>
-        <mxCell id="edge1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="QGHtzW7MvDySRoxTS57Wr" target="b4wZeVHo0n6NiLv7nKkLZ">
+        <mxCell id="edge1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#1e1e1e;" edge="1" parent="1" source="QGHtzW7MvDySRoxTS57Wr" target="b4wZeVHo0n6NiLv7nKkLZ">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="edge2" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="b4wZeVHo0n6NiLv7nKkLZ" target="Ny5QjgOcDuE77g3vsTU3p">
+        <mxCell id="edge2" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#1e1e1e;" edge="1" parent="1" source="b4wZeVHo0n6NiLv7nKkLZ" target="Ny5QjgOcDuE77g3vsTU3p">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="edge3" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="b4wZeVHo0n6NiLv7nKkLZ" target="pPn1kn_WRFnyiLvbKTmBB">
+        <mxCell id="edge3" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#1e1e1e;" edge="1" parent="1" source="b4wZeVHo0n6NiLv7nKkLZ" target="pPn1kn_WRFnyiLvbKTmBB">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#1e1e1e;" edge="1" parent="1" source="pTkFVKXU4VuPd9bq9gjbl" target="QGHtzW7MvDySRoxTS57Wr">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
         <mxCell id="freedraw1" value="" style="endArrow=none;startArrow=none;html=1;rounded=0;curved=0;strokeColor=#1e1e1e;strokeWidth=1.000000;" edge="1" parent="1">

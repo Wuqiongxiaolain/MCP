@@ -2728,9 +2728,11 @@ inline std::string toSVG(Graph g)
         smartPort(ax, ay, a->w, a->h, bx, by, x1, y1);
         smartPort(bx, by, b->w, b->h, ax, ay, x2, y2);
 
-        // 检测直线是否有效穿过中间节点（非擦边）
+        // 邻层边跳过碰撞检测（层间空隙天然隔离，无中间节点可穿过）
         double  b1x = 0, b1y = 0, b2x = 0, b2y = 0;
         bool    blocked = false;
+        double  vertDist = std::abs(a->y - b->y);
+        if (vertDist > 150.0) {  // 仅跨多层边需要检测
         double xMin = std::min(x1, x2) - 12, xMax = std::max(x1, x2) + 12;
         double yMin = std::min(y1, y2) - 12, yMax = std::max(y1, y2) + 12;
         for (auto& n : g.nodes) {
@@ -2766,6 +2768,7 @@ inline std::string toSVG(Graph g)
                 break;
             }
         }
+        }  // if (vertDist > 150)
 
         // 二次验证: 仅当新线段穿过节点核心区(无padding)才推送
         if (blocked) {

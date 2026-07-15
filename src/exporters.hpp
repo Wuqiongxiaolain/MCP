@@ -2581,7 +2581,7 @@ inline std::string toSVG(Graph g)
         for (auto& n : g.nodes) {
             if (n.id == e.from || n.id == e.to) continue;
             if (lineHitsRect(x1, y1, x2, y2,
-                             n.x - 6, n.y - 6, n.w + 12, n.h + 12)) {
+                             n.x - 2, n.y - 2, n.w + 4, n.h + 4)) {
                 blocked = true;
                 double gapTop    = std::min(a->y + a->h, b->y + b->h);
                 double gapBottom = std::max(a->y, b->y);
@@ -2589,14 +2589,15 @@ inline std::string toSVG(Graph g)
                 if (safeY < y1 + 10 && safeY > y1 - 10) safeY = y1 + 40;
                 if (safeY < y2 + 10 && safeY > y2 - 10) safeY = y2 - 40;
                 if (std::abs(x2 - x1) < 8) {
-                    double avoidX = (x1 < n.x + n.w / 2)
-                        ? n.x - 24 : n.x + n.w + 24;
-                    if (avoidX < 40) avoidX = n.x + n.w + 24;
+                    // 近垂直线→固定宽度避让(80px)，不用节点全宽
+                    double dodge = (x1 < n.x + n.w / 2) ? -80.0 : 80.0;
+                    double avoidX = x1 + dodge;
+                    if (avoidX < 40) avoidX = x1 + 80;
                     b1x = avoidX; b1y = y1; b2x = avoidX; b2y = y2;
                 } else if (std::abs(y2 - y1) < 8) {
-                    double avoidY = (y1 < n.y + n.h / 2)
-                        ? n.y - 24 : n.y + n.h + 24;
-                    if (avoidY < 40) avoidY = n.y + n.h + 24;
+                    double dodge = (y1 < n.y + n.h / 2) ? -80.0 : 80.0;
+                    double avoidY = y1 + dodge;
+                    if (avoidY < 40) avoidY = y1 + 80;
                     b1x = x1; b1y = avoidY; b2x = x2; b2y = avoidY;
                 } else {
                     b1x = x1; b1y = safeY; b2x = x2; b2y = safeY;
@@ -2605,29 +2606,38 @@ inline std::string toSVG(Graph g)
             }
         }
 
-        // 二次验证
+        // 二次验证: 仅当新线段穿过节点核心区(无padding)才推送
         if (blocked) {
             auto segBlocked = [&](double sx, double sy, double ex, double ey) {
                 for (auto& n : g.nodes) {
                     if (n.id == e.from || n.id == e.to) continue;
-                    if (lineHitsRect(sx, sy, ex, ey,
-                                     n.x - 8, n.y - 8, n.w + 16, n.h + 16))
+                    if (lineHitsRect(sx, sy, ex, ey, n.x, n.y, n.w, n.h))
                         return true;
                 }
                 return false;
             };
-            for (int retry = 0; retry < 3; retry++) {
+            for (int retry = 0; retry < 2; retry++) {
                 bool s1 = segBlocked(x1, y1, b1x, b1y);
                 bool s2 = segBlocked(b1x, b1y, b2x, b2y);
                 bool s3 = segBlocked(b2x, b2y, x2, y2);
                 if (!s1 && !s2 && !s3) break;
-                double push = 20.0;
-                if (s1) { if (std::abs(b1x - x1) > std::abs(b1y - y1)) { b1x += (b1x > x1 ? push : -push); if (b1x < 20) b1x = 20; }
+                double push = 12.0;
+                if (s1) { if (std::abs(b1x - x1) > std::abs(b1y - y1)) b1x += (b1x > x1 ? push : -push);
                           else b1y += (b1y > y1 ? push : -push); }
                 if (s2) { if (std::abs(b2x - b1x) > std::abs(b2y - b1y)) { b1x += push/2; b2x += push/2; }
                           else { b1y += push/2; b2y += push/2; } }
-                if (s3) { if (std::abs(x2 - b2x) > std::abs(y2 - b2y)) { b2x += (b2x > x2 ? push : -push); if (b2x < 20) b2x = 20; }
+                if (s3) { if (std::abs(x2 - b2x) > std::abs(y2 - b2y)) b2x += (b2x > x2 ? push : -push);
                           else b2y += (b2y > y2 ? push : -push); }
+            }
+        }
+
+        // 去掉冗余共线拐点
+        if (blocked) {
+            if (std::abs(b2x - b1x) < 2 && std::abs(b2y - b1y) < 2) {
+                b2x = x2; b2y = y2;  // b1≈b2 → 合并为3点
+            }
+            if (std::abs(b1x - x1) < 2 && std::abs(b1y - y1) < 2) {
+                b1x = b2x; b1y = b2y; b2x = x2; b2y = y2;  // source≈b1 → 合并
             }
         }
 

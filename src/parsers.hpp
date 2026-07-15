@@ -3132,6 +3132,7 @@ inline Graph parseDrawio(const std::string& text)
         bool        vertex = false, edge = false;
         double      x = 0, y = 0, w = 140, h = 80;
         bool        hasSourcePoint = false;
+        double      labelOffsetX = 0, labelOffsetY = 0;
     };
     std::vector<Cell> cells;
 
@@ -3168,6 +3169,14 @@ inline Graph parseDrawio(const std::string& text)
                         auto it = pt.attrs.find("as");
                         if (it != pt.attrs.end() && it->second == "sourcePoint")
                             cell.hasSourcePoint = true;
+                        if (it != pt.attrs.end() && it->second == "offset") {
+                            auto ox = pt.attrs.find("x");
+                            auto oy = pt.attrs.find("y");
+                            if (ox != pt.attrs.end())
+                                cell.labelOffsetX = std::stod(ox->second);
+                            if (oy != pt.attrs.end())
+                                cell.labelOffsetY = std::stod(oy->second);
+                        }
                     }
                 }
             }
@@ -3301,9 +3310,23 @@ inline Graph parseDrawio(const std::string& text)
             arrow = "both";
 
         g.addEdge(cell.source, cell.target, label, edgeStyle, arrow);
-        if (!g.edges.empty())
-            g.edges.back().strokeColor =
+        if (!g.edges.empty()) {
+            gm::Edge& edge = g.edges.back();
+            edge.strokeColor =
                 extractStyleVal(cell.style, "strokeColor");
+            // 还原边标签位置：draw.io offset 是相对边中心的偏移量
+            if (!label.empty() &&
+                (cell.labelOffsetX != 0 || cell.labelOffsetY != 0)) {
+                const Node* src = g.findNode(cell.source);
+                const Node* dst = g.findNode(cell.target);
+                if (src && dst) {
+                    double cx = (src->x + src->w / 2.0 + dst->x + dst->w / 2.0) / 2.0;
+                    double cy = (src->y + src->h / 2.0 + dst->y + dst->h / 2.0) / 2.0;
+                    edge.labelX = cx + cell.labelOffsetX;
+                    edge.labelY = cy + cell.labelOffsetY;
+                }
+            }
+        }
     }
 
     return g;

@@ -2636,13 +2636,30 @@ inline std::string toSVG(Graph g)
             }
         }
 
-        // 去掉冗余共线拐点
+        // 拐点远离中间节点(>18px), 避免视觉上"连到"中间节点
         if (blocked) {
+            auto pushAway = [&](double& px, double& py) {
+                for (auto& n : g.nodes) {
+                    if (n.id == e.from || n.id == e.to) continue;
+                    if (n.shape == "group") continue;
+                    if (px > n.x - 18 && px < n.x + n.w + 18 &&
+                        py > n.y - 18 && py < n.y + n.h + 18) {
+                        // 拐点落入节点附近→沿远离方向推出
+                        double dx = px - (n.x + n.w/2);
+                        double dy = py - (n.y + n.h/2);
+                        if (std::abs(dx) > std::abs(dy)) px += (dx > 0 ? 22 : -22);
+                        else                               py += (dy > 0 ? 22 : -22);
+                    }
+                }
+            };
+            pushAway(b1x, b1y);
+            pushAway(b2x, b2y);
+            // 去掉冗余共线拐点
             if (std::abs(b2x - b1x) < 2 && std::abs(b2y - b1y) < 2) {
-                b2x = x2; b2y = y2;  // b1≈b2 → 合并为3点
+                b2x = x2; b2y = y2;
             }
             if (std::abs(b1x - x1) < 2 && std::abs(b1y - y1) < 2) {
-                b1x = b2x; b1y = b2y; b2x = x2; b2y = y2;  // source≈b1 → 合并
+                b1x = b2x; b1y = b2y; b2x = x2; b2y = y2;
             }
         }
 

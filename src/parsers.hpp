@@ -355,14 +355,31 @@ inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines,
         }
         std::string prev = id;
         while (true) {
+            // 先处理 -- "label" --> 或 -- "label" --- 语法
+            std::string elabel;
+            {
+                size_t tmpPos = pos;
+                while (tmpPos < line.size() &&
+                       isspace((unsigned char)line[tmpPos]))
+                    tmpPos++;
+                if (tmpPos + 3 < line.size() &&
+                    line.compare(tmpPos, 3, "-- ") == 0 &&
+                    line[tmpPos + 3] == '"') {
+                    size_t closeQ = line.find('"', tmpPos + 4);
+                    if (closeQ != std::string::npos) {
+                        elabel =
+                            line.substr(tmpPos + 4, closeQ - tmpPos - 4);
+                        pos = closeQ + 1;  // 跳过 -- "label"
+                    }
+                }
+            }
             std::string style, arrow;
             if (!detail::readArrow(line, pos, style, arrow))
                 break;
-            // 可选边标签 |label|
+            // 可选边标签 |label|（若上面没提取到 -- "label" 标签）
             while (pos < line.size() && isspace((unsigned char)line[pos]))
                 pos++;
-            std::string elabel;
-            if (pos < line.size() && line[pos] == '|') {
+            if (elabel.empty() && pos < line.size() && line[pos] == '|') {
                 size_t end = line.find('|', pos + 1);
                 if (end != std::string::npos) {
                     elabel = trim(line.substr(pos + 1, end - pos - 1));

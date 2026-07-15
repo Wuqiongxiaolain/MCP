@@ -2746,11 +2746,12 @@ inline std::string toSVG(Graph g)
                 if (!lineHitsRect(x1, y1, x2, y2, n.x, n.y, n.w, n.h))
                     continue;  // 仅擦边，不绕行
                 blocked = true;
-                double gapTop    = std::min(a->y + a->h, b->y + b->h);
-                double gapBottom = std::max(a->y, b->y);
-                double safeY = (gapTop + gapBottom) / 2;
-                if (safeY < y1 + 10 && safeY > y1 - 10) safeY = y1 + 40;
-                if (safeY < y2 + 10 && safeY > y2 - 10) safeY = y2 - 40;
+                // 源和目标之间的层间空隙中点，离两端至少20px
+                double srcBot = a->y + a->h, dstTop = b->y;
+                double gapMid = (std::max(srcBot, dstTop) + std::min(srcBot, dstTop)) / 2;
+                double safeY = gapMid;
+                if (std::abs(safeY - y1) < 20) safeY = y1 + (y2 > y1 ? 20 : -20);
+                if (std::abs(safeY - y2) < 20) safeY = y2 + (y1 > y2 ? 20 : -20);
                 if (std::abs(x2 - x1) < 8) {
                     // 近垂直线→固定宽度避让(80px)，不用节点全宽
                     double dodge = (x1 < n.x + n.w / 2) ? -80.0 : 80.0;
@@ -2801,25 +2802,8 @@ inline std::string toSVG(Graph g)
             }
         }
 
-        // 拐点远离中间节点(>18px), 避免视觉上"连到"中间节点
+        // 去掉冗余共线拐点
         if (blocked) {
-            auto pushAway = [&](double& px, double& py) {
-                for (auto& n : g.nodes) {
-                    if (n.id == e.from || n.id == e.to) continue;
-                    if (n.shape == "group") continue;
-                    if (px > n.x - 18 && px < n.x + n.w + 18 &&
-                        py > n.y - 18 && py < n.y + n.h + 18) {
-                        // 拐点落入节点附近→沿远离方向推出
-                        double dx = px - (n.x + n.w/2);
-                        double dy = py - (n.y + n.h/2);
-                        if (std::abs(dx) > std::abs(dy)) px += (dx > 0 ? 22 : -22);
-                        else                               py += (dy > 0 ? 22 : -22);
-                    }
-                }
-            };
-            pushAway(b1x, b1y);
-            pushAway(b2x, b2y);
-            // 去掉冗余共线拐点
             if (std::abs(b2x - b1x) < 2 && std::abs(b2y - b1y) < 2) {
                 b2x = x2; b2y = y2;
             }

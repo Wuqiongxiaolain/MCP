@@ -2569,6 +2569,41 @@ static void testDrawioEdgeLabelRoundTrip()
     CHECK(g2.edges[0].labelX != 0 || g2.edges[0].labelY != 0);
 }
 
+static void testMcpJsonRoundTripDashLabel()
+{
+    // 模拟 MCP JSON-RPC 传输链路：原始内容 → JSON 序列化 → JSON 解析 → parseMermaid
+    // 验证 " 字符在 JSON 往返后不丢失，-- "label" --> 语法正常工作
+    std::string mermaidSrc =
+        "flowchart TD\n"
+        "A[Start]-- \"有\" -->B[Next]\n"
+        "B-- \"否\" -->C[End]\n";
+
+    // 构造一个包含此内容的 JSON 对象（模拟 MCP arguments）
+    gj::Json args = gj::Json::obj();
+    args.set("content", mermaidSrc);
+
+    // JSON 序列化（模拟 MCP 客户端发送）
+    std::string jsonWire = args.dump();
+
+    // JSON 解析（模拟 MCP 服务端接收）
+    std::string parseErr;
+    gj::Json   parsed = gj::Json::parse(jsonWire, &parseErr);
+    CHECK(parseErr.empty());
+
+    // 提取 content 字段
+    std::string content = parsed.str("content");
+    CHECK(!content.empty());
+
+    // 解析 Mermaid
+    Graph g = gp::parseMermaid(content);
+    CHECK(g.nodes.size() == 3);
+    CHECK(g.edges.size() == 2);
+    CHECK(g.edges[0].label == "有");
+    CHECK(g.edges[0].from == "A" && g.edges[0].to == "B");
+    CHECK(g.edges[1].label == "否");
+    CHECK(g.edges[1].from == "B" && g.edges[1].to == "C");
+}
+
 int runAll()
 {
     // 防止 graph_open / export 等路径意外拉起浏览器或外部编辑器
@@ -2617,6 +2652,7 @@ int runAll()
     testDashLabelEdge();
     testEdgeLabelPosition();
     testDrawioEdgeLabelRoundTrip();
+    testMcpJsonRoundTripDashLabel();
     std::cout << "tests: " << g_passed << " passed, " << g_failed
               << " failed\n";
     return g_failed == 0 ? 0 : 1;

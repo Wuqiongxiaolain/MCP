@@ -349,6 +349,36 @@ inline void layoutCompactLayers(std::map<std::string, int>& rank,
         rank[id] = remap[rr];
     }
     maxRank = nextR - 1;
+
+    // 合并稀疏相邻层
+    if (maxRank > 1) {
+        std::map<int, std::vector<std::string>> layers;
+        for (auto& [id, r] : rank) layers[r].push_back(id);
+        for (int r = maxRank; r > 0; r--) {
+            int cntAbove = (int)layers[r - 1].size();
+            int cntCur   = (int)layers[r].size();
+            if (cntAbove > 3 || cntCur > 3) continue;
+            bool canMerge = true;
+            for (auto& id : layers[r]) {
+                for (auto& e : g.edges)
+                    if (e.to == id && rank.count(e.from) &&
+                        rank[e.from] >= r - 1) { canMerge = false; break; }
+                if (!canMerge) break;
+            }
+            if (canMerge) {
+                for (auto& id : layers[r]) rank[id] = r - 1;
+                layers[r - 1].insert(layers[r - 1].end(),
+                                     layers[r].begin(), layers[r].end());
+                layers.erase(r);
+            }
+        }
+        remap.clear(); nextR = 0;
+        for (auto& [r, ids] : layers) {
+            remap[r] = nextR++;
+            for (auto& id : ids) rank[id] = remap[r];
+        }
+        maxRank = nextR - 1;
+    }
 }
 
 // ---- Sugiyama Phase 3: 重心启发式减交叉 ------------------------------------
@@ -547,6 +577,8 @@ inline void layoutRefineCoords(
             n->x    = std::max(cursor, desired);
             cursor  = n->x + n->w + gapX;
         }
+        if (row.size() == 1 && maxRank > 2)
+            row[0]->x += (r % 2 == 0 ? -24.0 : 24.0);
     }
 }
 
@@ -687,6 +719,7 @@ inline void layoutLayered(Graph& g)
     // Phase 5: 1:1 跨层边垂直对齐（消除长斜边穿过节点）
     layoutAlignUniqueEdges(byRank, rank, g, 60.0);
 
+    double gapY = (maxRank > 10) ? std::max(48.0, 80.0 - (maxRank - 10) * 3.0) : 80.0;
     double y = 40;
     for (int r = 0; r <= maxRank; r++) {
         auto& row = byRank[r];
@@ -696,7 +729,7 @@ inline void layoutLayered(Graph& g)
             n->y = y;
             rowH = std::max(rowH, n->h);
         }
-        y += rowH + 80;
+        y += rowH + gapY;
     }
 
     // 最终兜底：按 y 分组强制去重叠
@@ -822,6 +855,37 @@ inline void layoutPlaceGroups(Graph& g)
     deoverlapSiblings("");
 }
 
+// ---- 最终复查：全量节点重叠检测修复 ---------------------------------------
+inline int layoutFinalOverlapCheck(Graph& g, double gapX)
+{
+    int fixes = 0;
+    std::vector<gm::Node*> nodes;
+    for (auto& n : g.nodes)
+        if (n.shape != "group") nodes.push_back(&n);
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        std::sort(nodes.begin(), nodes.end(), [](gm::Node* a, gm::Node* b) {
+            if (std::abs(a->y - b->y) > 2) return a->y < b->y;
+            return a->x < b->x;
+        });
+        for (size_t i = 0; i < nodes.size(); i++) {
+            for (size_t j = i + 1; j < nodes.size(); j++) {
+                gm::Node* a = nodes[i], *b = nodes[j];
+                if (b->y - a->y > 64) break;
+                if (std::abs(a->y - b->y) > 60) continue;
+                if (a->x + a->w + gapX > b->x &&
+                    b->x + b->w + gapX > a->x &&
+                    a->y + a->h > b->y && b->y + b->h > a->y) {
+                    b->x = a->x + a->w + gapX;
+                    changed = true; fixes++;
+                }
+            }
+        }
+    }
+    return fixes;
+}
+
 // layoutTree: 树布局入口（horizontal=true 为左右，false 为上下）
 inline void layoutTree(Graph& g, bool horizontal)
 {
@@ -906,18 +970,28 @@ inline void layout(Graph& g, bool force = false,
     }
     // 递归 group 包裹定位（所有策略共用）
     layoutPlaceGroups(g);
-    // 坐标归一化到正区间
-    double minX = 1e18, minY = 1e18;
-    for (auto& n : g.nodes) {
-        minX = std::min(minX, n.x);
-        minY = std::min(minY, n.y);
-    }
-    if (!g.nodes.empty() && (minX < 20 || minY < 20)) {
-        double dx = 20 - minX, dy = 20 - minY;
+    // 最终复查：全量节点重叠检测修复
+    layoutFinalOverlapCheck(g, 60.0);
+    // 坐标居中 + 宽高比平衡
+    if (!g.nodes.empty()) {
+        double minX = 1e18, minY = 1e18, maxX = -1e18, maxY = -1e18;
         for (auto& n : g.nodes) {
-            n.x += dx;
-            n.y += dy;
+            minX = std::min(minX, n.x); minY = std::min(minY, n.y);
+            maxX = std::max(maxX, n.x + n.w); maxY = std::max(maxY, n.y + n.h);
         }
+        double w = maxX - minX, h = maxY - minY;
+        if (h > 0 && w / h < 0.5) {
+            double scale = 0.5 * h / std::max(w, 1.0);
+            double cx = (minX + maxX) / 2;
+            for (auto& n : g.nodes) n.x = cx + (n.x - cx) * scale;
+        }
+        minX = 1e18; minY = 1e18; maxX = -1e18; maxY = -1e18;
+        for (auto& n : g.nodes) {
+            minX = std::min(minX, n.x); minY = std::min(minY, n.y);
+            maxX = std::max(maxX, n.x + n.w); maxY = std::max(maxY, n.y + n.h);
+        }
+        double dx = 40 - minX, dy = 40 - minY;
+        for (auto& n : g.nodes) { n.x += dx; n.y += dy; }
     }
     g.laidOut = true;
 }

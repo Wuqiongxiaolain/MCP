@@ -1,0 +1,94 @@
+graph TD
+subgraph id0["派生实现"]
+  subgraph id1["属性"]
+    id2["确定生成行为"]
+    id3["确定受击行为"]
+    id4["确定濒死行为"]
+    id5["确定掉落物"]
+    id6["框定碰撞箱"]
+  end
+  subgraph id7["行为模式"]
+    id8["预设技能表"]
+    id9["动作图"]
+    id10["决策用行为树"]
+    id11["黑板内所需信息"]
+  end
+end
+subgraph id12["顶层设计"]
+  subgraph id13["创意机制"]
+    id14["1：主动饶恕敌怪/被动忽视敌怪"]
+    id15["2：从玩家奖励角度削弱特定敌人"]
+    id16["3：……"]
+  end
+  subgraph id17["生态位（玩法层面）"]
+    id18["敌怪风格限定：什么类型的生物？"]
+    id19["敌怪内生价值：对玩家形成怎样的作用/考验？"]
+  end
+  subgraph id20["剧情层面"]
+    id21["形象"]
+    id22["设定"]
+  end
+end
+subgraph id23["程序架构"]
+  subgraph id24["感知系统"]
+    id25["监测刺激源"]
+    id26["全局属性"]
+    id27["事件总线"]
+  end
+  subgraph id28["敌怪"]
+    subgraph id29["状态机（HSM）"]
+      id30["生成行为"]
+      subgraph id31["行为"]
+        id32["待机"]
+        id33["决策(BehavTree)"]
+        id34["行动(ActionMap)"]
+        id35["预设技能表<br>(BehavList)"]
+      end
+      id36["清除自身"]
+      id37["初始化"]
+      id38["有生成行为？"]
+      id39["有受击行为？"]
+      id40["是否死亡？"]
+      id41["受击行为"]
+      id42["死亡行为"]
+    end
+    subgraph id43["黑板（Blackboard）"]
+      subgraph id44["属性"]
+        id45["可读写参数（ReadWrite）"]
+        id46["仅由外部更新的参数（ReadOnly）"]
+        id47["黑板变更事件（Observer）"]
+        id48["局部视图（View）"]
+        id49["历史记录（History）"]
+      end
+      subgraph id50["功能"]
+        id51["监测外部数据"]
+        id52["向外部发送数据"]
+        id53["调取数据方便调试"]
+      end
+    end
+  end
+end
+id34 --> id32
+id32 --> id33
+id33 --> id34
+id30 --> id31
+id37 --> id38
+id38 -- "有" --> id30
+id38 -- "无" --> id31
+id39 -- "是" --> id41
+id31 -- "受击" --> id40
+id40 -- "否" --> id39
+id39 -- "否" --> id31
+id42 --> id36
+id41 --> id31
+id34 -- "读取" --> id35
+id25 -- "产生" --> id26
+id26 -- "产生事件" --> id27
+id8 -- "上层行为模式" --> id10
+id8 -- "技能细节" --> id9
+id10 -- "需要" --> id11
+id18 -- "概括" --> id19
+id12 --> id0
+id40 -- "是" --> id42
+id27 -- "分发" --> id43
+id0 --> id23

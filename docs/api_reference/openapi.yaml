@@ -1,7 +1,7 @@
 openapi: "3.0.3"
 info:
   title: graphmcp MCP API
-  version: v0.2.3-beta
+  version: v0.2.4-beta
   description: graphmcp MCP tools/call 契约（非 HTTP REST）。实际传输：JSON-RPC 2.0 over stdio（graphmcp serve）。本文档由 graphmcp dump-tools 从 toolList() 自动生成。
 servers:
   - url: "mcp://graphmcp"
@@ -138,7 +138,7 @@ paths:
     post:
       operationId: graph_import
       summary: graph_import
-      description: "Re-import an externally edited diagram: reads the open.<ext> file (or provided content), parses it, validates, and saves as a new version."
+      description: "Re-import an externally edited diagram after graph_open: reads open.<ext> (or provided content), parses, validates, and saves as a new version. NOT for first-time import — use graph_create."
       requestBody:
         required: true
         content:
@@ -264,7 +264,7 @@ paths:
     post:
       operationId: graph_layout
       summary: graph_layout
-      description: "Apply automatic layout to a stored graph. Supports layered (flowchart), tree-h (mindmap), tree-v (orgchart), grid, and auto strategies. Optionally saves the result as a new version."
+      description: Apply automatic layout to a stored graph (layered/tree/grid/auto). Coordinates are NOT saved unless save=true. Prefer save=true before graph_export if you need new positions on disk.
       requestBody:
         required: true
         content:
@@ -280,7 +280,7 @@ paths:
                   description: "layout strategy: auto|layered|tree-h|tree-v|grid (default auto)"
                 save:
                   type: boolean
-                  description: save layout result back to store (default false)
+                  description: "REQUIRED to persist layout: save=true writes a new store version; default false only preview in-memory"
               required:
                 - id
       responses:
@@ -314,7 +314,7 @@ paths:
     post:
       operationId: graph_show
       summary: graph_show
-      description: "Show graph summary, node details, or edge details. Without node/edge params, returns the full structure (nodes + edges list). Use --path to show only a properties subtree."
+      description: "Show graph summary with node/edge id lists, or details for one node/edge/path. Use this to discover element ids before graph_update/graph_insert/graph_apply. Avoid dumping via graph_export to=model for ordinary edits."
       requestBody:
         required: true
         content:
@@ -343,7 +343,7 @@ paths:
     post:
       operationId: graph_property
       summary: graph_property
-      description: "Read, set, insert, or delete properties sub-data. Use --action get to read a value at a path. Use --action set to write a value at a path. Use --action insert to push into an array. Use --action delete to remove at a path. Changes go to the draft."
+      description: "Read, set, insert, or delete values under graph.properties. action=get|set|insert|delete. Changes go to the draft; commit with graph_commit all=true or graph_apply."
       requestBody:
         required: true
         content:
@@ -377,7 +377,7 @@ paths:
     post:
       operationId: graph_update
       summary: graph_update
-      description: Update node/edge attributes via cursor operation. Changes go to the draft. Use --node/--edge for single element or --selector for batch. Multiple --set flags allowed (supports fillColor/strokeColor).
+      description: "Update node/edge attributes in the draft (in-memory selector; do NOT use graph_cursor_* for ordinary edits). Provide node, edge, or selector plus set as 'field=value' (array allowed). Then graph_commit with all=true, or prefer graph_apply to batch+commit."
       requestBody:
         required: true
         content:
@@ -410,7 +410,7 @@ paths:
     post:
       operationId: graph_insert
       summary: graph_insert
-      description: "Insert a node or edge into the graph. Changes go to the draft. For nodes: specify type, label, position, size, parent, fillColor, strokeColor. For edges: specify from, to, label, style, arrow, strokeColor."
+      description: "Insert a node or edge into the draft. For nodes: type, label, position, size, parent, fillColor, strokeColor. For edges: from, to, label, style, arrow, strokeColor. Commit with graph_commit all=true or graph_apply."
       requestBody:
         required: true
         content:
@@ -467,7 +467,7 @@ paths:
     post:
       operationId: graph_delete_element
       summary: graph_delete_element
-      description: Delete a node or edge from the graph via cursor. Changes go to the draft. Deleting a node cascades to its connected edges. Use --selector for batch deletion.
+      description: "Delete a node or edge from the draft (in-memory selector; do NOT use graph_cursor_*). Deleting a node cascades connected edges. Use selector for batch deletion. Commit with all=true or graph_apply."
       requestBody:
         required: true
         content:
@@ -565,7 +565,7 @@ paths:
     post:
       operationId: graph_commit
       summary: graph_commit
-      description: Commit staged (or all draft) changes as a new immutable version. Clears the staging area and submitted draft operations on success.
+      description: "Commit draft changes as a new immutable version. Agents: use all=true (skips empty-stage failure). Without all=true, only staged ops commit; empty stage returns an error. Prefer graph_apply for multi-edit+commit in one call."
       requestBody:
         required: true
         content:
@@ -581,7 +581,7 @@ paths:
                   description: commit message (required)
                 all:
                   type: boolean
-                  description: skip staging and commit all draft changes directly
+                  description: Agents should set all=true to commit all draft ops and skip staging (recommended default path)
                 author:
                   type: string
                   description: "author identifier (default 'mcp')"
@@ -626,7 +626,7 @@ paths:
     post:
       operationId: graph_checkout
       summary: graph_checkout
-      description: Move HEAD to a specified version without creating a new commit. Requires a clean working tree (no draft) unless --force is used.
+      description: Move HEAD to a specified version without creating a new commit. Requires a clean working tree (no draft) unless force=true.
       requestBody:
         required: true
         content:
@@ -649,11 +649,50 @@ paths:
       responses:
         "200":
           description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_apply:
+    post:
+      operationId: graph_apply
+      summary: graph_apply
+      description: "Batch-edit a graph then commit in one call (preferred Agent path). Applies ops[] to the draft, commits with all=true semantics when commit=true (default), optional export_to. Do not use graph_cursor_* or empty graph_stage for this workflow."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                ops:
+                  type: string
+                  description: "JSON array of edit ops. Each op has op=update|insert|delete plus the same fields as graph_update/insert/delete_element. Example: [{\"op\":\"update\",\"node\":\"n1\",\"set\":\"label=Hi\"},{\"op\":\"insert\",\"element\":\"node\",\"label\":\"X\"}]"
+                message:
+                  type: string
+                  description: commit message (default graph_apply); used when commit=true
+                commit:
+                  type: boolean
+                  description: commit all draft ops after edits (default true)
+                author:
+                  type: string
+                  description: author (default mcp)
+                export_to:
+                  type: string
+                  description: "optional post-commit export format: drawio|mermaid|excalidraw|svg|png|pdf|url|model"
+                export_path:
+                  type: string
+                  description: optional export file path (inline if omitted)
+              required:
+                - id
+                - ops
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
   /graph_cursor_open:
     post:
       operationId: graph_cursor_open
       summary: graph_cursor_open
-      description: Open a persistent cursor over nodes or edges. Creates a draft if none exists. Returns a cursor id for subsequent operations.
+      description: Open a persistent disk cursor for sequential traversal only. Do NOT use for ordinary few-point edits — use graph_update/graph_apply with node/edge/selector instead.
       requestBody:
         required: true
         content:

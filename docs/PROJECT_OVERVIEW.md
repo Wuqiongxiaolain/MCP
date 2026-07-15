@@ -7,7 +7,7 @@
 ## 当前状态快照（截至本次更新）
 
 - CLI 命令族已扩展到 15 个（含 `table`、`dump-tools`、`import`）。
-- MCP 工具总数为 46（图 + 表协作 + 规则/修复/派生链路）。
+- MCP 工具总数为 47（图 + 表协作 + 规则/修复/派生链路）。
 - Mermaid 已支持 class/state/sequence/pie 等扩展类型，不再仅限初期子集。
 - 通用表（CSV / 表 XML）与图↔表协同链路已落地；CD 已恢复 macOS 构建矩阵。
 - OpenAPI 由 `dump-tools` / `make docs-api` 从 `toolList()` 自动生成并由 CI 校验漂移。
@@ -46,7 +46,7 @@
 | 导出 draw.io / Mermaid / Excalidraw / PNG / SVG / PDF / URL / model | ✅ | `exporters.hpp` 统一分发；PNG/PDF 走外部转换链，失败回退 SVG |
 | 图版本保存 / 草稿暂存提交 / 回溯 | ✅ | Draft→Stage→Commit；`checkout` 移 HEAD；`rollback` 另存新版本 |
 | 游标遍历与细粒度改图 | ✅ | `cursor_*` + `graph_update`/`insert`/`delete_element`/`graph_property` |
-| MCP 接口（创建 / 转换 / 打开 / 导出及扩展） | ✅ | **46** 个工具（`toolList()` / OpenAPI）；另有 CLI **15** 命令族 + `dump-tools` |
+| MCP 接口（创建 / 转换 / 打开 / 导出及扩展） | ✅ | **47** 个工具（`toolList()` / OpenAPI）；另有 CLI **15** 命令族 + `dump-tools` |
 | **通用表格 + 图↔表协作**（07-10 后扩展） | ✅ | `table_*` / `graph_from_table`：CSV 与表 XML、规则校验修复、派生与样例提案行 |
 | 可选：实时画布预览 | ❎ | 列为后续目标 |
 | draw.io URL / 导出观感打磨 / 性能与性能测试管线 | ❎ | 列为下一阶段目标（见 §六） |
@@ -83,7 +83,7 @@
 | 导出 | `exporters.hpp` | 多格式导出、栅格化回退、编辑器发现与调起 |
 | 图存储 / 版本 / 游标 | `storage.hpp`、`version_*.hpp`、`cursor_types.hpp` | 图库快照、Draft/Stage/Commit、游标持久化 |
 | 通用表 | `table_model.hpp`、`table_storage.hpp`、`table_bridge.hpp`、`table_xml.hpp`、`csv_util.hpp` | 表模型、版本存储、图↔表投影、表 XML |
-| MCP | `mcp.hpp`、`mcp_table_tools.hpp` | **46** 工具；OpenAPI 由 `dump-tools` 导出 |
+| MCP | `mcp.hpp`、`mcp_table_tools.hpp` | **47** 工具；OpenAPI 由 `dump-tools` 导出 |
 | CLI | `main.cpp` | **15** 命令族：`create`/`convert`/`export`/`edit`/`import`/`layout`/`validate`/`store`/`table`/`version`/`graph`/`cursor`/`draft`/`serve`/`dump-tools` |
 | 契约 | `docs/api_reference/openapi.yaml` | `make docs-api` 从 `toolList()` 生成，CI 防漂移 |
 
@@ -146,7 +146,7 @@
 | 总提交数 | 200+（含扩展期） |
 | 开发跨度 | 07-05 启动；07-10 初步收尾后进入扩展期 |
 | 核心模块 | 图核心 + 表协作模块（`table_*.hpp` / `mcp_table_tools.hpp` 等） |
-| MCP 工具 | 46（以 `toolList()` 为准） |
+| MCP 工具 | 47（以 `toolList()` 为准） |
 | CLI 命令族 | 15（含 `table` / `dump-tools`） |
 
 ### 4.3 07-10 以来的需求落地（已解决）

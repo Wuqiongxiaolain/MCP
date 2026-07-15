@@ -70,9 +70,14 @@ inline Json toolDef(const std::string& name,
     return t;
 }
 
-// toolList: 返回服务暴露的全部工具清单（26 个工具）
+// toolList: 返回服务暴露的全部工具清单（进程内缓存，schema 不可变）
 inline Json toolList()
 {
+    static Json cached;
+    static bool ready = false;
+    if (ready)
+        return cached;
+
     Json tools = Json::arr();
 
     // ── 1. graph_create ──────────────────────────────────────
@@ -187,9 +192,9 @@ inline Json toolList()
         req.push(Json("id"));
         tools.push(toolDef(
             "graph_import",
-            "Re-import an externally edited diagram: reads the open.<ext> file "
-            "(or provided content), parses it, validates, and saves as a new "
-            "version.",
+            "Re-import an externally edited diagram after graph_open: reads "
+            "open.<ext> (or provided content), parses, validates, and saves as "
+            "a new version. NOT for first-time import — use graph_create.",
             p, req));
     }
 
@@ -259,16 +264,17 @@ inline Json toolList()
         p.set("strategy",
               prop("string", "layout strategy: auto|layered|tree-h|tree-v|grid "
                              "(default auto)"));
-        p.set("save", prop("boolean",
-                           "save layout result back to store (default false)"));
+        p.set("save",
+              prop("boolean",
+                   "REQUIRED to persist layout: save=true writes a new store "
+                   "version; default false only preview in-memory"));
         Json req = Json::arr();
         req.push(Json("id"));
         tools.push(toolDef(
             "graph_layout",
-            "Apply automatic layout to a stored graph. Supports layered "
-            "(flowchart), "
-            "tree-h (mindmap), tree-v (orgchart), grid, and auto strategies. "
-            "Optionally saves the result as a new version.",
+            "Apply automatic layout to a stored graph (layered/tree/grid/auto). "
+            "Coordinates are NOT saved unless save=true. Prefer save=true "
+            "before graph_export if you need new positions on disk.",
             p, req));
     }
 
@@ -299,12 +305,13 @@ inline Json toolList()
                    "e.g. sequence.participants"));
         Json req = Json::arr();
         req.push(Json("id"));
-        tools.push(toolDef("graph_show",
-                           "Show graph summary, node details, or edge details. "
-                           "Without node/edge params, returns the full "
-                           "structure (nodes + edges list). "
-                           "Use --path to show only a properties subtree.",
-                           p, req));
+        tools.push(toolDef(
+            "graph_show",
+            "Show graph summary with node/edge id lists, or details for one "
+            "node/edge/path. Use this to discover element ids before "
+            "graph_update/graph_insert/graph_apply. Avoid dumping via "
+            "graph_export to=model for ordinary edits.",
+            p, req));
     }
 
     // ── 11b. graph_property 🆕 ────────────────────────────────
@@ -328,14 +335,12 @@ inline Json toolList()
         req.push(Json("id"));
         req.push(Json("action"));
         req.push(Json("path"));
-        tools.push(toolDef("graph_property",
-                           "Read, set, insert, or delete properties sub-data. "
-                           "Use --action get to read a value at a path. "
-                           "Use --action set to write a value at a path. "
-                           "Use --action insert to push into an array. "
-                           "Use --action delete to remove at a path. "
-                           "Changes go to the draft.",
-                           p, req));
+        tools.push(toolDef(
+            "graph_property",
+            "Read, set, insert, or delete values under graph.properties. "
+            "action=get|set|insert|delete. Changes go to the draft; commit "
+            "with graph_commit all=true or graph_apply.",
+            p, req));
     }
 
     // ── 12. graph_update 🆕 ──────────────────────────────────
@@ -358,10 +363,10 @@ inline Json toolList()
         req.push(Json("set"));
         tools.push(toolDef(
             "graph_update",
-            "Update node/edge attributes via cursor operation. Changes go to "
-            "the draft. "
-            "Use --node/--edge for single element or --selector for batch. "
-            "Multiple --set flags allowed (supports fillColor/strokeColor).",
+            "Update node/edge attributes in the draft (in-memory selector; do "
+            "NOT use graph_cursor_* for ordinary edits). Provide node, edge, "
+            "or selector plus set as 'field=value' (array allowed). Then "
+            "graph_commit with all=true, or prefer graph_apply to batch+commit.",
             p, req));
     }
 
@@ -395,10 +400,10 @@ inline Json toolList()
         req.push(Json("element"));
         tools.push(toolDef(
             "graph_insert",
-            "Insert a node or edge into the graph. Changes go to the draft. "
-            "For nodes: specify type, label, position, size, parent, "
-            "fillColor, strokeColor. "
-            "For edges: specify from, to, label, style, arrow, strokeColor.",
+            "Insert a node or edge into the draft. For nodes: type, label, "
+            "position, size, parent, fillColor, strokeColor. For edges: from, "
+            "to, label, style, arrow, strokeColor. Commit with "
+            "graph_commit all=true or graph_apply.",
             p, req));
     }
 
@@ -412,12 +417,13 @@ inline Json toolList()
         p.set("selector", prop("string", "batch selector for mass deletion"));
         Json req = Json::arr();
         req.push(Json("id"));
-        tools.push(toolDef("graph_delete_element",
-                           "Delete a node or edge from the graph via cursor. "
-                           "Changes go to the draft. "
-                           "Deleting a node cascades to its connected edges. "
-                           "Use --selector for batch deletion.",
-                           p, req));
+        tools.push(toolDef(
+            "graph_delete_element",
+            "Delete a node or edge from the draft (in-memory selector; do NOT "
+            "use graph_cursor_*). Deleting a node cascades connected edges. "
+            "Use selector for batch deletion. Commit with all=true or "
+            "graph_apply.",
+            p, req));
     }
 
     // ── 15. graph_status 🆕 ──────────────────────────────────
@@ -477,16 +483,18 @@ inline Json toolList()
         p.set("message", prop("string", "commit message (required)"));
         p.set("all",
               prop("boolean",
-                   "skip staging and commit all draft changes directly"));
+                   "Agents should set all=true to commit all draft ops and "
+                   "skip staging (recommended default path)"));
         p.set("author", prop("string", "author identifier (default 'mcp')"));
         Json req = Json::arr();
         req.push(Json("id"));
         req.push(Json("message"));
         tools.push(toolDef(
             "graph_commit",
-            "Commit staged (or all draft) changes as a new immutable version. "
-            "Clears the staging area and submitted draft operations on "
-            "success.",
+            "Commit draft changes as a new immutable version. Agents: use "
+            "all=true (skips empty-stage failure). Without all=true, only "
+            "staged ops commit; empty stage returns an error. Prefer "
+            "graph_apply for multi-edit+commit in one call.",
             p, req));
     }
 
@@ -523,11 +531,48 @@ inline Json toolList()
         tools.push(toolDef(
             "graph_checkout",
             "Move HEAD to a specified version without creating a new commit. "
-            "Requires a clean working tree (no draft) unless --force is used.",
+            "Requires a clean working tree (no draft) unless force=true.",
             p, req));
     }
 
-    // ── 21-24. graph_cursor_* 🆕 游标磁盘持久化工具 ────────────
+    // ── graph_apply：多改 + 提交（可选导出）编排 ────────────
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "graph id"));
+        p.set("ops",
+              prop("string",
+                   "JSON array of edit ops. Each op has op=update|insert|delete "
+                   "plus the same fields as graph_update/insert/delete_element. "
+                   "Example: "
+                   "[{\"op\":\"update\",\"node\":\"n1\",\"set\":\"label=Hi\"},"
+                   "{\"op\":\"insert\",\"element\":\"node\",\"label\":\"X\"}]"));
+        p.set("message",
+              prop("string",
+                   "commit message (default graph_apply); used when "
+                   "commit=true"));
+        p.set("commit",
+              prop("boolean",
+                   "commit all draft ops after edits (default true)"));
+        p.set("author", prop("string", "author (default mcp)"));
+        p.set("export_to",
+              prop("string",
+                   "optional post-commit export format: "
+                   "drawio|mermaid|excalidraw|svg|png|pdf|url|model"));
+        p.set("export_path",
+              prop("string", "optional export file path (inline if omitted)"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("ops"));
+        tools.push(toolDef(
+            "graph_apply",
+            "Batch-edit a graph then commit in one call (preferred Agent "
+            "path). Applies ops[] to the draft, commits with all=true "
+            "semantics when commit=true (default), optional export_to. "
+            "Do not use graph_cursor_* or empty graph_stage for this workflow.",
+            p, req));
+    }
+
+    // ── 21-24. graph_cursor_* 游标磁盘持久化工具 ────────────
     {
         Json p = Json::obj();
         p.set("id", prop("string", "graph id"));
@@ -538,8 +583,9 @@ inline Json toolList()
         req.push(Json("id"));
         tools.push(toolDef(
             "graph_cursor_open",
-            "Open a persistent cursor over nodes or edges. Creates a draft "
-            "if none exists. Returns a cursor id for subsequent operations.",
+            "Open a persistent disk cursor for sequential traversal only. "
+            "Do NOT use for ordinary few-point edits — use graph_update/"
+            "graph_apply with node/edge/selector instead.",
             p, req));
     }
     {
@@ -920,7 +966,9 @@ inline Json toolList()
             p, req));
     }
 
-    return tools;
+    cached = tools;
+    ready  = true;
+    return cached;
 }
 
 // ---- OpenAPI 导出（代码即文档：以 toolList 为唯一 schema 源）----
@@ -1284,12 +1332,12 @@ inline Json opsToJson(const std::vector<gv::Operation>& ops)
     return arr;
 }
 
-// parseSetPairs: 解析 "key=value" 字符串对列表
+// parseSetPairs: 解析 "key=value" 字符串对列表；也接受 object 形式的 set
 inline std::vector<std::pair<std::string, std::string>>
 parseSetPairs(const Json& args)
 {
     std::vector<std::pair<std::string, std::string>> result;
-    // 支持 set 为字符串数组（多次指定）或单字符串
+    // 支持 set 为字符串数组（多次指定）、单字符串或 {field:value} 对象
     auto extract = [&](const std::string& raw) {
         size_t eq = raw.find('=');
         if (eq != std::string::npos) {
@@ -1304,6 +1352,19 @@ parseSetPairs(const Json& args)
         }
         else if (s->isStr()) {
             extract(s->s);
+        }
+        else if (s->isObj() && s->o) {
+            for (auto& kv : *s->o) {
+                if (kv.second.isStr())
+                    result.push_back({kv.first, kv.second.s});
+                else if (kv.second.isNum())
+                    result.push_back({kv.first, std::to_string(kv.second.n)});
+                else if (kv.second.isBool())
+                    result.push_back(
+                        {kv.first, kv.second.b ? "true" : "false"});
+                else
+                    result.push_back({kv.first, kv.second.dump()});
+            }
         }
     }
     return result;
@@ -1367,6 +1428,8 @@ class ToolRunner {
                 return diff(args);
             if (name == "graph_checkout")
                 return checkout(args);
+            if (name == "graph_apply")
+                return apply(args);
             // ── 游标持久化工具 ──
             if (name == "graph_cursor_open")
                 return cursorOpen(args);
@@ -1451,7 +1514,7 @@ class ToolRunner {
                 Json out = Json::obj();
                 out.set("status", "rejected");
                 out.set("issues", issuesToJson(issues));
-                return textContent(out.dump(2), true);
+                return textContent(out.dump(), true);
             }
         }
         if (doLayout)
@@ -1459,6 +1522,9 @@ class ToolRunner {
 
         std::string note = a.str("note", "created via MCP");
         int         v    = store_.save(g, note);
+        if (v < 0)
+            return textContent(
+                "failed to save graph: store lock, index, or IO error", true);
 
         Json out = Json::obj();
         out.set("status", "created");
@@ -1470,7 +1536,7 @@ class ToolRunner {
         out.set("edges", (double)g.edges.size());
         if (!issues.empty())
             out.set("warnings", issuesToJson(issues));
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // convert: 一次性格式转换
@@ -1478,9 +1544,18 @@ class ToolRunner {
     {
         Graph g = gp::parseAny(a.str("content"), a.str("format", "auto"));
         ge::ExportResult r = ge::exportGraph(g, a.str("to"));
+        if (r.timedOut)
+            return textContent(r.message, true);
         if (!r.ok)
             return textContent(r.message, true);
-        return textContent(r.content.empty() ? r.message : r.content);
+        std::string text = r.content.empty() ? r.message : r.content;
+        if (r.path.empty() && text.size() > ge::inlineExportMaxBytes())
+            return textContent(
+                "inline export exceeds GRAPHMCP_INLINE_MAX_BYTES (" +
+                    std::to_string(ge::inlineExportMaxBytes()) +
+                    "); provide path= to write file instead",
+                true);
+        return textContent(text);
     }
 
     // exportTool: 从存储导出
@@ -1491,11 +1566,20 @@ class ToolRunner {
         if (!store_.load(a.str("id"), g, (int)a.num("version", 0), &err))
             return textContent(err, true);
         ge::ExportResult r = ge::exportGraph(g, a.str("to"), a.str("path"));
+        if (r.timedOut)
+            return textContent(r.message, true);
         if (!r.ok)
             return textContent(r.message, true);
         std::string text = r.content.empty() ?
                                r.message :
                                (r.path.empty() ? r.content : r.message);
+        if (r.path.empty() && a.str("path").empty() &&
+            text.size() > ge::inlineExportMaxBytes())
+            return textContent(
+                "inline export exceeds GRAPHMCP_INLINE_MAX_BYTES (" +
+                    std::to_string(ge::inlineExportMaxBytes()) +
+                    "); provide path= to write file instead",
+                true);
         return textContent(text);
     }
 
@@ -1555,7 +1639,7 @@ class ToolRunner {
                     (editorPath.empty() ? "opened with system default handler" :
                                           "opened with editor: " + editorPath) :
                     "could not launch automatically; open the target manually");
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // importTool: 重新导入外部编辑后的图文件
@@ -1590,10 +1674,14 @@ class ToolRunner {
                 is.push(ji);
             }
             out.set("issues", is);
-            return textContent(out.dump(2), true);
+            return textContent(out.dump(), true);
         }
         gl::layout(imported);
         int  v   = store_.save(imported, "re-imported after external edit");
+        if (v < 0)
+            return textContent(
+                "failed to save imported graph: store lock, index, or IO error",
+                true);
         Json out = Json::obj();
         out.set("status", "imported");
         out.set("id", imported.id);
@@ -1614,7 +1702,7 @@ class ToolRunner {
         }
         out.set("hint", "use graph_open to edit again or graph_export to "
                         "save the updated diagram");
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // validateTool: 校验（增强：支持 strict 模式）
@@ -1643,7 +1731,7 @@ class ToolRunner {
             out.set("strictFailure", true);
             out.set("warningCount", (double)(issues.size()));
         }
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // list: 列出存储（增强：支持 type/filter + format）
@@ -1679,9 +1767,9 @@ class ToolRunner {
                 if (e.str("type") == filterType)
                     graphs.push(e);
             filtered.set("graphs", graphs);
-            return textContent(filtered.dump(2));
+            return textContent(filtered.dump());
         }
-        return textContent(idx.dump(2));
+        return textContent(idx.dump());
     }
 
     // history: 版本历史（增强：limit + format）
@@ -1721,7 +1809,7 @@ class ToolRunner {
             arr.push(e);
             shown++;
         }
-        return textContent(arr.dump(2));
+        return textContent(arr.dump());
     }
 
     // rollback: 回滚（保持向后兼容）
@@ -1735,7 +1823,7 @@ class ToolRunner {
         out.set("status", "rolled back");
         out.set("restoredFrom", a.num("version"));
         out.set("newVersion", (double)nv);
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // ==========================================================
@@ -1764,17 +1852,21 @@ class ToolRunner {
         bool shouldSave = a.boolean("save", false);
         if (shouldSave) {
             int  v   = store_.save(g, "layout via MCP (" + strategy + ")");
+            if (v < 0)
+                return textContent(
+                    "failed to save layout: store lock, index, or IO error",
+                    true);
             Json out = Json::obj();
             out.set("status", "layout applied and saved");
             out.set("version", (double)v);
             out.set("nodes", (double)g.nodes.size());
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         Json out = Json::obj();
         out.set("status", "layout applied (not saved)");
         out.set("nodes", (double)g.nodes.size());
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // deleteGraph: 删除图
@@ -1785,23 +1877,16 @@ class ToolRunner {
             return textContent(
                 "set force=true to confirm deletion of graph: " + id, true);
 
-        // Remove graph directory
-        std::string dir = store_.root() + "/" + id;
-        ge::removeDirectory(dir);
-
-        // Update index
-        Json idx       = store_.loadIndex();
-        Json newGraphs = Json::arr();
-        for (auto& e : *idx["graphs"].a)
-            if (e.str("id") != id)
-                newGraphs.push(e);
-        idx.set("graphs", newGraphs);
-        ge::writeFile(store_.root() + "/index.json", idx.dump(2));
+        // Store 内部持锁完成目录与 index 删除，避免与并发 save 交错。
+        std::string ierr;
+        if (!store_.removeGraphFromIndex(id, &ierr))
+            return textContent(ierr.empty() ? "failed to update index" : ierr,
+                               true);
 
         Json out = Json::obj();
         out.set("status", "deleted");
         out.set("id", id);
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // show: 查看图/节点/边详情
@@ -1847,7 +1932,7 @@ class ToolRunner {
             }
             out.set("incomingEdges", inEdges);
             out.set("outgoingEdges", outEdges);
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         if (!a.str("edge").empty()) {
@@ -1867,7 +1952,7 @@ class ToolRunner {
             out.set("style", e->style);
             out.set("arrow", e->arrow);
             out.set("strokeColor", e->strokeColor);
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         // --path：显示 properties 子树
@@ -1879,7 +1964,7 @@ class ToolRunner {
             Json out = Json::obj();
             out.set("path", a.str("path"));
             out.set("value", *sub);
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         // 全图摘要
@@ -1921,7 +2006,7 @@ class ToolRunner {
             edgesArr.push(ej);
         }
         out.set("edgeList", edgesArr);
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // update: Cursor 更新操作
@@ -1929,11 +2014,13 @@ class ToolRunner {
     Json property(const Json& a)
     {
         std::string id = a.str("id");
-        Graph       g  = vm_.materializeDraft(id);
+        gv::Draft   draft;
+        Graph       g = vm_.materializeDraftWithDraft(id, draft);
         if (g.id.empty()) {
             std::string err;
             if (!store_.load(id, g, 0, &err))
                 return textContent(err, true);
+            draft = vm_.loadDraft(id);
         }
 
         std::string action = a.str("action", "get");
@@ -1941,21 +2028,37 @@ class ToolRunner {
         if (path.empty())
             return textContent("'path' parameter is required", true);
 
-        gv::Draft draft = vm_.loadDraft(id);
-        Json      out   = Json::obj();
+        Json out = Json::obj();
 
         if (action == "get") {
             const Json* val = gj::resolve(g.properties, path);
             if (!val)
                 return textContent("path not found: " + path, true);
             out.set("path", path);
-            if (val->isStr()) { out.set("value", val->s); out.set("type", "string"); }
-            else if (val->isNum()) { out.set("value", val->n); out.set("type", "number"); }
-            else if (val->isBool()) { out.set("value", val->b); out.set("type", "bool"); }
-            else if (val->isArr()) { out.set("value", val->dump(2)); out.set("type", "array"); }
-            else if (val->isObj()) { out.set("value", val->dump(2)); out.set("type", "object"); }
-            else out.set("type", "null");
-            return textContent(out.dump(2));
+            if (val->isStr()) {
+                out.set("value", val->s);
+                out.set("type", "string");
+            }
+            else if (val->isNum()) {
+                out.set("value", val->n);
+                out.set("type", "number");
+            }
+            else if (val->isBool()) {
+                out.set("value", val->b);
+                out.set("type", "bool");
+            }
+            else if (val->isArr()) {
+                // 嵌真实 Json，避免 dump 字符串再外层转义的双重膨胀
+                out.set("value", *val);
+                out.set("type", "array");
+            }
+            else if (val->isObj()) {
+                out.set("value", *val);
+                out.set("type", "object");
+            }
+            else
+                out.set("type", "null");
+            return textContent(out.dump());
         }
 
         if (action == "set") {
@@ -1995,7 +2098,7 @@ class ToolRunner {
             out.set("oldValue", oldStr);
             out.set("draftOperations", (double)draft.operations.size());
             vm_.saveDraft(id, draft);
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         if (action == "insert") {
@@ -2027,7 +2130,7 @@ class ToolRunner {
             out.set("path", path);
             out.set("draftOperations", (double)draft.operations.size());
             vm_.saveDraft(id, draft);
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         if (action == "delete") {
@@ -2051,7 +2154,7 @@ class ToolRunner {
             out.set("path", path);
             out.set("draftOperations", (double)draft.operations.size());
             vm_.saveDraft(id, draft);
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         return textContent("unknown action: " + action + ". Use get|set|insert|delete.", true);
@@ -2060,15 +2163,16 @@ class ToolRunner {
     Json update(const Json& a)
     {
         std::string id = a.str("id");
-        Graph       g  = vm_.materializeDraft(id);
+        gv::Draft   draft;
+        Graph       g = vm_.materializeDraftWithDraft(id, draft);
         if (g.id.empty()) {
             std::string err;
             if (!store_.load(id, g, 0, &err))
                 return textContent(err, true);
+            draft = vm_.loadDraft(id);
         }
 
-        gv::Draft draft = vm_.loadDraft(id);
-        auto      pairs = parseSetPairs(a);
+        auto pairs = parseSetPairs(a);
         if (pairs.empty())
             return textContent("no set pairs provided", true);
 
@@ -2108,21 +2212,22 @@ class ToolRunner {
         out.set("status", "updated");
         out.set("elementsAffected", (double)updated);
         out.set("draftOperations", (double)draft.operationCount());
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // insert: Cursor 插入操作
     Json insert(const Json& a)
     {
         std::string id = a.str("id");
-        Graph       g  = vm_.materializeDraft(id);
+        gv::Draft   draft;
+        Graph       g = vm_.materializeDraftWithDraft(id, draft);
         if (g.id.empty()) {
             std::string err;
             if (!store_.load(id, g, 0, &err))
                 return textContent(err, true);
+            draft = vm_.loadDraft(id);
         }
 
-        gv::Draft   draft   = vm_.loadDraft(id);
         std::string element = a.str("element", "node");
 
         Json out = Json::obj();
@@ -2178,22 +2283,23 @@ class ToolRunner {
 
         vm_.saveDraft(id, draft);
         out.set("draftOperations", (double)draft.operationCount());
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // deleteElement: Cursor 删除操作
     Json deleteElement(const Json& a)
     {
         std::string id = a.str("id");
-        Graph       g  = vm_.materializeDraft(id);
+        gv::Draft   draft;
+        Graph       g = vm_.materializeDraftWithDraft(id, draft);
         if (g.id.empty()) {
             std::string err;
             if (!store_.load(id, g, 0, &err))
                 return textContent(err, true);
+            draft = vm_.loadDraft(id);
         }
 
-        gv::Draft draft = vm_.loadDraft(id);
-        Json      out   = Json::obj();
+        Json out = Json::obj();
 
         if (!a.str("node").empty()) {
             if (!gv::deleteNode(g, &draft, a.str("node")))
@@ -2226,7 +2332,7 @@ class ToolRunner {
 
         vm_.saveDraft(id, draft);
         out.set("draftOperations", (double)draft.operationCount());
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // status: 版本状态
@@ -2247,7 +2353,7 @@ class ToolRunner {
         out.set("dirty", st.dirty);
         out.set("status",
                 st.dirty ? "uncommitted changes" : "working tree clean");
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // draft: Draft 查看/重置/状态对比
@@ -2257,13 +2363,13 @@ class ToolRunner {
         std::string action = a.str("action", "show");
 
         if (action == "status") {
-            return textContent(vm_.draftStatus(id).dump(2));
+            return textContent(vm_.draftStatus(id).dump());
         }
         if (action == "reset") {
             vm_.resetDraft(id);
             Json out = Json::obj();
             out.set("status", "draft discarded");
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         // show
@@ -2281,7 +2387,7 @@ class ToolRunner {
             ops.push(op);
         }
         out.set("operations", ops);
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // stage: Stage 管理
@@ -2294,7 +2400,7 @@ class ToolRunner {
             vm_.clearStage(id);
             Json out = Json::obj();
             out.set("status", "stage cleared");
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         if (action == "show") {
@@ -2309,7 +2415,7 @@ class ToolRunner {
                 indices.push(Json((double)idx));
             out.set("stagedOpIndices", indices);
             out.set("count", (double)s.stagedOpIndices.size());
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         // add
@@ -2339,7 +2445,7 @@ class ToolRunner {
         Json out = Json::obj();
         out.set("status", "staged");
         out.set("count", (double)s.stagedOpIndices.size());
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // commit: 提交
@@ -2358,14 +2464,31 @@ class ToolRunner {
             nv = vm_.commit(id, msg, a.str("author", "mcp"));
         }
 
-        if (nv < 0)
-            return textContent("nothing to commit (stage is empty)", true);
+        if (nv == -1)
+            return textContent(
+                "nothing to commit (stage is empty). Retry with all=true to "
+                "commit all draft ops, or call graph_stage first, or use "
+                "graph_apply",
+                true);
+        if (nv == -2)
+            return textContent(
+                "commit failed: base version is missing or corrupt", true);
+        if (nv == -3)
+            return textContent(
+                "commit failed: store lock, index, or IO error; draft and "
+                "stage were preserved for retry",
+                true);
+        if (nv == -4)
+            return textContent(
+                "commit saved to store but draft trim failed; retry "
+                "graph_status/graph_commit or graph_draft reset after heal",
+                true);
 
         Json out = Json::obj();
         out.set("status", "committed");
         out.set("version", (double)nv);
         out.set("message", msg);
-        return textContent(out.dump(2));
+        return textContent(out.dump());
     }
 
     // diff: 版本对比
@@ -2398,7 +2521,7 @@ class ToolRunner {
             out.set("added", (double)nAdd);
             out.set("modified", (double)nMod);
             out.set("deleted", (double)nDel);
-            return textContent(out.dump(2));
+            return textContent(out.dump());
         }
 
         // unified format
@@ -2439,7 +2562,231 @@ class ToolRunner {
         Json out = Json::obj();
         out.set("status", "checkout complete");
         out.set("headVersion", (double)ver);
-        return textContent(out.dump(2));
+        return textContent(out.dump());
+    }
+
+    // apply: 批量编辑草稿并默认一次提交（可选导出）
+    Json apply(const Json& a)
+    {
+        std::string id = a.str("id");
+        if (id.empty())
+            return textContent("graph_apply requires 'id'", true);
+
+        const Json* opsField = a.find("ops");
+        if (!opsField)
+            return textContent("graph_apply requires 'ops'", true);
+
+        Json opsArr;
+        if (opsField->isArr()) {
+            opsArr = *opsField;
+        }
+        else if (opsField->isStr()) {
+            std::string perr;
+            opsArr = Json::parse(opsField->s, &perr);
+            if (!perr.empty() || !opsArr.isArr())
+                return textContent(
+                    "graph_apply 'ops' must be a JSON array: " + perr, true);
+        }
+        else {
+            return textContent("graph_apply 'ops' must be array or JSON string",
+                               true);
+        }
+
+        static const char* kKnownOpKeys[] = {
+            "op",         "action",  "set",         "node",        "edge",
+            "selector",   "element", "type",        "label",       "position",
+            "size",       "parent",  "from",        "to",          "style",
+            "arrow",      "fillColor","strokeColor"};
+        auto isKnownKey = [&](const std::string& k) {
+            for (const char* known : kKnownOpKeys)
+                if (k == known)
+                    return true;
+            return false;
+        };
+
+        int  applied  = 0;
+        Json warnings = Json::arr();
+        for (auto& op : *opsArr.a) {
+            if (!op.isObj()) {
+                Json fail = Json::obj();
+                fail.set("status", "partial");
+                fail.set("id", id);
+                fail.set("opsApplied", (double)applied);
+                fail.set("failedOpIndex", (double)applied);
+                fail.set("error", "each op must be a JSON object");
+                return textContent(fail.dump(), true);
+            }
+            if (op.o) {
+                for (auto& kv : *op.o) {
+                    if (!isKnownKey(kv.first))
+                        warnings.push(Json("unknown op field ignored: " +
+                                           kv.first));
+                }
+            }
+
+            std::string kind = op.str("op");
+            if (kind.empty())
+                kind = op.str("action");
+            if (kind.empty()) {
+                Json fail = Json::obj();
+                fail.set("status", "partial");
+                fail.set("id", id);
+                fail.set("opsApplied", (double)applied);
+                fail.set("failedOpIndex", (double)applied);
+                fail.set("error",
+                         "each op requires op=update|insert|delete");
+                auto st = vm_.status(id);
+                fail.set("draftOperations", (double)st.draftOpCount);
+                return textContent(fail.dump(), true);
+            }
+
+            Json one = Json::obj();
+            one.set("id", id);
+            auto copyStr = [&](const char* key) {
+                if (const Json* v = op.find(key)) {
+                    if (v->isStr())
+                        one.set(key, v->s);
+                    else if (v->isNum())
+                        one.set(key, v->n);
+                    else if (v->isBool())
+                        one.set(key, v->b);
+                    else
+                        one.set(key, *v);
+                }
+            };
+            for (const char* key :
+                 {"node", "edge", "selector", "element", "type", "label",
+                  "position", "size", "parent", "from", "to", "style", "arrow",
+                  "fillColor", "strokeColor"})
+                copyStr(key);
+            if (const Json* s = op.find("set"))
+                one.set("set", *s);
+
+            Json step;
+            if (kind == "update")
+                step = update(one);
+            else if (kind == "insert")
+                step = insert(one);
+            else if (kind == "delete" || kind == "delete_element")
+                step = deleteElement(one);
+            else {
+                Json fail = Json::obj();
+                fail.set("status", "partial");
+                fail.set("id", id);
+                fail.set("opsApplied", (double)applied);
+                fail.set("failedOpIndex", (double)applied);
+                fail.set("error",
+                         "unknown op: " + kind + " (use update|insert|delete)");
+                auto st = vm_.status(id);
+                fail.set("draftOperations", (double)st.draftOpCount);
+                return textContent(fail.dump(), true);
+            }
+            if (step.boolean("isError", false)) {
+                std::string errText;
+                if (const Json* content = step.find("content")) {
+                    if (content->isArr() && !content->a->empty())
+                        errText = (*content->a)[0].str("text");
+                }
+                Json fail = Json::obj();
+                fail.set("status", "partial");
+                fail.set("id", id);
+                fail.set("opsApplied", (double)applied);
+                fail.set("failedOpIndex", (double)applied);
+                fail.set("error", errText.empty() ? "op failed" : errText);
+                auto st = vm_.status(id);
+                fail.set("draftOperations", (double)st.draftOpCount);
+                if (warnings.size() > 0)
+                    fail.set("warnings", warnings);
+                return textContent(fail.dump(), true);
+            }
+            applied++;
+        }
+
+        Json out = Json::obj();
+        out.set("status", "applied");
+        out.set("id", id);
+        out.set("opsApplied", (double)applied);
+        if (warnings.size() > 0)
+            out.set("warnings", warnings);
+
+        bool doCommit = a.boolean("commit", true);
+        if (doCommit) {
+            std::string msg = a.str("message");
+            if (msg.empty())
+                msg = "graph_apply";
+            int nv =
+                vm_.commitAll(id, msg, a.str("author", "mcp"));
+            if (nv == -1)
+                return textContent(
+                    "graph_apply edits ok but nothing to commit "
+                    "(draft empty after ops)",
+                    true);
+            if (nv == -2)
+                return textContent(
+                    "graph_apply commit failed: base version missing/corrupt",
+                    true);
+            if (nv == -3)
+                return textContent(
+                    "graph_apply commit failed: store lock/index/IO error; "
+                    "draft preserved",
+                    true);
+            if (nv == -4) {
+                out.set("committed", true);
+                out.set("version", (double)vm_.status(id).headVersion);
+                out.set("status", "committed_but_draft_trim_failed");
+                out.set(
+                    "warning",
+                    "store updated; draft trim failed — loadDraft will heal "
+                    "via inflightCommitId");
+                return textContent(out.dump(), true);
+            }
+            out.set("committed", true);
+            out.set("version", (double)nv);
+            out.set("message", msg);
+        }
+        else {
+            out.set("committed", false);
+            auto st = vm_.status(id);
+            out.set("draftOperations", (double)st.draftOpCount);
+        }
+
+        std::string exportTo = a.str("export_to");
+        if (!exportTo.empty()) {
+            Graph       g;
+            std::string err;
+            if (!store_.load(id, g, 0, &err)) {
+                out.set("status", "committed_but_export_failed");
+                out.set("exportError", err);
+                return textContent(out.dump(), true);
+            }
+            ge::ExportResult r =
+                ge::exportGraph(g, exportTo, a.str("export_path"));
+            if (r.timedOut || !r.ok) {
+                out.set("status", "committed_but_export_failed");
+                out.set("exportError", r.message);
+                return textContent(out.dump(), true);
+            }
+            std::string text = r.content.empty() ?
+                                   r.message :
+                                   (r.path.empty() ? r.content : r.message);
+            if (r.path.empty() && a.str("export_path").empty() &&
+                text.size() > ge::inlineExportMaxBytes()) {
+                out.set("status", "committed_but_export_failed");
+                out.set("exportError",
+                        "inline export exceeds GRAPHMCP_INLINE_MAX_BYTES (" +
+                            std::to_string(ge::inlineExportMaxBytes()) +
+                            "); provide export_path= to write file instead");
+                return textContent(out.dump(), true);
+            }
+            out.set("export_to", exportTo);
+            if (!r.path.empty())
+                out.set("export_path", r.path);
+            else if (!a.str("export_path").empty())
+                out.set("export_path", a.str("export_path"));
+            else
+                out.set("export_content", text);
+        }
+        return textContent(out.dump());
     }
 
     // ── 游标磁盘持久化工具（基于 gv::openCursor 等函数）─────
@@ -2450,7 +2797,7 @@ class ToolRunner {
             return textContent("cursor: 'id' is required", true);
         Json        r   = gv::openCursor(store_, id, a.str("target", "nodes"));
         const Json* err = r.find("error");
-        return textContent(err ? err->s : r.dump(2), err != nullptr);
+        return textContent(err ? err->s : r.dump(), err != nullptr);
     }
 
     Json cursorGet(const Json& a)
@@ -2460,7 +2807,7 @@ class ToolRunner {
             return textContent("cursor: 'id' and 'cursor' are required", true);
         Json        r   = gv::getCursor(store_, id, cid);
         const Json* err = r.find("error");
-        return textContent(err ? err->s : r.dump(2), err != nullptr);
+        return textContent(err ? err->s : r.dump(), err != nullptr);
     }
 
     Json cursorMove(const Json& a)
@@ -2471,7 +2818,7 @@ class ToolRunner {
             return textContent("cursor: 'id' and 'cursor' are required", true);
         Json        r   = gv::moveCursor(store_, id, cid, delta);
         const Json* err = r.find("error");
-        return textContent(err ? err->s : r.dump(2), err != nullptr);
+        return textContent(err ? err->s : r.dump(), err != nullptr);
     }
 
     Json cursorClose(const Json& a)
@@ -2481,7 +2828,7 @@ class ToolRunner {
             return textContent("cursor: 'id' and 'cursor' are required", true);
         Json        r   = gv::closeCursor(store_, id, cid);
         const Json* err = r.find("error");
-        return textContent(err ? err->s : r.dump(2), err != nullptr);
+        return textContent(err ? err->s : r.dump(), err != nullptr);
     }
 
     // ==========================================================
@@ -2650,13 +2997,21 @@ inline bool handleMessage(const Json& msg, gs::Store& store, Json& response)
         ToolRunner  runner(store);
         Json        toolResp = runner.call(name, args ? *args : Json::obj());
         bool        isError  = toolResp.boolean("isError", false);
+        bool        timedOut = false;
+        if (isError) {
+            const Json* content = toolResp.find("content");
+            if (content && content->isArr() && content->size() > 0) {
+                std::string text = (*content)[0].str("text");
+                timedOut = text.find("timed out") != std::string::npos;
+            }
+        }
         response             = rpcResult(id, toolResp);
         auto ended           = std::chrono::steady_clock::now();
         logEvent(isError ? "error" : "info", method, name,
                  std::chrono::duration_cast<std::chrono::milliseconds>(ended -
                                                                        started)
                      .count(),
-                 isError ? "error" : "ok");
+                 timedOut ? "timeout" : (isError ? "error" : "ok"));
         return !isNotification;
     }
     if (isNotification) {

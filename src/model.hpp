@@ -56,6 +56,10 @@ struct Edge
     // 边路由路径点：布局阶段填充（虚拟节点在各中间层的坐标），导出阶段用于折线路由
     // 空 vector 表示未设置，导出器自行计算兜底路由
     std::vector<std::pair<double, double>> waypoints;
+
+    // 边标签在画布上的绝对位置：布局阶段从 waypoints 中选出最佳直段计算，
+    // 导出阶段供 draw.io 等格式定位标签偏移量
+    double labelX = 0, labelY = 0;
 };
 
 // Graph: 统一图模型容器（命名上 g 常用于 Graph 实例）
@@ -205,6 +209,10 @@ struct Graph
                 }
                 je.set("waypoints", wpArr);
             }
+            if (e.labelX != 0 || e.labelY != 0) {
+                je.set("labelX", e.labelX);
+                je.set("labelY", e.labelY);
+            }
             es.push(je);
         }
         j.set("edges", es);
@@ -285,6 +293,8 @@ struct Graph
                                 e.waypoints.push_back(
                                     {wpj.num("x", 0.0), wpj.num("y", 0.0)});
                     }
+                    e.labelX = je.num("labelX", 0.0);
+                    e.labelY = je.num("labelY", 0.0);
                     g.edges.push_back(e);
                 }
         }

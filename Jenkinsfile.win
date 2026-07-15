@@ -1,0 +1,91 @@
+// Jenkinsfile — graphmcp CI Windows 演示版
+pipeline {
+
+    agent any
+
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 10, unit: 'MINUTES')
+        buildDiscarder(logRotator(daysToKeepStr: '30', numToKeepStr: '10'))
+        timestamps()
+    }
+
+    environment {
+        GRAPHMCP_LOG    = 'info'
+        GRAPHMCP_STORE  = 'ci-store'
+        PROJECT_DIR     = 'D:\\MCP'
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                echo "使用本地代码: ${env.PROJECT_DIR}"
+                // Jenkins 工作目录就是 D:\MCP，无需额外拉取
+            }
+        }
+
+        stage('Build') {
+            steps {
+                dir("${env.PROJECT_DIR}") {
+                    bat 'mingw32-make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"'
+                }
+            }
+        }
+
+        stage('Unit Test') {
+            steps {
+                dir("${env.PROJECT_DIR}") {
+                    bat 'mingw32-make test-all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"'
+                }
+            }
+        }
+
+        stage('CLI Smoke Test') {
+            steps {
+                dir("${env.PROJECT_DIR}") {
+                    bat '''
+                        D:\\Git\\Git\\bin\\bash.exe tests/smoke_test.sh bin/graphmcp.exe
+                    '''
+                }
+            }
+        }
+
+        stage('MCP Smoke Test') {
+            steps {
+                dir("${env.PROJECT_DIR}") {
+                    // jq 在 Git Bash 下有 DLL 兼容问题，后续修复
+                    echo "MCP Smoke Test 前置依赖 jq 暂未完全就绪，跳过"
+                }
+            }
+        }
+
+        stage('Package') {
+            steps {
+                bat """
+                    pushd ${env.PROJECT_DIR}
+                    IF NOT EXIST "dist" mkdir dist
+                    copy /Y "bin\\\\graphmcp.exe" "dist\\\\" >nul
+                    copy /Y "README.md" "dist\\\\" >nul
+                    powershell -NoProfile -Command "Compress-Archive -Path 'dist\\*' -DestinationPath 'graphmcp-${BUILD_NUMBER}.zip' -Force"
+                    popd
+                    copy /Y "${env.PROJECT_DIR}\\\\graphmcp-${BUILD_NUMBER}.zip" .
+                """
+            }
+            post {
+                always {
+                    archiveArtifacts(
+                        artifacts: 'graphmcp-*.zip',
+                        allowEmptyArchive: true
+                    )
+                }
+            }
+        }
+    }
+
+    post {
+        cleanup {
+            echo '构建完成'
+        }
+    }
+}

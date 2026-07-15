@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="876" height="848" viewBox="0 0 876 848">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="161.505,538 277.777,600 494.048,662" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="494.048,662 520.198,724 646.349,786" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#b0714b" stroke-width="1.5" stroke-linejoin="round" points="646.349,786 687.174,786 687.174,166 836.5,166" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="719.5,166 610.603,104 393.206,42" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="443.206,64 437.853,104 432.5,144" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="432.5,188 429.958,228 427.416,268" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="477.416,290 520.341,352 667.516,414" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#b0714b" stroke-width="1.5" stroke-linejoin="round" points="667.516,414 528.236,414 528.236,42 493.206,42" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="393.206,42 355.728,104 214,166" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="214,166 189.877,352 61.505,538" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="393.206,42 265.103,104 20,166" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="87,188 99.2525,352 111.505,516" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="493.206,42 522.103,104 659.5,166" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="601,188 608.708,228 616.416,268" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="695.416,290 697.208,228 836.5,166" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="537.416,290 536.341,352 382.016,414" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="440.516,436 441.882,476 443.247,516" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#b0714b" stroke-width="1.5" stroke-linejoin="round" points="501.247,538 610.624,538 610.624,166 836.5,166" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#b0714b" stroke-width="1.5" stroke-linejoin="round" points="501.247,538 355.749,538 355.749,166 322.5,166" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="322.5,166 371.749,352 501.247,538" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="377.416,290 319.256,352 156.846,414" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="156.846,414 161.301,476 61.505,538" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="111.505,560 107.152,600 102.798,640" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="102.798,684 123.152,600 111.505,516" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="161.505,538 193.527,600 334.048,662" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="217.048,662 209.527,600 61.505,538" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="778,188 777.758,290 777.516,392" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="727.516,414 602.466,352 377.416,290" marker-end="url(#arrow)"/>
+  <rect x="61.505" y="516" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="111.505" y="543" text-anchor="middle">工作目录</text>
+  <rect x="394.048" y="640" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="444.048" y="667" text-anchor="middle">git_add</text>
+  <rect x="546.349" y="764" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="596.349" y="791" text-anchor="middle">暂存区</text>
+  <rect x="719.5" y="144" width="117" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="778" y="171" text-anchor="middle">git_commit</text>
+  <rect x="393.206" y="20" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="443.206" y="47" text-anchor="middle">本地仓库</text>
+  <rect x="382.5" y="144" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="432.5" y="171" text-anchor="middle">git_push</text>
+  <rect x="377.416" y="268" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="427.416" y="295" text-anchor="middle">远程仓库</text>
+  <rect x="559.016" y="392" width="108.5" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="613.266" y="419" text-anchor="middle">git_fetch</text>
+  <rect x="214" y="144" width="108.5" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="268.25" y="171" text-anchor="middle">git_merge</text>
+  <rect x="20" y="144" width="134" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="87" y="171" text-anchor="middle">git_checkout</text>
+  <rect x="542.5" y="144" width="117" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="601" y="171" text-anchor="middle">git_branch</text>
+  <rect x="537.416" y="268" width="158" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="616.416" y="295" text-anchor="middle">feature分支</text>
+  <rect x="382.016" y="392" width="117" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="440.516" y="419" text-anchor="middle">git_rebase</text>
+  <rect x="385.247" y="516" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="443.247" y="543" text-anchor="middle">main分支</text>
+  <rect x="156.846" y="392" width="108.5" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="211.096" y="419" text-anchor="middle">git_clone</text>
+  <rect x="48.5482" y="640" width="108.5" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="102.798" y="667" text-anchor="middle">git_stash</text>
+  <rect x="217.048" y="640" width="117" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="275.548" y="667" text-anchor="middle">git_status</text>
+  <rect x="727.516" y="392" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="777.516" y="419" text-anchor="middle">git_tag</text>
+</svg>

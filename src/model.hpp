@@ -302,12 +302,24 @@ struct Graph
                     e.to    = je.str("to");
                     e.label = je.str("label");
                     e.style = je.str("style", "solid");
-                    e.arrow = je.str("arrow", "arrow");
-                    // 扩展箭头信息：读新字段，若不存在则从 arrow 推导
-                    e.headStart = je.str(
-                        "headStart", (e.arrow == "both") ? "arrow" : "none");
-                    e.headEnd = je.str("headEnd",
-                                       (e.arrow == "none") ? "none" : "arrow");
+                    // 读 headStart/headEnd（优先），回退到旧 arrow 字段推导
+                    e.headStart = je.str("headStart", "");
+                    e.headEnd   = je.str("headEnd", "");
+                    if (e.headStart.empty() && e.headEnd.empty()) {
+                        // 仅含旧 arrow 字段，从 arrow 推导箭头
+                        std::string ar = je.str("arrow", "arrow");
+                        e.headStart = (ar == "both") ? "arrow" : "none";
+                        e.headEnd   = (ar == "none") ? "none" : "arrow";
+                        e.arrow     = ar;
+                    } else {
+                        // 已有 headStart/headEnd，从中计算兼容 arrow 字段
+                        if (e.headStart == "none" && e.headEnd == "none")
+                            e.arrow = "none";
+                        else if (e.headStart != "none" && e.headEnd != "none")
+                            e.arrow = "both";
+                        else
+                            e.arrow = "arrow";
+                    }
                     e.seqNum      = (int)je.num("seqNum", 0);
                     e.isAsync     = je.boolean("isAsync", false);
                     e.strokeColor = je.str("strokeColor");

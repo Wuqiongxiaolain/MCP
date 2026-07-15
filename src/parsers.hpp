@@ -3301,6 +3301,8 @@ inline Graph parseDrawio(const std::string& text)
         if (n.fillColor == "none")
             n.fillColor.clear();
         n.strokeColor = extractStyleVal(cell.style, "strokeColor");
+        if (n.strokeColor == "none")
+            n.strokeColor.clear();  // draw.io "none" 语义同空串
         if (!cell.parent.empty() && cell.parent != "1" && cell.parent != "0") {
             // 父节点是图层 → 记录 layer；否则是 group 包含关系
             if (layerNames.count(cell.parent))

@@ -1300,6 +1300,13 @@ inline std::string sanitizeMermaidId(const std::string& id)
     return out;
 }
 
+// edgeHasEndArrow / edgeHasStartArrow: 从 headStart/headEnd 推导箭头可见性
+// 替代直接读 e.arrow，确保与扩展箭头字段一致
+inline bool edgeHasEndArrow(const Edge& e)
+{ return e.headEnd != "none"; }
+inline bool edgeHasStartArrow(const Edge& e)
+{ return e.headStart != "none"; }
+
 // toMermaid: 统一模型导出为 Mermaid 文本
 // 关键步骤：按图类型分支（mindmap/er/flowchart）-> 输出节点 -> 输出边
 inline std::string toMermaid(const Graph& g)
@@ -2050,10 +2057,12 @@ inline std::string toMermaid(const Graph& g)
             os << " -.->";
         else if (e.style == "thick")
             os << " ==>";
-        else if (e.arrow == "none")
+        else if (!edgeHasEndArrow(e) && !edgeHasStartArrow(e))
             os << " ---";
-        else if (e.arrow == "both")
+        else if (edgeHasStartArrow(e) && edgeHasEndArrow(e))
             os << " <-->";
+        else if (edgeHasStartArrow(e))
+            os << " <--";
         else
             os << " -->";
         if (!e.label.empty())
@@ -2236,9 +2245,9 @@ inline std::string toDrawio(Graph g)
             style += "dashed=1;";
         if (e.style == "thick")
             style += "strokeWidth=3;";
-        if (e.arrow == "none")
+        if (!edgeHasEndArrow(e))
             style += "endArrow=none;";
-        if (e.arrow == "both")
+        if (edgeHasStartArrow(e))
             style += "startArrow=classic;";
         if (!e.strokeColor.empty())
             style += "strokeColor=" + e.strokeColor + ";";
@@ -2430,8 +2439,9 @@ inline std::string toExcalidraw(Graph g)
             el.set("startBinding", sb);
             el.set("endBinding", eb);
             el.set("startArrowhead",
-                   e.arrow == "both" ? Json("arrow") : Json());
-            el.set("endArrowhead", e.arrow == "none" ? Json() : Json("arrow"));
+                   edgeHasStartArrow(e) ? Json("arrow") : Json());
+            el.set("endArrowhead",
+                   edgeHasEndArrow(e) ? Json("arrow") : Json());
             if (e.style == "dashed")
                 el.set("strokeStyle", "dashed");
             if (!e.strokeColor.empty())
@@ -2538,9 +2548,9 @@ inline std::string toSVG(Graph g)
            << "\" stroke-width=\"" << (e.style == "thick" ? 3 : 1.5) << "\"";
         if (e.style == "dashed")
             os << " stroke-dasharray=\"6,4\"";
-        if (e.arrow != "none")
+        if (edgeHasEndArrow(e))
             os << " marker-end=\"url(#arrow)\"";
-        if (e.arrow == "both")
+        if (edgeHasStartArrow(e))
             os << " marker-start=\"url(#arrow)\"";
         os << "/>\n";
         if (!e.label.empty()) {
@@ -2998,8 +3008,15 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
 {
     ExportResult r;
     std::string  content;
-    if (to == "drawio")
+    if (to == "drawio") {
+        // rawMermaid 类型：生成含注释节点的 drawio，避免空白图表
+        if (!g.rawMermaid.empty() && g.nodes.empty()) {
+            Node& note = g.ensureNode("raw-mermaid-note", g.rawMermaid);
+            note.shape = "note";
+            note.x = 20; note.y = 20; note.w = 400; note.h = 200;
+        }
         content = toDrawio(g);
+    }
     else if (to == "mermaid")
         content = toMermaid(g);
     else if (to == "excalidraw")

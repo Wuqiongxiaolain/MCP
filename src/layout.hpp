@@ -764,6 +764,17 @@ inline void layout(Graph& g, bool force = false,
             n.x += dx;
             n.y += dy;
         }
+        // 同步调整边 waypoints 和 label 位置
+        for (auto& e : g.edges) {
+            for (auto& wp : e.waypoints) {
+                wp.first += dx;
+                wp.second += dy;
+            }
+            if (e.labelX != 0 || e.labelY != 0) {
+                e.labelX += dx;
+                e.labelY += dy;
+            }
+        }
     }
     g.laidOut = true;
 }

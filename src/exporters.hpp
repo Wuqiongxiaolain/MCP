@@ -260,6 +260,8 @@ inline bool writeFileAtomic(const std::string& path, const std::string& content)
                         MOVEFILE_REPLACE_EXISTING))
             return true;
         DWORD code = GetLastError();
+        // 共享冲突常表现为 SHARING_VIOLATION；部分环境下也会变成 ACCESS_DENIED。
+        // 真实权限问题会在有界重试后仍失败并返回 false。
         if (code != ERROR_SHARING_VIOLATION && code != ERROR_ACCESS_DENIED)
             break;
         Sleep(20);
@@ -2941,6 +2943,7 @@ inline int runQuiet(const std::string& cmd,
         return -1;
     }
     // Job Object 确保超时时连同 cmd 拉起的转换器子进程一起结束。
+    // Assign 失败（嵌套 Job 等）时废弃 Job，退化为只终止主进程。
     HANDLE job = CreateJobObjectW(nullptr, nullptr);
     if (job) {
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION info;
@@ -2949,7 +2952,10 @@ inline int runQuiet(const std::string& cmd,
             JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         SetInformationJobObject(job, JobObjectExtendedLimitInformation, &info,
                                 sizeof(info));
-        AssignProcessToJobObject(job, pi.hProcess);
+        if (!AssignProcessToJobObject(job, pi.hProcess)) {
+            CloseHandle(job);
+            job = nullptr;
+        }
     }
     DWORD wait = WaitForSingleObject(pi.hProcess, (DWORD)timeoutMs);
     int   rc   = -1;
@@ -3043,7 +3049,10 @@ inline int launchBrowser(const std::string& exe,
             JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         SetInformationJobObject(job, JobObjectExtendedLimitInformation, &info,
                                 sizeof(info));
-        AssignProcessToJobObject(job, pi.hProcess);
+        if (!AssignProcessToJobObject(job, pi.hProcess)) {
+            CloseHandle(job);
+            job = nullptr;
+        }
     }
     DWORD wait = WaitForSingleObject(pi.hProcess, (DWORD)timeoutMs);
     int   rc   = -1;

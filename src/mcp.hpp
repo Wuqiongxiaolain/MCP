@@ -2478,6 +2478,11 @@ class ToolRunner {
                 "commit failed: store lock, index, or IO error; draft and "
                 "stage were preserved for retry",
                 true);
+        if (nv == -4)
+            return textContent(
+                "commit saved to store but draft trim failed; retry "
+                "graph_status/graph_commit or graph_draft reset after heal",
+                true);
 
         Json out = Json::obj();
         out.set("status", "committed");
@@ -2587,16 +2592,53 @@ class ToolRunner {
                                true);
         }
 
-        int applied = 0;
+        static const char* kKnownOpKeys[] = {
+            "op",         "action",  "set",         "node",        "edge",
+            "selector",   "element", "type",        "label",       "position",
+            "size",       "parent",  "from",        "to",          "style",
+            "arrow",      "fillColor","strokeColor"};
+        auto isKnownKey = [&](const std::string& k) {
+            for (const char* known : kKnownOpKeys)
+                if (k == known)
+                    return true;
+            return false;
+        };
+
+        int  applied  = 0;
+        Json warnings = Json::arr();
         for (auto& op : *opsArr.a) {
-            if (!op.isObj())
-                return textContent("each op must be a JSON object", true);
+            if (!op.isObj()) {
+                Json fail = Json::obj();
+                fail.set("status", "partial");
+                fail.set("id", id);
+                fail.set("opsApplied", (double)applied);
+                fail.set("failedOpIndex", (double)applied);
+                fail.set("error", "each op must be a JSON object");
+                return textContent(fail.dump(), true);
+            }
+            if (op.o) {
+                for (auto& kv : *op.o) {
+                    if (!isKnownKey(kv.first))
+                        warnings.push(Json("unknown op field ignored: " +
+                                           kv.first));
+                }
+            }
+
             std::string kind = op.str("op");
             if (kind.empty())
                 kind = op.str("action");
-            if (kind.empty())
-                return textContent("each op requires op=update|insert|delete",
-                                   true);
+            if (kind.empty()) {
+                Json fail = Json::obj();
+                fail.set("status", "partial");
+                fail.set("id", id);
+                fail.set("opsApplied", (double)applied);
+                fail.set("failedOpIndex", (double)applied);
+                fail.set("error",
+                         "each op requires op=update|insert|delete");
+                auto st = vm_.status(id);
+                fail.set("draftOperations", (double)st.draftOpCount);
+                return textContent(fail.dump(), true);
+            }
 
             Json one = Json::obj();
             one.set("id", id);
@@ -2627,12 +2669,36 @@ class ToolRunner {
                 step = insert(one);
             else if (kind == "delete" || kind == "delete_element")
                 step = deleteElement(one);
-            else
-                return textContent("unknown op: " + kind +
-                                       " (use update|insert|delete)",
-                                   true);
-            if (step.boolean("isError", false))
-                return step;
+            else {
+                Json fail = Json::obj();
+                fail.set("status", "partial");
+                fail.set("id", id);
+                fail.set("opsApplied", (double)applied);
+                fail.set("failedOpIndex", (double)applied);
+                fail.set("error",
+                         "unknown op: " + kind + " (use update|insert|delete)");
+                auto st = vm_.status(id);
+                fail.set("draftOperations", (double)st.draftOpCount);
+                return textContent(fail.dump(), true);
+            }
+            if (step.boolean("isError", false)) {
+                std::string errText;
+                if (const Json* content = step.find("content")) {
+                    if (content->isArr() && !content->a->empty())
+                        errText = (*content->a)[0].str("text");
+                }
+                Json fail = Json::obj();
+                fail.set("status", "partial");
+                fail.set("id", id);
+                fail.set("opsApplied", (double)applied);
+                fail.set("failedOpIndex", (double)applied);
+                fail.set("error", errText.empty() ? "op failed" : errText);
+                auto st = vm_.status(id);
+                fail.set("draftOperations", (double)st.draftOpCount);
+                if (warnings.size() > 0)
+                    fail.set("warnings", warnings);
+                return textContent(fail.dump(), true);
+            }
             applied++;
         }
 
@@ -2640,6 +2706,8 @@ class ToolRunner {
         out.set("status", "applied");
         out.set("id", id);
         out.set("opsApplied", (double)applied);
+        if (warnings.size() > 0)
+            out.set("warnings", warnings);
 
         bool doCommit = a.boolean("commit", true);
         if (doCommit) {
@@ -2662,6 +2730,16 @@ class ToolRunner {
                     "graph_apply commit failed: store lock/index/IO error; "
                     "draft preserved",
                     true);
+            if (nv == -4) {
+                out.set("committed", true);
+                out.set("version", (double)vm_.status(id).headVersion);
+                out.set("status", "committed_but_draft_trim_failed");
+                out.set(
+                    "warning",
+                    "store updated; draft trim failed — loadDraft will heal "
+                    "via inflightCommitId");
+                return textContent(out.dump(), true);
+            }
             out.set("committed", true);
             out.set("version", (double)nv);
             out.set("message", msg);
@@ -2676,22 +2754,30 @@ class ToolRunner {
         if (!exportTo.empty()) {
             Graph       g;
             std::string err;
-            if (!store_.load(id, g, 0, &err))
-                return textContent(err, true);
+            if (!store_.load(id, g, 0, &err)) {
+                out.set("status", "committed_but_export_failed");
+                out.set("exportError", err);
+                return textContent(out.dump(), true);
+            }
             ge::ExportResult r =
                 ge::exportGraph(g, exportTo, a.str("export_path"));
-            if (r.timedOut || !r.ok)
-                return textContent(r.message, true);
+            if (r.timedOut || !r.ok) {
+                out.set("status", "committed_but_export_failed");
+                out.set("exportError", r.message);
+                return textContent(out.dump(), true);
+            }
             std::string text = r.content.empty() ?
                                    r.message :
                                    (r.path.empty() ? r.content : r.message);
             if (r.path.empty() && a.str("export_path").empty() &&
-                text.size() > ge::inlineExportMaxBytes())
-                return textContent(
-                    "inline export exceeds GRAPHMCP_INLINE_MAX_BYTES (" +
-                        std::to_string(ge::inlineExportMaxBytes()) +
-                        "); provide export_path= to write file instead",
-                    true);
+                text.size() > ge::inlineExportMaxBytes()) {
+                out.set("status", "committed_but_export_failed");
+                out.set("exportError",
+                        "inline export exceeds GRAPHMCP_INLINE_MAX_BYTES (" +
+                            std::to_string(ge::inlineExportMaxBytes()) +
+                            "); provide export_path= to write file instead");
+                return textContent(out.dump(), true);
+            }
             out.set("export_to", exportTo);
             if (!r.path.empty())
                 out.set("export_path", r.path);

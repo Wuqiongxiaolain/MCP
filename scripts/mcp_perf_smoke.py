@@ -438,6 +438,26 @@ def main() -> int:
         )
         assertTrue('"label":"Renamed"' in export_body.replace(" ", ""), toolText(applied))
 
+        # graph_apply 中段失败应回报部分成功，而非吞掉已应用计数
+        partial = c3.tool(
+            "graph_apply",
+            {
+                "id": apply_id,
+                "ops": json.dumps(
+                    [
+                        {"op": "update", "node": node_a, "set": "label=Ok"},
+                        {"op": "update", "node": "__missing__", "set": "label=X"},
+                    ]
+                ),
+                "commit": False,
+            },
+        )
+        assertTrue(partial["result"].get("isError"), "partial apply should error")
+        partial_data = json.loads(toolText(partial))
+        assertTrue(partial_data.get("status") == "partial", toolText(partial))
+        assertTrue(partial_data.get("opsApplied") == 1, toolText(partial))
+        assertTrue(partial_data.get("failedOpIndex") == 1, toolText(partial))
+
         # --- 损坏 index 必须拒绝写，且 commit 失败后保留 draft/stage ---
         retry_update = c3.tool(
             "graph_update", {"id": gid, "node": "A", "set": "label=A2"}

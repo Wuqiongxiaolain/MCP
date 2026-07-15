@@ -50,6 +50,7 @@ class GraphVersionManager {
     // ==============================================================
 
     // loadDraft: 加载草稿；不存在则创建空草稿（基于 latest 版本）
+    // 若存在未完成的 inflight commit，先做崩溃恢复，避免重复回放已入库 ops。
     Draft loadDraft(const std::string& graphId)
     {
         std::string path = draftPath(graphId);
@@ -57,8 +58,11 @@ class GraphVersionManager {
         if (!txt.empty()) {
             std::string err;
             Json        j = Json::parse(txt, &err);
-            if (err.empty())
-                return Draft::fromJson(j);
+            if (err.empty()) {
+                Draft d = Draft::fromJson(j);
+                healInflightCommit(d);
+                return d;
+            }
         }
         // 新建空草稿
         Draft d;
@@ -215,12 +219,25 @@ class GraphVersionManager {
         std::string cid =
             shortHash(graphId + ":" + std::to_string(parentVersion) + ":" +
                       message + ":" + nowIso());
+        // 先持久化 inflight 意图：若随后 save 成功而裁剪草稿失败/崩溃，
+        // 下次 loadDraft 可按 commitId 识别已入库并裁剪，避免重复回放。
+        draft.inflightCommitId      = cid;
+        draft.inflightStagedIndices = stage.stagedOpIndices;
+        draft.updatedAt             = nowIso();
+        if (!saveDraft(graphId, draft))
+            return -3;
+
         int newVersion =
             store_.save(committedModel, message, parentVersion, cid);
-        if (newVersion < 0)
+        if (newVersion < 0) {
+            draft.inflightCommitId.clear();
+            draft.inflightStagedIndices.clear();
+            saveDraft(graphId, draft);
             return -3;  // 存储锁或 IO 失败；保留 draft/stage 供重试
+        }
 
-        // save 已原子更新快照/latest/HEAD/index，此处只裁剪已提交操作。
+        // save 已原子更新快照/latest/HEAD/index，此处裁剪已提交操作。
+        // 若裁剪写盘失败：磁盘仍保留带 inflightCommitId 的旧 draft，heal 可恢复。
         std::set<int>          staged(stage.stagedOpIndices.begin(),
                                       stage.stagedOpIndices.end());
         std::vector<Operation> remaining;
@@ -228,10 +245,13 @@ class GraphVersionManager {
             if (!staged.count(i))
                 remaining.push_back(draft.operations[i]);
         }
-        draft.operations  = remaining;
-        draft.baseVersion = newVersion;
-        draft.updatedAt   = nowIso();
-        saveDraft(graphId, draft);
+        draft.operations            = remaining;
+        draft.baseVersion           = newVersion;
+        draft.updatedAt             = nowIso();
+        draft.inflightCommitId.clear();
+        draft.inflightStagedIndices.clear();
+        if (!saveDraft(graphId, draft))
+            return -4;
 
         // 清空暂存区
         clearStage(graphId);
@@ -655,6 +675,63 @@ class GraphVersionManager {
             // 兼容损坏/旧索引：至少保留独立 HEAD，供 readHead 回退。
             ge::writeFileAtomic(headPath(id), std::to_string(version));
         }
+    }
+
+    // snapshotCommitId: 读取版本快照中的 commitId（缺失则空串）
+    std::string snapshotCommitId(const std::string& id, int version) const
+    {
+        std::string txt = ge::readFile(versionPath(id, version));
+        if (txt.empty())
+            return "";
+        std::string err;
+        Json        j = Json::parse(txt, &err);
+        if (!err.empty())
+            return "";
+        return j.str("commitId");
+    }
+
+    // healInflightCommit: 若 inflight 对应快照已存在则裁剪草稿，防止重复回放
+    void healInflightCommit(Draft& draft)
+    {
+        if (draft.inflightCommitId.empty() || draft.graphId.empty())
+            return;
+
+        const std::string& cid = draft.inflightCommitId;
+        int                head = readHead(draft.graphId);
+        int                foundVer = 0;
+        int                start =
+            draft.baseVersion > 0 ? draft.baseVersion + 1 : 1;
+        for (int v = start; v <= head; ++v) {
+            if (snapshotCommitId(draft.graphId, v) == cid) {
+                foundVer = v;
+                break;
+            }
+        }
+        if (foundVer == 0) {
+            // save 未成功落地：仅清除 inflight 标记，保留原 ops
+            draft.inflightCommitId.clear();
+            draft.inflightStagedIndices.clear();
+            saveDraft(draft.graphId, draft);
+            return;
+        }
+
+        std::set<int> staged(draft.inflightStagedIndices.begin(),
+                             draft.inflightStagedIndices.end());
+        // 若未记录索引（旧数据），保守地清空全部 ops，避免重放已入库变更
+        std::vector<Operation> remaining;
+        if (!staged.empty()) {
+            for (int i = 0; i < draft.operationCount(); i++) {
+                if (!staged.count(i))
+                    remaining.push_back(draft.operations[i]);
+            }
+        }
+        draft.operations = remaining;
+        draft.baseVersion = foundVer;
+        draft.updatedAt   = nowIso();
+        draft.inflightCommitId.clear();
+        draft.inflightStagedIndices.clear();
+        saveDraft(draft.graphId, draft);
+        clearStage(draft.graphId);
     }
 };
 

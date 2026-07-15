@@ -367,10 +367,11 @@ pipeline {
               echo "---"
               echo ""
               echo "制品由 Jenkins CD 自动构建上传。"
-              // Groovy ''' 中 \\` → 交给 shell 的 \`，避免命令替换并写入 markdown 反引号
-              echo "- Tag：\\`${GRAPHMCP_TAG_NAME}\\`"
-              echo "- Build：\\`${BUILD_NUMBER}\\`"
-              echo "- Commit：\\`${GIT_COMMIT}\\`"
+              # 用变量拼 markdown 反引号，避免 bash 命令替换，也避免 Groovy 转义问题
+              BT='`'
+              echo "- Tag：${BT}${GRAPHMCP_TAG_NAME}${BT}"
+              echo "- Build：${BT}${BUILD_NUMBER}${BT}"
+              echo "- Commit：${BT}${GIT_COMMIT}${BT}"
               echo "- 平台：以 release-assets 内实际文件为准"
             } >> "$NOTE_FILE"
 

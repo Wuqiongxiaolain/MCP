@@ -101,6 +101,11 @@ jobs:
           mkdir -p dist
           cp bin/graphmcp dist/
           cp README.md VERSION dist/
+          # 可选增益：产品 Skill 包（安装 MCP ≠ 安装 Skill）
+          if [ -d skills/graphmcp ]; then
+            mkdir -p dist/skills
+            cp -R skills/graphmcp dist/skills/
+          fi
           ASSET_NAME="graphmcp-${{ github.ref_name }}-${{ matrix.platform }}.tar.gz"
           tar czf "${ASSET_NAME}" -C dist .
 
@@ -112,6 +117,10 @@ jobs:
           Copy-Item "bin/graphmcp.exe" "dist/graphmcp.exe"
           Copy-Item "README.md" "dist/README.md"
           Copy-Item "VERSION" "dist/VERSION"
+          if (Test-Path "skills/graphmcp") {
+            New-Item -ItemType Directory -Path "dist/skills" -Force | Out-Null
+            Copy-Item -Recurse "skills/graphmcp" "dist/skills/graphmcp"
+          }
           $asset_name = "graphmcp-${{ github.ref_name }}-${{ matrix.platform }}.zip"
           if (Test-Path $asset_name) { Remove-Item $asset_name -Force }
           Compress-Archive -Path "dist/*" -DestinationPath $asset_name

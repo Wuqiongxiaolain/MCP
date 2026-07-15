@@ -2575,13 +2575,17 @@ inline std::string toSVG(Graph g)
         smartPort(ax, ay, a->w, a->h, bx, by, x1, y1);
         smartPort(bx, by, b->w, b->h, ax, ay, x2, y2);
 
-        // 检测直线是否穿过中间节点
+        // 检测直线是否有效穿过中间节点（非擦边）
         double  b1x = 0, b1y = 0, b2x = 0, b2y = 0;
         bool    blocked = false;
         for (auto& n : g.nodes) {
             if (n.id == e.from || n.id == e.to) continue;
+            if (n.shape == "group") continue;
             if (lineHitsRect(x1, y1, x2, y2,
                              n.x - 2, n.y - 2, n.w + 4, n.h + 4)) {
+                // 二次确认：线段必须真正穿过节点(零padding)，非仅擦边
+                if (!lineHitsRect(x1, y1, x2, y2, n.x, n.y, n.w, n.h))
+                    continue;  // 仅擦边，不绕行
                 blocked = true;
                 double gapTop    = std::min(a->y + a->h, b->y + b->h);
                 double gapBottom = std::max(a->y, b->y);
@@ -2611,6 +2615,7 @@ inline std::string toSVG(Graph g)
             auto segBlocked = [&](double sx, double sy, double ex, double ey) {
                 for (auto& n : g.nodes) {
                     if (n.id == e.from || n.id == e.to) continue;
+                    if (n.shape == "group") continue;
                     if (lineHitsRect(sx, sy, ex, ey, n.x, n.y, n.w, n.h))
                         return true;
                 }

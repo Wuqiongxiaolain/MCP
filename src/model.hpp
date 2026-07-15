@@ -49,6 +49,10 @@ struct Edge
     // 序列图 / gitGraph 专用
     int  seqNum  = 0;       // 消息序号
     bool isAsync = false;   // 异步消息（->>）
+
+    // 边路由路径点：布局阶段填充（虚拟节点在各中间层的坐标），导出阶段用于折线路由
+    // 空 vector 表示未设置，导出器自行计算兜底路由
+    std::vector<std::pair<double, double>> waypoints;
 };
 
 // Graph: 统一图模型容器（命名上 g 常用于 Graph 实例）
@@ -182,6 +186,16 @@ struct Graph
                 je.set("seqNum", (double)e.seqNum);
             if (e.isAsync)
                 je.set("isAsync", true);
+            if (!e.waypoints.empty()) {
+                Json wpArr = Json::arr();
+                for (auto& wp : e.waypoints) {
+                    Json wpObj = Json::obj();
+                    wpObj.set("x", wp.first);
+                    wpObj.set("y", wp.second);
+                    wpArr.push(wpObj);
+                }
+                je.set("waypoints", wpArr);
+            }
             es.push(je);
         }
         j.set("edges", es);
@@ -253,6 +267,12 @@ struct Graph
                         (e.arrow == "none") ? "none" : "arrow");
                     e.seqNum  = (int)je.num("seqNum", 0);
                     e.isAsync = je.boolean("isAsync", false);
+                    if (const Json* wp = je.find("waypoints")) {
+                        if (wp->isArr())
+                            for (auto& wpj : *wp->a)
+                                e.waypoints.push_back(
+                                    {wpj.num("x", 0.0), wpj.num("y", 0.0)});
+                    }
                     g.edges.push_back(e);
                 }
         }

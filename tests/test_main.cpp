@@ -2232,6 +2232,95 @@ static void testTableXml()
     ge::removeDirectory("test-table-xml-mcp-tmp");
 }
 
+// ---- 布局改善新增测试 ----
+
+static void testLayerBalancing()
+{
+    // 构造 10 节点图，8 个扇出节点从 A 到同层，验证层次均衡分散
+    Graph g;
+    g.type = "flowchart";
+    g.ensureNode("A", "Start");
+    for (int i = 0; i < 8; i++) {
+        std::string id = std::string(1, (char)('B' + i));
+        g.ensureNode(id, "Step " + std::to_string(i + 1));
+        g.addEdge("A", id);
+    }
+    g.ensureNode("Z", "End");
+    for (int i = 0; i < 8; i++) {
+        std::string id = std::string(1, (char)('B' + i));
+        g.addEdge(id, "Z");
+    }
+    gl::layout(g);
+    CHECK(g.laidOut);
+
+    // 统计不同 Y 坐标（层次）数，层次均衡应产生 ≥3 层
+    std::set<double> yLayers;
+    for (auto& n : g.nodes)
+        yLayers.insert(n.y);
+    CHECK(yLayers.size() >= 3);
+
+    // 没有一层超过 6 个节点
+    for (auto y : yLayers) {
+        int count = 0;
+        for (auto& n : g.nodes)
+            if (std::abs(n.y - y) < 1.0) count++;
+        CHECK(count <= 6);
+    }
+
+    // 验证 SVG 可正常生成
+    std::string svg = ge::toSVG(g);
+    CHECK(svg.find("<svg") != std::string::npos);
+    CHECK(svg.find("<polyline") != std::string::npos);
+}
+
+static void testEdgeWaypoints()
+{
+    // 构造跨 3 层的长边 A->D，验证路径点持久化和 SVG 折线路由
+    Graph g = gp::parseMermaid(
+        "flowchart TD\nA[Top]-->B[Mid1]\nB-->C[Mid2]\nC-->D[Bottom]\n"
+        "A-->D\n");
+    gl::layout(g);
+    CHECK(g.laidOut);
+
+    // A->D 跨 3 层 → 应有 2 个虚拟节点 → 2 个路径点
+    bool foundLongEdge = false;
+    for (auto& e : g.edges) {
+        if (e.from == "A" && e.to == "D") {
+            foundLongEdge = true;
+            CHECK(e.waypoints.size() == 2);
+            CHECK(std::abs(e.waypoints[0].second - e.waypoints[1].second) > 10);
+            break;
+        }
+    }
+    CHECK(foundLongEdge);
+
+    std::string svg = ge::toSVG(g);
+    CHECK(svg.find("<svg") != std::string::npos);
+    CHECK(svg.find("<polyline") != std::string::npos);
+}
+
+static void testWaypointSerialization()
+{
+    // 验证 waypoints 的 JSON 序列化/反序列化 round-trip
+    Graph g;
+    g.type = "flowchart";
+    g.ensureNode("S", "Source");
+    g.ensureNode("T", "Target");
+    g.addEdge("S", "T");
+    g.edges.back().waypoints.push_back({100.5, 200.5});
+    g.edges.back().waypoints.push_back({300.0, 400.0});
+
+    Json j = g.toJson();
+    Graph g2 = Graph::fromJson(j);
+
+    CHECK(g2.edges.size() == 1);
+    CHECK(g2.edges[0].waypoints.size() == 2);
+    CHECK(g2.edges[0].waypoints[0].first == 100.5);
+    CHECK(g2.edges[0].waypoints[0].second == 200.5);
+    CHECK(g2.edges[0].waypoints[1].first == 300.0);
+    CHECK(g2.edges[0].waypoints[1].second == 400.0);
+}
+
 int runAll()
 {
     // 防止 graph_open / export 等路径意外拉起浏览器或外部编辑器
@@ -2273,6 +2362,9 @@ int runAll()
     testParseDrawio();
     testDrawioRoundTrip();
     testMcpGraphImport();
+    testLayerBalancing();
+    testEdgeWaypoints();
+    testWaypointSerialization();
     std::cout << "tests: " << g_passed << " passed, " << g_failed
               << " failed\n";
     return g_failed == 0 ? 0 : 1;

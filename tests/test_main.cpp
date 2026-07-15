@@ -2483,6 +2483,25 @@ static void testWaypointSerialization()
     CHECK(g2.edges[0].waypoints[1].second == 400.0);
 }
 
+static void testDashLabelEdge()
+{
+    // 验证 -- "label" --> 语法被正确解析
+    Graph g = gp::parseMermaid(
+        "flowchart TD\nA[Start]-- \"有\" -->B[Next]\n"
+        "B-- \"否\" -->C[End]\n"
+        "C-- \"是\" -->D[Done]\n");
+    CHECK(g.nodes.size() == 4);
+    CHECK(g.edges.size() == 3);
+    CHECK(g.edges[0].label == "有");
+    CHECK(g.edges[0].from == "A" && g.edges[0].to == "B");
+    CHECK(g.edges[1].label == "否");
+    CHECK(g.edges[2].label == "是");
+
+    // 验证 SVG 可正常生成
+    std::string svg = ge::toSVG(g);
+    CHECK(svg.find("<svg") != std::string::npos);
+}
+
 int runAll()
 {
     // 防止 graph_open / export 等路径意外拉起浏览器或外部编辑器
@@ -2528,6 +2547,7 @@ int runAll()
     testLayerBalancing();
     testEdgeWaypoints();
     testWaypointSerialization();
+    testDashLabelEdge();
     std::cout << "tests: " << g_passed << " passed, " << g_failed
               << " failed\n";
     return g_failed == 0 ? 0 : 1;

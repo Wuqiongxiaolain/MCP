@@ -4,11 +4,8 @@
 #pragma once
 #include "storage.hpp"
 #include "version_types.hpp"
-#include <algorithm>
 #include <cstdio>
-#include <fstream>
 #include <set>
-#include <sstream>
 #include <tuple>
 
 namespace gv {
@@ -219,9 +216,10 @@ class GraphVersionManager {
                       message + ":" + nowIso());
         int newVersion =
             store_.save(committedModel, message, parentVersion, cid);
+        if (newVersion < 0)
+            return -3;  // 存储锁或 IO 失败；保留 draft/stage 供重试
 
-        // 先保存 draft（裁剪已提交操作 + 更新 baseVersion），再写 HEAD
-        // 崩溃安全：draft 更新成功后 HEAD 才指向新版本
+        // save 已原子更新快照/latest/HEAD/index，此处只裁剪已提交操作。
         std::set<int>          staged(stage.stagedOpIndices.begin(),
                                       stage.stagedOpIndices.end());
         std::vector<Operation> remaining;
@@ -236,9 +234,6 @@ class GraphVersionManager {
 
         // 清空暂存区
         clearStage(graphId);
-
-        // HEAD 最后更新——此时 draft 已正确反映提交后状态
-        writeHead(graphId, newVersion);
 
         return newVersion;
     }
@@ -627,10 +622,21 @@ class GraphVersionManager {
 
     int readHead(const std::string& id)
     {
+        // 新格式优先从受锁保护的 index.head 读取。
+        Json idx = store_.loadIndex();
+        for (auto& item : *idx["graphs"].a) {
+            if (item.str("id") == id) {
+                int head = (int)item.num("head");
+                if (head > 0)
+                    return head;
+                break;
+            }
+        }
+
+        // 兼容旧存储：回退读取独立 HEAD 文件。
         std::string txt = ge::readFile(headPath(id));
         if (txt.empty()) {
             // 回退到 index.json 中的版本数
-            Json idx = store_.loadIndex();
             for (auto& item : *idx["graphs"].a) {
                 if (item.str("id") == id)
                     return (int)item.num("versions");
@@ -643,7 +649,11 @@ class GraphVersionManager {
     void writeHead(const std::string& id, int version)
     {
         makeGraphDir(id);
-        ge::writeFileAtomic(headPath(id), std::to_string(version));
+        std::string err;
+        if (!store_.setHead(id, version, &err)) {
+            // 兼容损坏/旧索引：至少保留独立 HEAD，供 readHead 回退。
+            ge::writeFileAtomic(headPath(id), std::to_string(version));
+        }
     }
 };
 

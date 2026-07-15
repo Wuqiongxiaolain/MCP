@@ -24,6 +24,7 @@
 
 #    include <shellapi.h>
 #elif defined(__APPLE__)
+#    include <cerrno>
 #    include <dirent.h>
 #    include <fcntl.h>
 #    include <limits.h>
@@ -33,16 +34,19 @@
 #    include <mach-o/dyld.h>
 #    include <sys/stat.h>
 #    include <sys/wait.h>
+#    include <signal.h>
 #    ifndef PATH_MAX
 #        define PATH_MAX 4096
 #    endif
 #else
+#    include <cerrno>
 #    include <dirent.h>
 #    include <fcntl.h>
 #    include <limits.h>
 #    include <sys/file.h>
 #    include <sys/stat.h>
 #    include <sys/wait.h>
+#    include <signal.h>
 #    include <unistd.h>
 #    ifndef PATH_MAX
 #        define PATH_MAX 4096
@@ -247,12 +251,21 @@ inline bool writeFileAtomic(const std::string& path, const std::string& content)
 #ifdef _WIN32
     std::wstring wtmp  = toWidePath(tmp);
     std::wstring wpath = toWidePath(path);
-    if (!MoveFileExW(wtmp.c_str(), wpath.c_str(),
-                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        DeleteFileW(wtmp.c_str());
-        return false;
+    // Windows 读者未开启 FILE_SHARE_DELETE 时，原子替换会短暂失败；
+    // 对共享冲突进行有界重试，避免 latest/HEAD 已写而 index 未提交。
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        // REPLACE_EXISTING 保证同卷原子替换；不使用 WRITE_THROUGH，
+        // 避免每个 latest/snapshot/meta/index/HEAD 都同步刷盘。
+        if (MoveFileExW(wtmp.c_str(), wpath.c_str(),
+                        MOVEFILE_REPLACE_EXISTING))
+            return true;
+        DWORD code = GetLastError();
+        if (code != ERROR_SHARING_VIOLATION && code != ERROR_ACCESS_DENIED)
+            break;
+        Sleep(20);
     }
-    return true;
+    DeleteFileW(wtmp.c_str());
+    return false;
 #else
     if (std::rename(tmp.c_str(), path.c_str()) != 0) {
         std::remove(tmp.c_str());
@@ -2907,7 +2920,12 @@ inline int runQuiet(const std::string& cmd,
 #ifdef _WIN32
     std::string bat = tmpBase + ".run.bat";
     writeFile(bat, "@echo off\r\n" + cmd + "\r\n");
-    std::string          cmdline = "\"" + bat + "\"";
+    std::string comspec = getEnvVar("COMSPEC");
+    if (comspec.empty())
+        comspec = "C:\\Windows\\System32\\cmd.exe";
+    std::string cmdline =
+        "\"" + comspec + "\" /d /s /c call \"" + bat + "\"";
+    std::wstring         wexe    = widen(comspec);
     std::wstring         wcmd    = widen(cmdline);
     std::vector<wchar_t> buf(wcmd.begin(), wcmd.end());
     buf.push_back(L'\0');
@@ -2916,17 +2934,30 @@ inline int runQuiet(const std::string& cmd,
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi;
     ZeroMemory(&pi, sizeof(pi));
-    BOOL ok =
-        CreateProcessW(nullptr, buf.data(), nullptr, nullptr, FALSE,
-                       CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+    BOOL ok = CreateProcessW(wexe.c_str(), buf.data(), nullptr, nullptr, FALSE,
+                             CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
     if (!ok) {
         std::remove(bat.c_str());
         return -1;
     }
+    // Job Object 确保超时时连同 cmd 拉起的转换器子进程一起结束。
+    HANDLE job = CreateJobObjectW(nullptr, nullptr);
+    if (job) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION info;
+        ZeroMemory(&info, sizeof(info));
+        info.BasicLimitInformation.LimitFlags =
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        SetInformationJobObject(job, JobObjectExtendedLimitInformation, &info,
+                                sizeof(info));
+        AssignProcessToJobObject(job, pi.hProcess);
+    }
     DWORD wait = WaitForSingleObject(pi.hProcess, (DWORD)timeoutMs);
     int   rc   = -1;
     if (wait == WAIT_TIMEOUT) {
-        TerminateProcess(pi.hProcess, 1);
+        if (job)
+            TerminateJobObject(job, 1);
+        else
+            TerminateProcess(pi.hProcess, 1);
         WaitForSingleObject(pi.hProcess, 5000);
         if (timedOut)
             *timedOut = true;
@@ -2939,34 +2970,40 @@ inline int runQuiet(const std::string& cmd,
     }
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
+    if (job)
+        CloseHandle(job);
     std::remove(bat.c_str());
     return rc;
 #else
     (void)tmpBase;
-    std::string wrapped = "timeout " + std::to_string((timeoutMs + 999) / 1000) +
-                          "s sh -c " +
-                          "\"" + cmd + "\"";
-    int rc = std::system(wrapped.c_str());
-    if (rc == 127 || rc == -1)
-        return std::system(cmd.c_str());
-    // GNU timeout: 124；system 返回值需右移（POSIX wait status）
-    int status = rc;
-#    ifdef WIFEXITED
-    if (WIFEXITED(status) && WEXITSTATUS(status) == 124) {
-        if (timedOut)
-            *timedOut = true;
-        return -2;
+    pid_t pid = fork();
+    if (pid < 0)
+        return -1;
+    if (pid == 0) {
+        setpgid(0, 0);
+        execl("/bin/sh", "sh", "-c", cmd.c_str(), (char*)nullptr);
+        _exit(127);
     }
-    if (WIFEXITED(status))
-        return WEXITSTATUS(status);
-#    else
-    if ((status >> 8) == 124) {
-        if (timedOut)
-            *timedOut = true;
-        return -2;
+    setpgid(pid, pid);
+    auto deadline = std::chrono::steady_clock::now() +
+                    std::chrono::milliseconds(timeoutMs);
+    int status = 0;
+    for (;;) {
+        pid_t done = waitpid(pid, &status, WNOHANG);
+        if (done == pid)
+            break;
+        if (done < 0 && errno != EINTR)
+            return -1;
+        if (std::chrono::steady_clock::now() >= deadline) {
+            kill(-pid, SIGKILL);
+            waitpid(pid, &status, 0);
+            if (timedOut)
+                *timedOut = true;
+            return -2;
+        }
+        usleep(20000);
     }
-#    endif
-    return status;
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 #endif
 }
 
@@ -2998,10 +3035,23 @@ inline int launchBrowser(const std::string& exe,
                              CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
     if (!ok)
         return -1;
+    HANDLE job = CreateJobObjectW(nullptr, nullptr);
+    if (job) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION info;
+        ZeroMemory(&info, sizeof(info));
+        info.BasicLimitInformation.LimitFlags =
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        SetInformationJobObject(job, JobObjectExtendedLimitInformation, &info,
+                                sizeof(info));
+        AssignProcessToJobObject(job, pi.hProcess);
+    }
     DWORD wait = WaitForSingleObject(pi.hProcess, (DWORD)timeoutMs);
     int   rc   = -1;
     if (wait == WAIT_TIMEOUT) {
-        TerminateProcess(pi.hProcess, 1);
+        if (job)
+            TerminateJobObject(job, 1);
+        else
+            TerminateProcess(pi.hProcess, 1);
         WaitForSingleObject(pi.hProcess, 5000);
         if (timedOut)
             *timedOut = true;
@@ -3014,31 +3064,40 @@ inline int launchBrowser(const std::string& exe,
     }
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
+    if (job)
+        CloseHandle(job);
     return rc;
 #else
-    std::string wrapped =
-        "timeout " + std::to_string((timeoutMs + 999) / 1000) + "s \"" + exe +
-        "\" " + argstr + " >/dev/null 2>&1";
-    int rc = std::system(wrapped.c_str());
-    if (rc == 127 || rc == -1)
-        return std::system(
-            ("\"" + exe + "\" " + argstr + " >/dev/null 2>&1").c_str());
-#    ifdef WIFEXITED
-    if (WIFEXITED(rc) && WEXITSTATUS(rc) == 124) {
-        if (timedOut)
-            *timedOut = true;
-        return -2;
+    std::string command =
+        "\"" + exe + "\" " + argstr + " >/dev/null 2>&1";
+    pid_t pid = fork();
+    if (pid < 0)
+        return -1;
+    if (pid == 0) {
+        setpgid(0, 0);
+        execl("/bin/sh", "sh", "-c", command.c_str(), (char*)nullptr);
+        _exit(127);
     }
-    if (WIFEXITED(rc))
-        return WEXITSTATUS(rc);
-#    else
-    if ((rc >> 8) == 124) {
-        if (timedOut)
-            *timedOut = true;
-        return -2;
+    setpgid(pid, pid);
+    auto deadline = std::chrono::steady_clock::now() +
+                    std::chrono::milliseconds(timeoutMs);
+    int status = 0;
+    for (;;) {
+        pid_t done = waitpid(pid, &status, WNOHANG);
+        if (done == pid)
+            break;
+        if (done < 0 && errno != EINTR)
+            return -1;
+        if (std::chrono::steady_clock::now() >= deadline) {
+            kill(-pid, SIGKILL);
+            waitpid(pid, &status, 0);
+            if (timedOut)
+                *timedOut = true;
+            return -2;
+        }
+        usleep(20000);
     }
-#    endif
-    return rc;
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 #endif
 }
 

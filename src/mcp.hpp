@@ -1466,6 +1466,9 @@ class ToolRunner {
 
         std::string note = a.str("note", "created via MCP");
         int         v    = store_.save(g, note);
+        if (v < 0)
+            return textContent(
+                "failed to save graph: store lock, index, or IO error", true);
 
         Json out = Json::obj();
         out.set("status", "created");
@@ -1619,6 +1622,10 @@ class ToolRunner {
         }
         gl::layout(imported);
         int  v   = store_.save(imported, "re-imported after external edit");
+        if (v < 0)
+            return textContent(
+                "failed to save imported graph: store lock, index, or IO error",
+                true);
         Json out = Json::obj();
         out.set("status", "imported");
         out.set("id", imported.id);
@@ -1789,6 +1796,10 @@ class ToolRunner {
         bool shouldSave = a.boolean("save", false);
         if (shouldSave) {
             int  v   = store_.save(g, "layout via MCP (" + strategy + ")");
+            if (v < 0)
+                return textContent(
+                    "failed to save layout: store lock, index, or IO error",
+                    true);
             Json out = Json::obj();
             out.set("status", "layout applied and saved");
             out.set("version", (double)v);
@@ -1810,11 +1821,7 @@ class ToolRunner {
             return textContent(
                 "set force=true to confirm deletion of graph: " + id, true);
 
-        // Remove graph directory
-        std::string dir = store_.root() + "/" + id;
-        ge::removeDirectory(dir);
-
-        // 持锁更新 index，避免与并发 save 互相覆盖
+        // Store 内部持锁完成目录与 index 删除，避免与并发 save 交错。
         std::string ierr;
         if (!store_.removeGraphFromIndex(id, &ierr))
             return textContent(ierr.empty() ? "failed to update index" : ierr,
@@ -2384,8 +2391,16 @@ class ToolRunner {
             nv = vm_.commit(id, msg, a.str("author", "mcp"));
         }
 
-        if (nv < 0)
+        if (nv == -1)
             return textContent("nothing to commit (stage is empty)", true);
+        if (nv == -2)
+            return textContent(
+                "commit failed: base version is missing or corrupt", true);
+        if (nv == -3)
+            return textContent(
+                "commit failed: store lock, index, or IO error; draft and "
+                "stage were preserved for retry",
+                true);
 
         Json out = Json::obj();
         out.set("status", "committed");
@@ -2676,13 +2691,21 @@ inline bool handleMessage(const Json& msg, gs::Store& store, Json& response)
         ToolRunner  runner(store);
         Json        toolResp = runner.call(name, args ? *args : Json::obj());
         bool        isError  = toolResp.boolean("isError", false);
+        bool        timedOut = false;
+        if (isError) {
+            const Json* content = toolResp.find("content");
+            if (content && content->isArr() && content->size() > 0) {
+                std::string text = (*content)[0].str("text");
+                timedOut = text.find("timed out") != std::string::npos;
+            }
+        }
         response             = rpcResult(id, toolResp);
         auto ended           = std::chrono::steady_clock::now();
         logEvent(isError ? "error" : "info", method, name,
                  std::chrono::duration_cast<std::chrono::milliseconds>(ended -
                                                                        started)
                      .count(),
-                 isError ? "error" : "ok");
+                 timedOut ? "timeout" : (isError ? "error" : "ok"));
         return !isNotification;
     }
     if (isNotification) {

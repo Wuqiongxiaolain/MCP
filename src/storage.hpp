@@ -8,8 +8,6 @@
 #include "exporters.hpp"  // writeFileAtomic / StoreLock / readFile
 #include "model.hpp"
 #include "version_types.hpp"  // gv::nowIso / gv::isValidId
-#include <ctime>
-
 #ifdef _WIN32
 #    include <direct.h>
 #else
@@ -57,30 +55,51 @@ class Store {
     { return gv::isValidId(id); }
 
     // ---- 索引 ----
-    // loadIndex: 读取索引；文件缺失或损坏时返回空索引结构
+    // loadIndex: 读取索引；只读调用在损坏时返回空结构
     Json loadIndex() const
     {
-        std::string txt = ge::readFile(root_ + "/index.json");
-        if (txt.empty()) {
-            Json j = Json::obj();
-            j.set("graphs", Json::arr());
-            return j;
-        }
-        std::string err;
-        Json        j = Json::parse(txt, &err);
-        if (!err.empty() || !j.find("graphs")) {
-            Json fresh = Json::obj();
-            fresh.set("graphs", Json::arr());
-            return fresh;
-        }
-        return j;
+        Json        idx;
+        std::string ignored;
+        if (loadIndexStrict(idx, &ignored))
+            return idx;
+        Json fresh = Json::obj();
+        fresh.set("graphs", Json::arr());
+        return fresh;
     }
 
     // saveIndex: 原子写回 index.json（紧凑序列化）
     bool saveIndex(const Json& idx) const
     { return ge::writeFileAtomic(root_ + "/index.json", idx.dump()); }
 
-    // removeGraphFromIndex: 持锁删除索引条目（供 graph_delete 使用）
+    // setHead: 将逻辑 HEAD 合并写入 index，避免保存热路径额外写 HEAD 文件。
+    bool setHead(const std::string& id, int version, std::string* err = nullptr)
+    {
+        ge::StoreLock lock(root_);
+        if (!lock.locked()) {
+            if (err)
+                *err = "failed to acquire store lock";
+            return false;
+        }
+        Json idx;
+        if (!loadIndexStrict(idx, err))
+            return false;
+        for (auto& item : *idx["graphs"].a) {
+            if (item.str("id") == id) {
+                item.set("head", version);
+                if (!saveIndex(idx)) {
+                    if (err)
+                        *err = "failed to write index.json";
+                    return false;
+                }
+                return true;
+            }
+        }
+        if (err)
+            *err = "graph not found in index: " + id;
+        return false;
+    }
+
+    // removeGraphFromIndex: 持锁完成目录与索引删除，避免与并发 save 交错
     bool removeGraphFromIndex(const std::string& id, std::string* err = nullptr)
     {
         ge::StoreLock lock(root_);
@@ -89,11 +108,16 @@ class Store {
                 *err = "failed to acquire store lock";
             return false;
         }
-        Json idx = loadIndex();
-        if (!idx.find("graphs") || !idx["graphs"].isArr()) {
-            Json fresh = Json::obj();
-            fresh.set("graphs", Json::arr());
-            idx = fresh;
+        Json idx;
+        if (!loadIndexStrict(idx, err))
+            return false;
+
+        std::string dir = root_ + "/" + id;
+        if (ge::fileReadable(dir + "/latest.json") &&
+            !ge::removeDirectory(dir)) {
+            if (err)
+                *err = "failed to remove graph directory";
+            return false;
         }
         Json filtered = Json::arr();
         for (auto& item : *idx["graphs"].a) {
@@ -111,7 +135,7 @@ class Store {
 
     // ---- 保存：写 latest.json + 新的不可变版本快照 ----
     // 返回新版本号；失败返回 -1
-    // 关键步骤：持锁 -> 合并读 index -> 写 latest/snapshot/meta/HEAD -> 写 index
+    // 关键步骤：持锁 -> 合并读 index -> 写 snapshot/latest -> 写 index
     int save(Graph&             g,
              const std::string& note          = "",
              int                parentVersion = 0,
@@ -128,12 +152,16 @@ class Store {
         if (!lock.locked())
             return -1;
 
+        // 持锁后重新读 index，避免并发写互相覆盖
+        Json        idx;
+        std::string indexErr;
+        if (!loadIndexStrict(idx, &indexErr))
+            return -1;
+
         std::string dir = root_ + "/" + g.id;
         makeDir(dir);
         makeDir(dir + "/versions");
 
-        // 持锁后重新读 index，避免并发写互相覆盖
-        Json  idx   = loadIndex();
         Json* entry = nullptr;
         for (auto& item : *idx["graphs"].a)
             if (item.str("id") == g.id) {
@@ -143,12 +171,14 @@ class Store {
         int version = 1;
         if (entry)
             version = (int)entry->num("versions") + 1;
+        // index 落后时不覆写已存在的不可变快照。
+        while (ge::fileReadable(dir + "/versions/v" +
+                                std::to_string(version) + ".json"))
+            version++;
 
-        // 大文件白板含大量 base64：toJson 一次，dump 一次，供 latest + snapshot 复用
+        // 大文件白板含大量 base64：toJson 仅执行一次。
         Json        model     = g.toJson();
         std::string modelDump = model.dump();
-        if (!ge::writeFileAtomic(dir + "/latest.json", modelDump))
-            return -1;
 
         std::string savedAt = nowIso();
         Json        snap    = Json::obj();
@@ -165,21 +195,14 @@ class Store {
         if (!ge::writeFileAtomic(verPath, snap.dump()))
             return -1;
 
-        // 轻量 meta：history 优先读，避免全量解析大 snapshot
-        Json meta = Json::obj();
-        meta.set("version", version);
-        meta.set("savedAt", savedAt);
-        meta.set("note", note);
-        meta.set("nodes", (double)g.nodes.size());
-        meta.set("edges", (double)g.edges.size());
-        ge::writeFileAtomic(dir + "/versions/v" + std::to_string(version) +
-                                ".meta.json",
-                            meta.dump());
+        if (!ge::writeFileAtomic(dir + "/latest.json", modelDump))
+            return -1;
 
         if (entry) {
             entry->set("name", g.name);
             entry->set("type", g.type);
             entry->set("versions", version);
+            entry->set("head", version);
             entry->set("updatedAt", savedAt);
         }
         else {
@@ -188,15 +211,12 @@ class Store {
             e.set("name", g.name);
             e.set("type", g.type);
             e.set("versions", version);
+            e.set("head", version);
             e.set("createdAt", savedAt);
             e.set("updatedAt", savedAt);
             idx["graphs"].push(e);
         }
         if (!saveIndex(idx))
-            return -1;
-
-        // 与 GraphVersionManager::writeHead 对齐
-        if (!ge::writeFileAtomic(dir + "/HEAD", std::to_string(version)))
             return -1;
         return version;
     }
@@ -300,6 +320,9 @@ class Store {
                     "edges",
                     (double)(m->find("edges") ? m->find("edges")->size() : 0));
             }
+            // meta 是可重建缓存：首次 history 查询时惰性生成，
+            // 避免每次 save 在热路径额外创建一个文件。
+            ge::writeFile(metaPath, e.dump());
             list.push(e);
         }
         return list;
@@ -327,6 +350,28 @@ class Store {
     }
 
   private:
+    // loadIndexStrict: 写路径必须拒绝损坏索引，禁止把损坏文件当空索引覆盖。
+    bool loadIndexStrict(Json& out, std::string* err) const
+    {
+        std::string txt = ge::readFile(root_ + "/index.json");
+        if (txt.empty()) {
+            out = Json::obj();
+            out.set("graphs", Json::arr());
+            return true;
+        }
+        std::string parseErr;
+        Json        parsed = Json::parse(txt, &parseErr);
+        const Json* graphs = parsed.find("graphs");
+        if (!parseErr.empty() || !graphs || !graphs->isArr()) {
+            if (err)
+                *err = parseErr.empty() ? "index.json has no graphs array" :
+                                         "corrupt index.json: " + parseErr;
+            return false;
+        }
+        out = parsed;
+        return true;
+    }
+
     std::string root_;
 };
 

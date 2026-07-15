@@ -367,9 +367,10 @@ pipeline {
               echo "---"
               echo ""
               echo "制品由 Jenkins CD 自动构建上传。"
-              echo "- Tag：\`${GRAPHMCP_TAG_NAME}\`"
-              echo "- Build：\`${BUILD_NUMBER}\`"
-              echo "- Commit：\`${GIT_COMMIT}\`"
+              // Groovy ''' 中 \\` → 交给 shell 的 \`，避免命令替换并写入 markdown 反引号
+              echo "- Tag：\\`${GRAPHMCP_TAG_NAME}\\`"
+              echo "- Build：\\`${BUILD_NUMBER}\\`"
+              echo "- Commit：\\`${GIT_COMMIT}\\`"
               echo "- 平台：以 release-assets 内实际文件为准"
             } >> "$NOTE_FILE"
 

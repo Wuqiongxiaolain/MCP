@@ -2502,6 +2502,73 @@ static void testDashLabelEdge()
     CHECK(svg.find("<svg") != std::string::npos);
 }
 
+static void testEdgeLabelPosition()
+{
+    // 验证 layout 为有 label 的边计算 labelX/labelY，并正确序列化
+    Graph g = gp::parseMermaid(
+        "flowchart TD\nA[Start]-- \"是\" -->B[Next]\n"
+        "B-- \"否\" -->C[End]\n"
+        "C-- \"未知\" -->D[Done]\n");
+    gl::layout(g);
+    CHECK(g.laidOut);
+
+    // 所有 3 条边都有 label，都应该有 labelX/labelY
+    for (auto& e : g.edges) {
+        CHECK(!e.label.empty());
+        // labelX/labelY 至少有一个非零（不可能正好在原点）
+        CHECK(e.labelX != 0 || e.labelY != 0);
+    }
+
+    // JSON 序列化 round-trip
+    Json j = g.toJson();
+    Graph g2 = Graph::fromJson(j);
+    for (size_t i = 0; i < g.edges.size() && i < g2.edges.size(); i++) {
+        CHECK(g2.edges[i].labelX == g.edges[i].labelX);
+        CHECK(g2.edges[i].labelY == g.edges[i].labelY);
+    }
+
+    // SVG 也能正常生成
+    std::string svg = ge::toSVG(g);
+    CHECK(svg.find("elabel") != std::string::npos);
+}
+
+static void testDrawioEdgeLabelRoundTrip()
+{
+    // 验证 draw.io 导出包含 label offset，并能 round-trip 回来
+    Graph g;
+    g.name = "LabelTest";
+    g.type = "flowchart";
+    Node& n1 = g.ensureNode("n1", "Start");
+    n1.shape = "round";
+    n1.x = 100; n1.y = 100; n1.w = 120; n1.h = 60;
+    Node& n2 = g.ensureNode("n2", "End");
+    n2.shape = "diamond";
+    n2.x = 300; n2.y = 100; n2.w = 120; n2.h = 60;
+    g.addEdge("n1", "n2", "go", "solid");
+    // labelX/labelY 需要 layout 来设置
+    gl::layout(g);
+    CHECK(g.laidOut);
+    CHECK(!g.edges.empty());
+    CHECK(g.edges[0].label == "go");
+    CHECK(g.edges[0].labelX != 0 || g.edges[0].labelY != 0);
+
+    // 导出 draw.io XML
+    std::string dx = ge::toDrawio(g);
+    CHECK(dx.find("<mxfile") != std::string::npos);
+    // 应包含 offset 信息
+    CHECK(dx.find("as=\"offset\"") != std::string::npos);
+
+    // round-trip 读回
+    Graph g2 = gp::parseDrawio(dx);
+    CHECK(g2.name == "LabelTest");
+    CHECK(g2.nodes.size() >= 2);
+    CHECK(g2.edges.size() >= 1);
+    // 标签应该被保留
+    CHECK(g2.edges[0].label == "go");
+    // label 位置应该被保留且非零
+    CHECK(g2.edges[0].labelX != 0 || g2.edges[0].labelY != 0);
+}
+
 int runAll()
 {
     // 防止 graph_open / export 等路径意外拉起浏览器或外部编辑器
@@ -2548,6 +2615,8 @@ int runAll()
     testEdgeWaypoints();
     testWaypointSerialization();
     testDashLabelEdge();
+    testEdgeLabelPosition();
+    testDrawioEdgeLabelRoundTrip();
     std::cout << "tests: " << g_passed << " passed, " << g_failed
               << " failed\n";
     return g_failed == 0 ? 0 : 1;

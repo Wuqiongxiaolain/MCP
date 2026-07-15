@@ -207,7 +207,7 @@ make docs-api    # 或 graphmcp dump-tools --format openapi -o docs/api_referenc
 | 语言 / 产物 | C++17，单可执行文件，零第三方依赖（JSON/XML/Base64 内置） |
 | 入口 | CLI 15 命令族 + `serve`；Windows 可静态链接运行时，利于 MCP 裁剪 PATH |
 | 契约 | OpenAPI 3.0 由 `dump-tools` 生成，CI 防漂移；升版本用 Actions `Bump version` 写回（不自动打 tag） |
-| 性能基线 | CI `bench-ci` 仅比对；按需 Actions `Update bench baseline` 写回 |
+| 性能基线 | CI `bench-ci` 仅比对；内存稳定性 `memory_RSS_repeat_save_*` 用绝对 MB 上限（非相对旧基线）；按需 Actions `Update bench baseline` 写回 |
 | CD | 推送 `v*` tag 触发多平台 Release；或 CD `workflow_dispatch` 试运行 |
 
 <img src="images/build.svg" alt="零依赖构建与测试" width="100%">

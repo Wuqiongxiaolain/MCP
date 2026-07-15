@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1899" height="1032" viewBox="0 0 1899 1032">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="995.925,82 1491.92,82" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="1491.92,82 1431.92,82" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="1217.92,82 995.925,82" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#b0714b" stroke-width="1.5" stroke-linejoin="round" points="1656.51,330 1290.65,330 1290.65,322 1611.92,322" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="1701.92,104 1696.8,144 1691.67,184" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="1691.67,228 1649.09,268 1656.51,330" marker-end="url(#arrow)"/>
+  <text class="elabel" x="1652.8" y="295" text-anchor="middle">有</text>
+  <polyline fill="none" stroke="#b0714b" stroke-width="1.5" stroke-linejoin="round" points="1749.67,206 1333.23,206 1333.23,322 1611.92,322" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <text class="elabel" x="1472.58" y="318" text-anchor="middle">无</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="1481.65,578 1551.74,640 1629.82,702" marker-end="url(#arrow)"/>
+  <text class="elabel" x="1590.78" y="667" text-anchor="middle">是</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="974.787,620 837.505,556 805.825,702" marker-end="url(#arrow)"/>
+  <text class="elabel" x="821.665" y="625" text-anchor="middle">受击</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="805.825,702 1089.24,640 1365.65,578" marker-end="url(#arrow)"/>
+  <text class="elabel" x="1227.44" y="605" text-anchor="middle">否</text>
+  <polyline fill="none" stroke="#b0714b" stroke-width="1.5" stroke-linejoin="round" points="1481.65,578 1199.22,578 1199.22,322 1611.92,322" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <text class="elabel" x="1405.57" y="318" text-anchor="middle">否</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="709.971,848 703.683,888 697.395,928" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#b0714b" stroke-width="1.5" stroke-linejoin="round" points="1729.82,702 1327.31,702 1327.31,322 1611.92,322" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="781.925,82 795.106,184 701.287,308 607.469,432 669.65,578" marker-end="url(#arrow)"/>
+  <text class="elabel" x="654.378" y="366" text-anchor="middle">读取</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="1522.67,228 1484.59,268 1446.51,308" marker-end="url(#arrow)"/>
+  <text class="elabel" x="1465.55" y="284" text-anchor="middle">产生</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="1396.51,330 1336.51,330" marker-end="url(#arrow)"/>
+  <text class="elabel" x="1336.51" y="326" text-anchor="middle">产生事件</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="1055.92,82 972.799,144 896.673,206" marker-end="url(#arrow)"/>
+  <text class="elabel" x="934.736" y="171" text-anchor="middle">上层行为模式</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="1055.92,82 1028.72,184 1000.51,330" marker-end="url(#arrow)"/>
+  <text class="elabel" x="1014.61" y="253" text-anchor="middle">技能细节</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="780.673,206 789.88,268 741.088,308" marker-end="url(#arrow)"/>
+  <text class="elabel" x="765.484" y="284" text-anchor="middle">需要</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="268.665,104 255.532,184 242.399,308 229.266,432 216.133,556 203,680" marker-end="url(#arrow)"/>
+  <text class="elabel" x="222.699" y="490" text-anchor="middle">概括</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="920.185,42 920.185,42" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="754.825,724 732.398,764 709.971,804" marker-end="url(#arrow)"/>
+  <text class="elabel" x="721.185" y="780" text-anchor="middle">是</text>
+  <polyline fill="none" stroke="#b0714b" stroke-width="1.5" stroke-linejoin="round" points="1336.51,330 1135.35,330 1135.35,42 1098.18,42" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <text class="elabel" x="1116.77" y="38" text-anchor="middle">分发</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="920.185,42 920.185,42" marker-end="url(#arrow)"/>
+  <rect x="870.185" y="20" width="100" height="44" fill="none" stroke="#999" stroke-dasharray="5,4" rx="6"/>
+  <text class="lbl" x="878.185" y="38" fill="#777">派生实现</text>
+  <rect x="879.185" y="148" width="552.489" height="720" fill="none" stroke="#999" stroke-dasharray="5,4" rx="6"/>
+  <text class="lbl" x="887.185" y="166" fill="#777">属性</text>
+  <rect x="1060.51" y="308" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1118.51" y="335" text-anchor="middle">确定生成行为</text>
+  <rect x="957.673" y="184" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1015.67" y="211" text-anchor="middle">确定受击行为</text>
+  <rect x="1133.67" y="184" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1191.67" y="211" text-anchor="middle">确定濒死行为</text>
+  <rect x="1309.67" y="184" width="102" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1360.67" y="211" text-anchor="middle">确定掉落物</text>
+  <rect x="899.185" y="804" width="102" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="950.185" y="831" text-anchor="middle">框定碰撞箱</text>
+  <rect x="656.088" y="24" width="521.837" height="348" fill="none" stroke="#999" stroke-dasharray="5,4" rx="6"/>
+  <text class="lbl" x="664.088" y="42" fill="#777">行为模式</text>
+  <rect x="1055.92" y="60" width="102" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1106.92" y="87" text-anchor="middle">预设技能表</text>
+  <rect x="900.511" y="308" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="950.511" y="335" text-anchor="middle">动作图</text>
+  <rect x="780.673" y="184" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="838.673" y="211" text-anchor="middle">决策用行为树</text>
+  <rect x="676.088" y="308" width="130" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="741.088" y="335" text-anchor="middle">黑板内所需信息</text>
+  <rect x="870.185" y="20" width="100" height="44" fill="none" stroke="#999" stroke-dasharray="5,4" rx="6"/>
+  <text class="lbl" x="878.185" y="38" fill="#777">顶层设计</text>
+  <rect x="845.825" y="644" width="744" height="100" fill="none" stroke="#999" stroke-dasharray="5,4" rx="6"/>
+  <text class="lbl" x="853.825" y="662" fill="#777">创意机制</text>
+  <rect x="865.825" y="680" width="242" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="986.825" y="707" text-anchor="middle">1：主动饶恕敌怪/被动忽视敌怪</text>
+  <rect x="1167.82" y="680" width="242" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1288.82" y="707" text-anchor="middle">2：从玩家奖励角度削弱特定敌人</text>
+  <rect x="1469.82" y="680" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1519.82" y="707" text-anchor="middle">3：……</text>
+  <rect x="20" y="24" width="389.665" height="720" fill="none" stroke="#999" stroke-dasharray="5,4" rx="6"/>
+  <text class="lbl" x="28" y="42" fill="#777">生态位（玩法层面）</text>
+  <rect x="147.665" y="60" width="242" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="268.665" y="87" text-anchor="middle">敌怪风格限定：什么类型的生物？</text>
+  <rect x="40" y="680" width="326" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="203" y="707" text-anchor="middle">敌怪内生价值：对玩家形成怎样的作用/考验？</text>
+  <rect x="709.65" y="520" width="300" height="100" fill="none" stroke="#999" stroke-dasharray="5,4" rx="6"/>
+  <text class="lbl" x="717.65" y="538" fill="#777">剧情层面</text>
+  <rect x="729.65" y="556" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="779.65" y="583" text-anchor="middle">形象</text>
+  <rect x="889.65" y="556" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="939.65" y="583" text-anchor="middle">设定</text>
+  <rect x="870.185" y="20" width="100" height="44" fill="none" stroke="#999" stroke-dasharray="5,4" rx="6"/>
+  <text class="lbl" x="878.185" y="38" fill="#777">程序架构</text>
+  <rect x="1216.51" y="148" width="377.162" height="224" fill="none" stroke="#999" stroke-dasharray="5,4" rx="6"/>
+  <text class="lbl" x="1224.51" y="166" fill="#777">感知系统</text>
+  <rect x="1471.67" y="184" width="102" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1522.67" y="211" text-anchor="middle">监测刺激源</text>
+  <rect x="1396.51" y="308" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1446.51" y="335" text-anchor="middle">全局属性</text>
+  <rect x="1236.51" y="308" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1286.51" y="335" text-anchor="middle">事件总线</text>
+  <rect x="870.185" y="20" width="100" height="44" fill="none" stroke="#999" stroke-dasharray="5,4" rx="6"/>
+  <text class="lbl" x="878.185" y="38" fill="#777">敌怪</text>
+  <rect x="627.395" y="24" width="1144.53" height="968" fill="none" stroke="#999" stroke-dasharray="5,4" rx="6"/>
+  <text class="lbl" x="635.395" y="42" fill="#777">状态机（HSM）</text>
+  <rect x="1556.51" y="308" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1606.51" y="335" text-anchor="middle">生成行为</text>
+  <rect x="337.65" y="24" width="1274.27" height="596" fill="none" stroke="#999" stroke-dasharray="5,4" rx="6"/>
+  <text class="lbl" x="345.65" y="42" fill="#777">行为</text>
+  <rect x="1491.92" y="60" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1541.92" y="87" text-anchor="middle">待机</text>
+  <rect x="1217.92" y="60" width="214" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1324.92" y="87" text-anchor="middle">决策(BehavTree)</text>
+  <rect x="781.925" y="60" width="214" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="888.925" y="87" text-anchor="middle">行动(ActionMap)</text>
+  <rect x="357.65" y="556" width="312" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="513.65" y="583" text-anchor="middle">预设技能表&lt;br&gt;(BehavList)</text>
+  <rect x="647.395" y="928" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="697.395" y="955" text-anchor="middle">清除自身</text>
+  <rect x="1651.92" y="60" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1701.92" y="87" text-anchor="middle">初始化</text>
+  <rect x="1633.67" y="184" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1691.67" y="211" text-anchor="middle">有生成行为？</text>
+  <rect x="1365.65" y="556" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1423.65" y="583" text-anchor="middle">有受击行为？</text>
+  <rect x="703.825" y="680" width="102" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="754.825" y="707" text-anchor="middle">是否死亡？</text>
+  <rect x="1629.82" y="680" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1679.82" y="707" text-anchor="middle">受击行为</text>
+  <rect x="659.971" y="804" width="100" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="709.971" y="831" text-anchor="middle">死亡行为</text>
+  <rect x="870.185" y="20" width="228" height="44" fill="none" stroke="#999" stroke-dasharray="5,4" rx="6"/>
+  <text class="lbl" x="878.185" y="38" fill="#777">黑板（Blackboard）</text>
+  <rect x="244.185" y="396" width="1615.47" height="224" fill="none" stroke="#999" stroke-dasharray="5,4" rx="6"/>
+  <text class="lbl" x="252.185" y="414" fill="#777">属性</text>
+  <rect x="1049.65" y="556" width="256" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1177.65" y="583" text-anchor="middle">可读写参数（ReadWrite）</text>
+  <rect x="1541.65" y="556" width="298" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1690.65" y="583" text-anchor="middle">仅由外部更新的参数（ReadOnly）</text>
+  <rect x="264.185" y="432" width="256" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="392.185" y="459" text-anchor="middle">黑板变更事件（Observer）</text>
+  <rect x="580.185" y="432" width="172" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="666.185" y="459" text-anchor="middle">局部视图（View）</text>
+  <rect x="812.185" y="432" width="214" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="919.185" y="459" text-anchor="middle">历史记录（History）</text>
+  <rect x="1066.18" y="396" width="550" height="100" fill="none" stroke="#999" stroke-dasharray="5,4" rx="6"/>
+  <text class="lbl" x="1074.18" y="414" fill="#777">功能</text>
+  <rect x="1086.18" y="432" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1144.18" y="459" text-anchor="middle">监测外部数据</text>
+  <rect x="1262.18" y="432" width="130" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1327.18" y="459" text-anchor="middle">向外部发送数据</text>
+  <rect x="1452.18" y="432" width="144" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1524.18" y="459" text-anchor="middle">调取数据方便调试</text>
+</svg>

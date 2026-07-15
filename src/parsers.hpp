@@ -326,6 +326,10 @@ inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines,
                 glabel = trim(rest.substr(br + 1, close == std::string::npos ?
                                                       std::string::npos :
                                                       close - br - 1));
+                // 去掉包裹在两端的引号（与 readNodeRef 的 grab 一致）
+                if (glabel.size() >= 2 && glabel.front() == '"' &&
+                    glabel.back() == '"')
+                    glabel = glabel.substr(1, glabel.size() - 2);
             }
             if (gid.empty())
                 gid = "sg" + std::to_string(g.nodes.size());

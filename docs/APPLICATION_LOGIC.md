@@ -68,11 +68,11 @@ graphmcp 是一个 **C++17 单可执行文件**，零第三方依赖。核心设
 | 2 | 服务器 → AI | `initialize` 响应 | 服务器能力 + 协议/服务版本 |
 | 3 | AI → 服务器 | `initialized` 通知 | 握手完成（通知不回包） |
 | 4 | AI → 服务器 | `tools/list` 请求 | 查询可用工具 |
-| 5 | 服务器 → AI | `tools/list` 响应 | **46** 个工具定义 |
+| 5 | 服务器 → AI | `tools/list` 响应 | **47** 个工具定义 |
 | 6 | AI → 服务器 | `tools/call` 请求 | 调用具体工具 |
 | 7 | 服务器 → AI | `tools/call` 响应 | 结果文本；异常时 `isError: true` |
 
-### 2.3 MCP 工具（46 个，`toolList()`）
+### 2.3 MCP 工具（47 个，`toolList()`）
 
 完整参数速查见 [CLI_MCP_REFERENCE.md](CLI_MCP_REFERENCE.md)。契约以 `make docs-api`（`dump-tools`）写出的 [`openapi.yaml`](api_reference/openapi.yaml) 为准。按职责分组：
 
@@ -366,7 +366,7 @@ Table {
 | 表存储 | `table_storage.hpp` | `gts::TableStore` |
 | 图↔表桥接 | `table_bridge.hpp` | 投影、对齐、规则、fix、derive… |
 | CSV 工具 | `csv_util.hpp` | 字段转义 / 分行 |
-| MCP | `mcp.hpp` + `mcp_table_tools.hpp` | JSON-RPC、46 工具 |
+| MCP | `mcp.hpp` + `mcp_table_tools.hpp` | JSON-RPC、47 工具 |
 | CLI | `main.cpp` | **15** 个命令族：`create`/`convert`/`export`/`edit`/`import`/`layout`/`validate`/`store`/`table`/`version`/`graph`/`cursor`/`draft`/`serve`/`dump-tools`；旧版扁平命令走 `handleLegacyCommand` |
 
 ### 7.3 关键设计决策（与代码一致）

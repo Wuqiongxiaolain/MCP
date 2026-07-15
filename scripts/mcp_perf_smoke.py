@@ -251,9 +251,22 @@ def main() -> int:
             "graph_history",
             "graph_delete",
             "graph_commit",
+            "graph_apply",
             "table_create",
+            "table_export",
         }
-        assertTrue(len(tools) >= 46 and required <= names, "tools/list incomplete")
+        assertTrue(len(tools) >= 47 and required <= names, "tools/list incomplete")
+        apply_tool = next(t for t in tools if t["name"] == "graph_apply")
+        assertTrue(
+            "all=true" in apply_tool.get("description", "")
+            or "commit" in apply_tool.get("description", ""),
+            "graph_apply description missing commit guidance",
+        )
+        commit_tool = next(t for t in tools if t["name"] == "graph_commit")
+        assertTrue(
+            "all=true" in commit_tool.get("description", ""),
+            "graph_commit must steer agents to all=true",
+        )
         # 外层 JSON-RPC 与内层工具清单应保持单行紧凑。
         assertTrue("\n" not in c0.last_raw.rstrip("\n"), "tools/list response not compact")
         cold_start = time.perf_counter()
@@ -334,6 +347,37 @@ def main() -> int:
             elapsed < budget("GRAPHMCP_SMOKE_MAX_CONCURRENT_MS", 3000),
             f"concurrent create exceeded budget: {elapsed:.1f}ms",
         )
+        # latest.json 应为版本指针，避免与 snapshot 整图双写
+        sample_id = next(iter(index_ids))
+        latest_obj = json.loads(
+            (pathlib.Path(store) / sample_id / "latest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assertTrue(
+            "version" in latest_obj and "nodes" not in latest_obj,
+            f"latest.json should be version pointer, got keys={list(latest_obj)}",
+        )
+        snap = json.loads(
+            (
+                pathlib.Path(store)
+                / sample_id
+                / "versions"
+                / f"v{int(latest_obj['version'])}.json"
+            ).read_text(encoding="utf-8")
+        )
+        assertTrue("model" in snap and "nodes" in snap["model"], "snapshot missing model")
+        latest_bytes = (pathlib.Path(store) / sample_id / "latest.json").stat().st_size
+        snap_bytes = (
+            pathlib.Path(store)
+            / sample_id
+            / "versions"
+            / f"v{int(latest_obj['version'])}.json"
+        ).stat().st_size
+        assertTrue(
+            latest_bytes < snap_bytes / 2,
+            f"latest pointer not smaller than snapshot: {latest_bytes} vs {snap_bytes}",
+        )
 
         # --- commit(all) path ---
         c3 = MCP(exe, store)
@@ -346,8 +390,53 @@ def main() -> int:
         assertTrue(not upd["result"].get("isError"), toolText(upd))
         bad = c3.tool("graph_commit", {"id": gid, "message": "no-all"})
         assertTrue(bad["result"].get("isError"), "expected stage-empty error")
+        assertTrue(
+            "all=true" in toolText(bad),
+            "empty-stage error should steer agents to all=true",
+        )
         good = c3.tool("graph_commit", {"id": gid, "message": "with-all", "all": True})
         assertTrue(not good["result"].get("isError"), toolText(good))
+
+        # --- graph_apply：多改 + 提交 + 紧凑 model 导出 ---
+        apply_created = c3.tool(
+            "graph_create",
+            {"content": "flowchart LR\nP-->Q", "name": "apply-case"},
+        )
+        apply_id = graphId(apply_created)
+        shown = c3.tool("graph_show", {"id": apply_id})
+        show_data = json.loads(toolText(shown))
+        node_a = show_data["nodeList"][0]["id"]
+        apply_ops = json.dumps(
+            [
+                {"op": "update", "node": node_a, "set": "label=Renamed"},
+                {
+                    "op": "insert",
+                    "element": "node",
+                    "label": "Extra",
+                    "type": "rect",
+                },
+            ]
+        )
+        applied = c3.tool(
+            "graph_apply",
+            {
+                "id": apply_id,
+                "ops": apply_ops,
+                "message": "apply-batch",
+                "export_to": "model",
+            },
+        )
+        assertTrue(not applied["result"].get("isError"), toolText(applied))
+        apply_data = json.loads(toolText(applied))
+        assertTrue(apply_data.get("committed") is True, "graph_apply did not commit")
+        assertTrue(apply_data.get("opsApplied") == 2, "graph_apply ops count wrong")
+        export_body = apply_data.get("export_content", "")
+        assertTrue(export_body, "graph_apply export_content missing")
+        assertTrue(
+            "\n" not in export_body.rstrip("\n"),
+            "model export should be compact (no pretty newlines)",
+        )
+        assertTrue('"label":"Renamed"' in export_body.replace(" ", ""), toolText(applied))
 
         # --- 损坏 index 必须拒绝写，且 commit 失败后保留 draft/stage ---
         retry_update = c3.tool(
@@ -456,6 +545,28 @@ def main() -> int:
         assertTrue(
             "GRAPHMCP_INLINE_MAX_BYTES" in toolText(guard),
             "inline guard message is not actionable",
+        )
+        # table_export 同样受内联护栏约束
+        table = guard_client.tool(
+            "table_create",
+            {
+                "content": "c1,c2\n" + "\n".join(f"{i},x{i}" for i in range(200)),
+                "format": "csv",
+                "name": "guard-table",
+            },
+        )
+        assertTrue(not table["result"].get("isError"), toolText(table))
+        table_id = json.loads(toolText(table))["id"]
+        table_guard = guard_client.tool(
+            "table_export", {"id": table_id, "to": "model"}
+        )
+        assertTrue(
+            table_guard["result"].get("isError"),
+            "table_export inline guard did not reject",
+        )
+        assertTrue(
+            "GRAPHMCP_INLINE_MAX_BYTES" in toolText(table_guard),
+            "table_export guard message is not actionable",
         )
         guard_client.close()
 

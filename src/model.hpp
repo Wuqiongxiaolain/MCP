@@ -18,21 +18,36 @@ using gj::Json;
 // 可选值："flowchart" | "architecture" | "er" | "orgchart" | "mindmap" |
 // "whiteboard"
 
-// Node: 图中的“节点”实体（命名上 n 表示 node，id 为机器唯一标识，label
+// Layer: draw.io 图层 —— 同页内节点的垂直分组
+// id 为 draw.io mxCell id，name 为图层展示名
+struct Layer
+{
+    std::string id;
+    std::string name;
+    bool visible = true;
+    bool locked  = false;
+};
+
+// Node: 图中的”节点”实体（命名上 n 表示 node，id 为机器唯一标识，label
 // 为展示名）
 struct Node
 {
     std::string id;
     std::string label;
     std::string shape;  // 节点形状：rect | round | diamond | ellipse | circle |
-                        // stadium | group
+                        // stadium | hexagon | group |
+                        // process | document | cylinder | parallelogram |
+                        // delay | manualInput | display | cloud |
+                        // trapezoid | triangle | step | umlActor | note |
+                        // cube | message
     std::string              parent;  // 层级关系：父节点 id（空字符串表示根层）
+    std::string              layer;   // 所属图层名（空字符串表示默认图层）
     std::string              style;   // 自由样式提示（颜色等）
-    std::vector<std::string> attrs;   // ER 属性列表：形如 "type name"
+    std::vector<std::string> attrs;   // ER 属性列表：形如 “type name”
     double                   x = 0, y = 0, w = 0, h = 0;
 };
 
-// Edge: 图中的“边/连线”实体（命名上 from/to 表示起点和终点节点 id）
+// Edge: 图中的”边/连线”实体（命名上 from/to 表示起点和终点节点 id）
 struct Edge
 {
     std::string id;
@@ -40,6 +55,8 @@ struct Edge
     std::string label;
     std::string style;  // 线型：solid | dashed | thick
     std::string arrow;  // 箭头：arrow | none | both
+    double labelX = 0;  // 标签 X 偏移（相对边中点）
+    double labelY = 0;  // 标签 Y 偏移（相对边中点）
 };
 
 // Graph: 统一图模型容器（命名上 g 常用于 Graph 实例）
@@ -48,9 +65,11 @@ struct Graph
     std::string       id;
     std::string       name;
     std::string       type = "flowchart";
-    std::vector<Node> nodes;
-    std::vector<Edge> edges;
-    std::vector<Json> elements;  // 原始白板元素（类似 excalidraw）
+    std::vector<Node>  nodes;
+    std::vector<Edge>  edges;
+    std::vector<Layer> layers;   // 图层列表（draw.io 多图层支持）
+    std::vector<Graph> pages;   // 多页支持（首行为首页，pages 存储附加页）
+    std::vector<Json>  elements; // 原始白板元素（类似 excalidraw）
     Json files   = Json::obj();  // Excalidraw 顶层 files（image 附件）
     bool laidOut = false;
     int  edgeCounter_ = 0;       // 自增边 ID 计数器
@@ -127,6 +146,8 @@ struct Graph
             jn.set("shape", n.shape);
             if (!n.parent.empty())
                 jn.set("parent", n.parent);
+            if (!n.layer.empty())
+                jn.set("layer", n.layer);
             if (!n.style.empty())
                 jn.set("style", n.style);
             if (!n.attrs.empty()) {
@@ -152,9 +173,31 @@ struct Graph
                 je.set("label", e.label);
             je.set("style", e.style);
             je.set("arrow", e.arrow);
+            if (e.labelX != 0 || e.labelY != 0) {
+                je.set("labelX", e.labelX);
+                je.set("labelY", e.labelY);
+            }
             es.push(je);
         }
         j.set("edges", es);
+        if (!layers.empty()) {
+            Json ls = Json::arr();
+            for (auto& l : layers) {
+                Json jl = Json::obj();
+                jl.set("id", l.id);
+                jl.set("name", l.name);
+                jl.set("visible", l.visible);
+                jl.set("locked", l.locked);
+                ls.push(jl);
+            }
+            j.set("layers", ls);
+        }
+        if (!pages.empty()) {
+            Json ps = Json::arr();
+            for (auto& p : pages)
+                ps.push(p.toJson());
+            j.set("pages", ps);
+        }
         if (!elements.empty()) {
             Json els = Json::arr();
             for (auto& el : elements)
@@ -188,6 +231,7 @@ struct Graph
                     n.label  = jn.str("label");
                     n.shape  = jn.str("shape", "rect");
                     n.parent = jn.str("parent");
+                    n.layer  = jn.str("layer");
                     n.style  = jn.str("style");
                     if (const Json* ja = jn.find("attrs")) {
                         if (ja->isArr())
@@ -210,10 +254,28 @@ struct Graph
                     e.from  = je.str("from");
                     e.to    = je.str("to");
                     e.label = je.str("label");
-                    e.style = je.str("style", "solid");
-                    e.arrow = je.str("arrow", "arrow");
+                    e.style  = je.str("style", "solid");
+                    e.arrow  = je.str("arrow", "arrow");
+                    e.labelX = je.num("labelX");
+                    e.labelY = je.num("labelY");
                     g.edges.push_back(e);
                 }
+        }
+        if (const Json* ls = j.find("layers")) {
+            if (ls->isArr())
+                for (auto& jl : *ls->a) {
+                    Layer l;
+                    l.id      = jl.str("id");
+                    l.name    = jl.str("name");
+                    l.visible = jl.boolean("visible", true);
+                    l.locked  = jl.boolean("locked", false);
+                    g.layers.push_back(l);
+                }
+        }
+        if (const Json* ps = j.find("pages")) {
+            if (ps->isArr())
+                for (auto& jp : *ps->a)
+                    g.pages.push_back(Graph::fromJson(jp));
         }
         if (const Json* els = j.find("elements")) {
             if (els->isArr())
@@ -313,7 +375,15 @@ inline void defaultSize(Node& n)
         }
     double perChar = wide ? 14.0 : 8.5;
     n.w            = std::max(100.0, cps * perChar + 32.0);
-    n.h            = (n.shape == "diamond") ? 60.0 : 44.0;
+    n.h = 44.0;
+    if (n.shape == "diamond")
+        n.h = 60.0;
+    else if (n.shape == "cylinder")
+        n.h = 60.0;
+    else if (n.shape == "umlActor")
+        n.h = 80.0;
+    else if (n.shape == "note")
+        n.h = 50.0;
     if (n.shape == "circle") {
         n.w = std::max(n.w, n.h);
         n.h = n.w;

@@ -1417,34 +1417,64 @@ inline std::string toMermaid(const Graph& g)
 // drawioStyle: 将统一 shape 映射为 draw.io 样式字符串
 inline std::string drawioStyle(const Node& n)
 {
-    std::string base = "whiteSpace=wrap;html=1;";
-    if (n.shape == "diamond")
-        return "rhombus;" + base;
-    if (n.shape == "ellipse" || n.shape == "circle")
-        return "ellipse;" + base;
-    if (n.shape == "round" || n.shape == "stadium")
-        return "rounded=1;arcSize=" +
-               std::string(n.shape == "stadium" ? "50" : "10") + ";" + base;
-    if (n.shape == "hexagon")
-        return "shape=hexagon;" + base;
+    // 特殊逻辑：group 和 ER entity 不走通用映射表
     if (n.shape == "group")
         return "rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor="
                "none;dashed=1;";
     if (!n.attrs.empty())
-        return "shape=table;startSize=30;container=1;collapsible=0;" + base;
-    return "rounded=0;" + base;
+        return "shape=table;startSize=30;container=1;collapsible=0;"
+               "whiteSpace=wrap;html=1;";
+
+    // round/stadium 需要动态 arcSize，单独处理
+    if (n.shape == "round")
+        return "rounded=1;arcSize=10;whiteSpace=wrap;html=1;";
+    if (n.shape == "stadium")
+        return "rounded=1;arcSize=50;whiteSpace=wrap;html=1;";
+
+    // 通用形状映射表：统一形状名 → draw.io 样式字符串
+    static const std::map<std::string, std::string> kShapeStyleMap = {
+        {"diamond",       "rhombus;whiteSpace=wrap;html=1;"},
+        {"ellipse",       "ellipse;whiteSpace=wrap;html=1;"},
+        {"circle",        "ellipse;whiteSpace=wrap;html=1;"},
+        {"hexagon",       "shape=hexagon;whiteSpace=wrap;html=1;"},
+        {"triangle",      "shape=triangle;perimeter=trianglePerimeter;whiteSpace=wrap;html=1;"},
+        {"parallelogram", "shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;"},
+        {"trapezoid",     "shape=trapezoid;perimeter=trapezoidPerimeter;whiteSpace=wrap;html=1;"},
+        {"step",          "shape=step;perimeter=stepPerimeter;whiteSpace=wrap;html=1;"},
+        {"process",       "shape=process;whiteSpace=wrap;html=1;"},
+        {"document",      "shape=document;whiteSpace=wrap;html=1;"},
+        {"cylinder",      "shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;container=0;size=15;"},
+        {"delay",         "shape=delay;whiteSpace=wrap;html=1;"},
+        {"manualInput",   "shape=manualInput;perimeter=manualInputPerimeter;whiteSpace=wrap;html=1;"},
+        {"display",       "shape=display;whiteSpace=wrap;html=1;"},
+        {"cloud",         "shape=cloud;whiteSpace=wrap;html=1;"},
+        {"umlActor",      "shape=umlActor;whiteSpace=wrap;html=1;"},
+        {"note",          "shape=note;whiteSpace=wrap;html=1;size=14;"},
+        {"cube",          "shape=cube;whiteSpace=wrap;html=1;"},
+        {"message",       "shape=message;whiteSpace=wrap;html=1;"},
+    };
+    auto it = kShapeStyleMap.find(n.shape);
+    if (it != kShapeStyleMap.end())
+        return it->second;
+
+    // 默认：普通矩形
+    return "rounded=0;whiteSpace=wrap;html=1;";
 }
 
-// toDrawio: 导出 draw.io XML
+// toDrawio: 导出 draw.io XML（支持多页）
 // 关键步骤：先 layout 保证有坐标 -> 先输出 group 再输出普通节点 -> 最后输出边
 inline std::string toDrawio(Graph g)
 {
-    gl::layout(g);
-    std::vector<FreedrawStroke> strokes = collectFreedrawStrokes(g);
-    std::ostringstream          os;
+    std::ostringstream os;
     os << "<mxfile host=\"graphmcp\" agent=\"graphmcp/1.0\" type=\"device\">\n";
-    os << "  <diagram name=\"" << xmlEscape(g.name.empty() ? "Page-1" : g.name)
-       << "\" id=\"" << xmlEscape(g.id.empty() ? "d1" : g.id) << "\">\n";
+
+    // writePage: 输出单页 diagram 的节点、边、图层、free 笔画
+    auto writePage = [&](Graph& page, const std::string& diagId) {
+    gl::layout(page);
+    std::vector<FreedrawStroke> strokes = collectFreedrawStrokes(page);
+    os << "  <diagram name=\""
+       << xmlEscape(page.name.empty() ? "Page-1" : page.name)
+       << "\" id=\"" << xmlEscape(diagId) << "\">\n";
     os << "    <mxGraphModel dx=\"800\" dy=\"600\" grid=\"1\" gridSize=\"10\" "
           "guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" "
           "page=\"1\" pageScale=\"1\" pageWidth=\"1169\" pageHeight=\"826\" "
@@ -1452,12 +1482,24 @@ inline std::string toDrawio(Graph g)
     os << "      <root>\n";
     os << "        <mxCell id=\"0\"/>\n";
     os << "        <mxCell id=\"1\" parent=\"0\"/>\n";
+    // 输出自定义图层（默认图层 id=1 已经存在）
+    for (auto& l : page.layers) {
+        os << "        <mxCell id=\"" << xmlEscape(l.id) << "\" parent=\"0\""
+           << " value=\"" << xmlEscape(l.name) << "\"";
+        if (l.locked)
+            os << " style=\"locked=1\"";
+        os << "/>\n";
+    }
+    // 构建 layer 名称 → id 的反向映射，供节点 parent 引用
+    std::map<std::string, std::string> layerIdForName;
+    for (auto& l : page.layers)
+        layerIdForName[l.name] = l.id;
     // 先输出 group，确保子节点可引用其作为 parent
     std::vector<const Node*> ordered;
-    for (auto& n : g.nodes)
+    for (auto& n : page.nodes)
         if (n.shape == "group")
             ordered.push_back(&n);
-    for (auto& n : g.nodes)
+    for (auto& n : page.nodes)
         if (n.shape != "group")
             ordered.push_back(&n);
     for (auto* n : ordered) {
@@ -1467,24 +1509,29 @@ inline std::string toDrawio(Graph g)
             for (auto& a : n->attrs)
                 label += "<br/>" + a;
         }
-        const Node* p = n->parent.empty() ? nullptr : g.findNode(n->parent);
+        const Node* p = n->parent.empty() ? nullptr : page.findNode(n->parent);
         bool        insideGroup = p && p->shape == "group";
         double      x = n->x, y = n->y;
         if (insideGroup) {
             x -= p->x;
             y -= p->y;
         }  // draw.io 子节点使用相对坐标
+        // 确定 parent 引用：group 优先 → 图层 → 默认图层 "1"
+        std::string parentRef = "1";
+        if (insideGroup)
+            parentRef = n->parent;
+        else if (!n->layer.empty() && layerIdForName.count(n->layer))
+            parentRef = layerIdForName[n->layer];
         os << "        <mxCell id=\"" << xmlEscape(n->id) << "\" value=\""
            << xmlEscape(label) << "\" style=\"" << drawioStyle(*n)
-           << "\" vertex=\"1\" parent=\""
-           << (insideGroup ? xmlEscape(n->parent) : "1") << "\">\n";
+           << "\" vertex=\"1\" parent=\"" << xmlEscape(parentRef) << "\">\n";
         os << "          <mxGeometry x=\"" << x << "\" y=\"" << y
            << "\" width=\"" << n->w << "\" height=\"" << n->h
            << "\" as=\"geometry\"/>\n";
         os << "        </mxCell>\n";
     }
     int ei = 0;
-    for (auto& e : g.edges) {
+    for (auto& e : page.edges) {
         std::string style = "edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;";
         if (e.style == "dashed")
             style += "dashed=1;";
@@ -1498,7 +1545,15 @@ inline std::string toDrawio(Graph g)
            << xmlEscape(e.label) << "\" style=\"" << style
            << "\" edge=\"1\" parent=\"1\" source=\"" << xmlEscape(e.from)
            << "\" target=\"" << xmlEscape(e.to) << "\">\n";
-        os << "          <mxGeometry relative=\"1\" as=\"geometry\"/>\n";
+        os << "          <mxGeometry relative=\"1\" as=\"geometry\"";
+        if (e.labelX != 0 || e.labelY != 0) {
+            os << ">\n";
+            os << "            <mxPoint x=\"" << e.labelX << "\" y=\""
+               << e.labelY << "\" as=\"offset\"/>\n";
+            os << "          </mxGeometry>\n";
+        } else {
+            os << "/>\n";
+        }
         os << "        </mxCell>\n";
     }
     // Excalidraw freedraw -> draw.io 矢量线段（按相邻采样点拆分）
@@ -1531,6 +1586,14 @@ inline std::string toDrawio(Graph g)
     os << "      </root>\n";
     os << "    </mxGraphModel>\n";
     os << "  </diagram>\n";
+    };  // writePage lambda
+
+    // 首页和附加页依次输出
+    writePage(g, g.id.empty() ? "d1" : g.id);
+    int di = 2;
+    for (auto& p : g.pages)
+        writePage(p, "d" + std::to_string(di++));
+
     os << "</mxfile>\n";
     return os.str();
 }
@@ -1748,8 +1811,10 @@ inline std::string toSVG(Graph g)
             os << " marker-start=\"url(#arrow)\"";
         os << "/>\n";
         if (!e.label.empty()) {
-            os << "  <text class=\"elabel\" x=\"" << (x1 + x2) / 2 << "\" y=\""
-               << (y1 + y2) / 2 - 4 << "\" text-anchor=\"middle\">"
+            double lx = (x1 + x2) / 2 + e.labelX;
+            double ly = (y1 + y2) / 2 + e.labelY - 4;
+            os << "  <text class=\"elabel\" x=\"" << lx << "\" y=\""
+               << ly << "\" text-anchor=\"middle\">"
                << xmlEscape(e.label) << "</text>\n";
         }
     }

@@ -696,13 +696,18 @@ inline Graph parseDrawio(const std::string& text)
     if (mxfile.tag != "mxfile")
         throw ParseError("drawio: root element must be <mxfile>, got <" +
                          mxfile.tag + ">");
-    const detail::XmlNode* diagram = nullptr;
+    // 收集所有 <diagram> 元素
+    std::vector<const detail::XmlNode*> diagrams;
     for (auto& c : mxfile.children)
-        if (c.tag == "diagram") { diagram = &c; break; }
-    if (!diagram)
+        if (c.tag == "diagram")
+            diagrams.push_back(&c);
+    if (diagrams.empty())
         throw ParseError("drawio: <mxfile> must contain a <diagram>");
+
+    // parseOneDiagram: 解析单个 diagram → Graph
+    auto parseOneDiagram = [&](const detail::XmlNode& diagram) -> Graph {
     const detail::XmlNode* model = nullptr;
-    for (auto& c : diagram->children)
+    for (auto& c : diagram.children)
         if (c.tag == "mxGraphModel") { model = &c; break; }
     if (!model)
         throw ParseError("drawio: <diagram> must contain an <mxGraphModel>");
@@ -713,8 +718,8 @@ inline Graph parseDrawio(const std::string& text)
         throw ParseError("drawio: <mxGraphModel> must contain a <root>");
 
     Graph g;
-    if (diagram->attrs.count("name"))
-        g.name = diagram->attrs.at("name");
+    if (diagram.attrs.count("name"))
+        g.name = diagram.attrs.at("name");
     g.type = "flowchart";
 
     struct Cell
@@ -723,7 +728,9 @@ inline Graph parseDrawio(const std::string& text)
         std::string source, target;
         bool        vertex = false, edge = false;
         double      x = 0, y = 0, w = 140, h = 80;
-        bool        hasSourcePoint = false;
+        bool        hasSourcePoint  = false;
+        bool        hasLabelOffset  = false;
+        double      labelOffX = 0, labelOffY = 0;
     };
     std::vector<Cell> cells;
 
@@ -758,8 +765,19 @@ inline Graph parseDrawio(const std::string& text)
                 for (auto& pt : gc.children) {
                     if (pt.tag == "mxPoint") {
                         auto it = pt.attrs.find("as");
-                        if (it != pt.attrs.end() && it->second == "sourcePoint")
-                            cell.hasSourcePoint = true;
+                        if (it != pt.attrs.end()) {
+                            if (it->second == "sourcePoint")
+                                cell.hasSourcePoint = true;
+                            else if (it->second == "offset") {
+                                cell.hasLabelOffset = true;
+                                auto ox = pt.attrs.find("x");
+                                auto oy = pt.attrs.find("y");
+                                if (ox != pt.attrs.end())
+                                    cell.labelOffX = std::stod(ox->second);
+                                if (oy != pt.attrs.end())
+                                    cell.labelOffY = std::stod(oy->second);
+                            }
+                        }
                     }
                 }
             }
@@ -777,6 +795,22 @@ inline Graph parseDrawio(const std::string& text)
     auto styleHas = [](const std::string& s, const std::string& key) {
         return s.find(key) != std::string::npos;
     };
+
+    // —— 图层检测：parent="0" 且 id 不是 0/1 的 cell 为用户自定义图层 ——
+    std::map<std::string, std::string> layerNames;  // layerId → layerName
+    for (auto& cell : cells) {
+        if (cell.parent == "0" && cell.id != "0" && cell.id != "1") {
+            std::string lname = cell.value.empty() ? cell.id : cell.value;
+            layerNames[cell.id] = lname;
+            gm::Layer l;
+            l.id   = cell.id;
+            l.name = lname;
+            // draw.io 图层样式含 locked=1 表示锁定
+            if (styleHas(cell.style, "locked=1"))
+                l.locked = true;
+            g.layers.push_back(l);
+        }
+    }
 
     for (auto& cell : cells) {
         if (skipCell(cell) || !cell.vertex)
@@ -827,18 +861,36 @@ inline Graph parseDrawio(const std::string& text)
             label = cell.id;
 
         std::string shape = "rect";
-        if (styleHas(cell.style, "rhombus"))
-            shape = "diamond";
-        else if (styleHas(cell.style, "ellipse"))
-            shape = "ellipse";
-        else if (styleHas(cell.style, "shape=hexagon"))
-            shape = "hexagon";
-        else if (styleHas(cell.style, "arcSize=50"))
-            shape = "stadium";
-        else if (styleHas(cell.style, "rounded=1"))
-            shape = "round";
-        else if (styleHas(cell.style, "shape=table"))
-            shape = "rect";
+        // 优先级有序的形状映射表：先匹配具体的 shape=xxx 模式，再匹配通用子串
+        static const std::vector<std::pair<std::string, std::string>> kShapePatterns =
+            {{"shape=triangle", "triangle"},
+             {"shape=parallelogram", "parallelogram"},
+             {"shape=trapezoid", "trapezoid"},
+             {"shape=step", "step"},
+             {"shape=process", "process"},
+             {"shape=document", "document"},
+             {"shape=cylinder3", "cylinder"},
+             {"shape=delay", "delay"},
+             {"shape=manualInput", "manualInput"},
+             {"shape=display", "display"},
+             {"shape=cloud", "cloud"},
+             {"shape=umlActor", "umlActor"},
+             {"shape=actor", "umlActor"},
+             {"shape=note", "note"},
+             {"shape=cube", "cube"},
+             {"shape=message", "message"},
+             {"shape=hexagon", "hexagon"},
+             {"shape=table", "rect"},
+             {"rhombus", "diamond"},
+             {"ellipse", "ellipse"},
+             {"arcSize=50", "stadium"},
+             {"rounded=1", "round"}};
+        for (auto& p : kShapePatterns) {
+            if (styleHas(cell.style, p.first)) {
+                shape = p.second;
+                break;
+            }
+        }
 
         bool isGroup = false;
         if (styleHas(cell.style, "fillColor=none") &&
@@ -858,8 +910,13 @@ inline Graph parseDrawio(const std::string& text)
         n.h     = cell.h;
         if (!attrs.empty())
             n.attrs = attrs;
-        if (!cell.parent.empty() && cell.parent != "1" && cell.parent != "0")
-            n.parent = cell.parent;
+        if (!cell.parent.empty() && cell.parent != "1" && cell.parent != "0") {
+            // 父节点是图层 → 记录 layer；否则是 group 包含关系
+            if (layerNames.count(cell.parent))
+                n.layer = layerNames[cell.parent];
+            else
+                n.parent = cell.parent;
+        }
     }
 
     for (auto& cell : cells) {
@@ -889,7 +946,19 @@ inline Graph parseDrawio(const std::string& text)
             arrow = "both";
 
         g.addEdge(cell.source, cell.target, label, edgeStyle, arrow);
+        if (cell.hasLabelOffset) {
+            g.edges.back().labelX = cell.labelOffX;
+            g.edges.back().labelY = cell.labelOffY;
+        }
     }
+
+    return g;
+    };  // parseOneDiagram lambda
+
+    // 首页填充主 Graph，附加页 push 到 g.pages
+    Graph g = parseOneDiagram(*diagrams[0]);
+    for (size_t i = 1; i < diagrams.size(); i++)
+        g.pages.push_back(parseOneDiagram(*diagrams[i]));
 
     return g;
 }

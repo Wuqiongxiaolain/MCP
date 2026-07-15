@@ -10,9 +10,14 @@ Semaphore 容器 `semaphore` 已挂载：
 | `D:/.../MCP-` → `/ansible-projects/MCP-` | 本地 Git 仓库作 Semaphore Repository |
 | `semaphore-data` | SQLite 与配置持久化 |
 
-控制节点需一次性准备（重建 Semaphore 后若 playbook 报缺 `docker` 模块再执行）：
+控制节点需一次性准备（**重建 Semaphore 后务必再执行**）：
 
 ```bash
+# Git：任务进程 HOME 可能非 /home/semaphore，须写 system 级
+docker exec -u root semaphore git config --system --add safe.directory /ansible-projects/MCP-
+docker exec -u root semaphore git config --system --add safe.directory /ansible-projects/MCP-/.git
+
+# Docker SDK + socket 权限
 docker exec -u root semaphore /opt/semaphore/apps/ansible/13.5.0/venv/bin/pip install docker
 docker exec -u root semaphore chmod 666 /var/run/docker.sock
 ```

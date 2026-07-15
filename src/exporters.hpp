@@ -2197,7 +2197,22 @@ inline std::string toDrawio(Graph g)
            << xmlEscape(e.label) << "\" style=\"" << style
            << "\" edge=\"1\" parent=\"1\" source=\"" << xmlEscape(e.from)
            << "\" target=\"" << xmlEscape(e.to) << "\">\n";
-        os << "          <mxGeometry relative=\"1\" as=\"geometry\"/>\n";
+        os << "          <mxGeometry relative=\"1\" as=\"geometry\">\n";
+        // 边标签位置：layout 设置了 labelX/labelY（画布绝对坐标），
+        // draw.io 需要的是相对边中心的偏移量
+        if (!e.label.empty() && (e.labelX != 0 || e.labelY != 0)) {
+            const Node* src = g.findNode(e.from);
+            const Node* dst = g.findNode(e.to);
+            if (src && dst) {
+                double cx = (src->x + src->w / 2.0 + dst->x + dst->w / 2.0) / 2.0;
+                double cy = (src->y + src->h / 2.0 + dst->y + dst->h / 2.0) / 2.0;
+                double ox = e.labelX - cx;
+                double oy = e.labelY - cy;
+                os << "            <mxPoint x=\"" << ox << "\" y=\"" << oy
+                   << "\" as=\"offset\"/>\n";
+            }
+        }
+        os << "          </mxGeometry>\n";
         os << "        </mxCell>\n";
     }
     // Excalidraw freedraw -> draw.io 矢量线段（按相邻采样点拆分）

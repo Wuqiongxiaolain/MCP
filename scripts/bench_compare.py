@@ -92,18 +92,18 @@ def main():
 
         if ratio >= fail_thr:
             failures.append(
-                f"{name}: {bl_val:.2f}{bl['unit']} → "
-                f"{cur_val:.2f}{cur['unit']} (+{(ratio-1)*100:.0f}%)"
+                f"{name}: {bl['value']:.2f}{bl['unit']} → "
+                f"{cur['value']:.2f}{cur['unit']} (+{(ratio-1)*100:.0f}%)"
             )
         elif ratio >= warn_thr:
             warnings.append(
-                f"{name}: {bl_val:.2f}{bl['unit']} → "
-                f"{cur_val:.2f}{cur['unit']} (+{(ratio-1)*100:.0f}%)"
+                f"{name}: {bl['value']:.2f}{bl['unit']} → "
+                f"{cur['value']:.2f}{cur['unit']} (+{(ratio-1)*100:.0f}%)"
             )
         elif ratio <= IMPROVE_THRESHOLD:
             improvements.append(
-                f"{name}: {bl_val:.2f}{bl['unit']} → "
-                f"{cur_val:.2f}{cur['unit']} (-{(1-ratio)*100:.0f}%)"
+                f"{name}: {bl['value']:.2f}{bl['unit']} → "
+                f"{cur['value']:.2f}{cur['unit']} (-{(1-ratio)*100:.0f}%)"
             )
 
     # ── 输出 GitHub Actions workflow 注解 ──

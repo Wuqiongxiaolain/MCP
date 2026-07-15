@@ -1,452 +1,60 @@
 {
   "benchmarks": [
-    {
-      "name": "parseMermaid_flowchart",
-      "unit": "us",
-      "value": 7.3538,
-      "p50": 7.074,
-      "p95": 7.203,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_sequence",
-      "unit": "us",
-      "value": 9.5957,
-      "p50": 9.268,
-      "p95": 9.488,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_classDiagram",
-      "unit": "us",
-      "value": 3.4743,
-      "p50": 3.376,
-      "p95": 3.436,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_stateDiagram",
-      "unit": "us",
-      "value": 5.5073,
-      "p50": 5.37,
-      "p95": 5.431,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_erDiagram",
-      "unit": "us",
-      "value": 2.7133,
-      "p50": 2.665,
-      "p95": 2.715,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_gantt",
-      "unit": "us",
-      "value": 5.7354,
-      "p50": 5.581,
-      "p95": 5.68,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_pie",
-      "unit": "us",
-      "value": 2.9517,
-      "p50": 2.855,
-      "p95": 2.906,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_gitGraph",
-      "unit": "us",
-      "value": 4.1198,
-      "p50": 4.007,
-      "p95": 4.067,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_mindmap",
-      "unit": "us",
-      "value": 4.9773,
-      "p50": 4.899,
-      "p95": 4.949,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_journey",
-      "unit": "us",
-      "value": 4.3277,
-      "p50": 4.228,
-      "p95": 4.288,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_timeline",
-      "unit": "us",
-      "value": 3.7098,
-      "p50": 3.657,
-      "p95": 3.707,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_kanban",
-      "unit": "us",
-      "value": 4.2317,
-      "p50": 4.158,
-      "p95": 4.218,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_quadrantChart",
-      "unit": "us",
-      "value": 4.7488,
-      "p50": 4.68,
-      "p95": 4.739,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_xychart",
-      "unit": "us",
-      "value": 4.7693,
-      "p50": 4.719,
-      "p95": 4.769,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_requirementDiagram",
-      "unit": "us",
-      "value": 4.6973,
-      "p50": 4.618,
-      "p95": 4.719,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_sankey",
-      "unit": "us",
-      "value": 5.6783,
-      "p50": 5.601,
-      "p95": 5.691,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_block",
-      "unit": "us",
-      "value": 5.0358,
-      "p50": 4.979,
-      "p95": 5.03,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_architecture",
-      "unit": "us",
-      "value": 5.8958,
-      "p50": 5.82,
-      "p95": 5.901,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_packet",
-      "unit": "us",
-      "value": 2.9508,
-      "p50": 2.906,
-      "p95": 2.946,
-      "iterations": 500
-    },
-    {
-      "name": "parseMermaid_flowchart_n100",
-      "unit": "us",
-      "value": 115.9862,
-      "p50": 112.302,
-      "p95": 123.843,
-      "iterations": 50
-    },
-    {
-      "name": "parseMermaid_flowchart_n500",
-      "unit": "ms",
-      "value": 1.3577,
-      "p50": 1.3543,
-      "p95": 1.3799,
-      "iterations": 50
-    },
-    {
-      "name": "parseMermaid_flowchart_n1000",
-      "unit": "ms",
-      "value": 4.8297,
-      "p50": 4.825,
-      "p95": 4.864,
-      "iterations": 50
-    },
-    {
-      "name": "jsonRoundTrip_flowchart_n200",
-      "unit": "us",
-      "value": 935.637,
-      "p50": 928.427,
-      "p95": 952.362,
-      "iterations": 100
-    },
-    {
-      "name": "jsonDump_n200",
-      "unit": "us",
-      "value": 134.5333,
-      "p50": 133.05,
-      "p95": 143.891,
-      "iterations": 200
-    },
-    {
-      "name": "jsonParse_n200",
-      "unit": "us",
-      "value": 200.5746,
-      "p50": 198.242,
-      "p95": 210.026,
-      "iterations": 200
-    },
-    {
-      "name": "toMermaid_n200",
-      "unit": "us",
-      "value": 64.2605,
-      "p50": 62.979,
-      "p95": 72.306,
-      "iterations": 100
-    },
-    {
-      "name": "toDrawio_n200",
-      "unit": "us",
-      "value": 328.7352,
-      "p50": 324.36,
-      "p95": 337.776,
-      "iterations": 100
-    },
-    {
-      "name": "toSVG_n200",
-      "unit": "us",
-      "value": 705.1458,
-      "p50": 703.444,
-      "p95": 716.328,
-      "iterations": 20
-    },
-    {
-      "name": "store_save",
-      "unit": "us",
-      "value": 555.7869,
-      "p50": 553.342,
-      "p95": 585.872,
-      "iterations": 100
-    },
-    {
-      "name": "store_load",
-      "unit": "us",
-      "value": 222.0447,
-      "p50": 218.521,
-      "p95": 234.501,
-      "iterations": 100
-    },
-    {
-      "name": "mcp_tools_list",
-      "unit": "us",
-      "value": 114.594,
-      "p50": 111.66,
-      "p95": 130.797,
-      "iterations": 200
-    },
-    {
-      "name": "mcp_graph_create",
-      "unit": "us",
-      "value": 352.9793,
-      "p50": 354.918,
-      "p95": 427.965,
-      "iterations": 100
-    },
-    {
-      "name": "table_fromCsv_n100",
-      "unit": "us",
-      "value": 64.1098,
-      "p50": 62.908,
-      "p95": 71.805,
-      "iterations": 100
-    },
-    {
-      "name": "table_fromCsv_n500",
-      "unit": "us",
-      "value": 322.9722,
-      "p50": 316.745,
-      "p95": 333.167,
-      "iterations": 100
-    },
-    {
-      "name": "table_fromCsv_n2000",
-      "unit": "ms",
-      "value": 1.4159,
-      "p50": 1.3306,
-      "p95": 1.5331,
-      "iterations": 100
-    },
-    {
-      "name": "table_toJson_n500",
-      "unit": "us",
-      "value": 167.7931,
-      "p50": 165.612,
-      "p95": 176.583,
-      "iterations": 100
-    },
-    {
-      "name": "table_fromJson_n500",
-      "unit": "us",
-      "value": 96.3815,
-      "p50": 95.119,
-      "p95": 105.899,
-      "iterations": 100
-    },
-    {
-      "name": "table_cell_n200",
-      "unit": "us",
-      "value": 14.7753,
-      "p50": 14.577,
-      "p95": 14.588,
-      "iterations": 5000
-    },
-    {
-      "name": "table_toXml_n50",
-      "unit": "us",
-      "value": 30.6811,
-      "p50": 30.297,
-      "p95": 30.637,
-      "iterations": 50
-    },
-    {
-      "name": "table_fromXml_n50",
-      "unit": "us",
-      "value": 105.3444,
-      "p50": 100.669,
-      "p95": 112.081,
-      "iterations": 50
-    },
-    {
-      "name": "table_toXml_n200",
-      "unit": "us",
-      "value": 122.4575,
-      "p50": 121.048,
-      "p95": 130.917,
-      "iterations": 50
-    },
-    {
-      "name": "table_fromXml_n200",
-      "unit": "us",
-      "value": 403.2421,
-      "p50": 398.519,
-      "p95": 410.412,
-      "iterations": 50
-    },
-    {
-      "name": "table_toXml_n500",
-      "unit": "us",
-      "value": 341.2196,
-      "p50": 338.918,
-      "p95": 348.596,
-      "iterations": 50
-    },
-    {
-      "name": "table_fromXml_n500",
-      "unit": "us",
-      "value": 997.5417,
-      "p50": 994.291,
-      "p95": 1.0135,
-      "iterations": 50
-    },
-    {
-      "name": "graphFromTable_n500",
-      "unit": "us",
-      "value": 974.1354,
-      "p50": 972.159,
-      "p95": 986.517,
-      "iterations": 100
-    },
-    {
-      "name": "tableFromGraph_edgelist_n200",
-      "unit": "us",
-      "value": 21.6535,
-      "p50": 21.23,
-      "p95": 22.683,
-      "iterations": 100
-    },
-    {
-      "name": "tableFromGraph_skeleton_n200",
-      "unit": "us",
-      "value": 47.5094,
-      "p50": 45.285,
-      "p95": 55.334,
-      "iterations": 100
-    },
-    {
-      "name": "tableCheck_n300_1rule",
-      "unit": "us",
-      "value": 38.836,
-      "p50": 38.142,
-      "p95": 38.573,
-      "iterations": 50
-    },
-    {
-      "name": "tableAlign_n100",
-      "unit": "us",
-      "value": 17.2172,
-      "p50": 15.629,
-      "p95": 25.278,
-      "iterations": 50
-    },
-    {
-      "name": "tableStore_save_n200",
-      "unit": "us",
-      "value": 578.4598,
-      "p50": 577.847,
-      "p95": 598.987,
-      "iterations": 50
-    },
-    {
-      "name": "tableStore_load_n200",
-      "unit": "us",
-      "value": 130.4527,
-      "p50": 126.358,
-      "p95": 144.943,
-      "iterations": 50
-    },
-    {
-      "name": "tableStore_list",
-      "unit": "us",
-      "value": 6.1068,
-      "p50": 6.022,
-      "p95": 6.092,
-      "iterations": 100
-    },
-    {
-      "name": "mcp_table_create_n200",
-      "unit": "us",
-      "value": 603.6081,
-      "p50": 597.394,
-      "p95": 651.074,
-      "iterations": 20
-    },
-    {
-      "name": "memory_RSS_repeat_save_same_id",
-      "unit": "MB",
-      "value": 0.5,
-      "p50": 0.5,
-      "p95": 0.5,
-      "iterations": 1
-    },
-    {
-      "name": "memory_RSS_repeat_save_1st_half",
-      "unit": "MB",
-      "value": 0.25,
-      "p50": 0.25,
-      "p95": 0.25,
-      "iterations": 1
-    },
-    {
-      "name": "memory_RSS_repeat_save_2nd_half",
-      "unit": "MB",
-      "value": 0.25,
-      "p50": 0.25,
-      "p95": 0.25,
-      "iterations": 1
-    }
+    {"name": "parseMermaid_flowchart", "unit": "us", "value": 7.0631, "p50": 6.7900, "p95": 6.9910, "iterations": 500},
+    {"name": "parseMermaid_sequence", "unit": "us", "value": 9.6516, "p50": 9.4140, "p95": 9.5540, "iterations": 500},
+    {"name": "parseMermaid_classDiagram", "unit": "us", "value": 3.5425, "p50": 3.4750, "p95": 3.4860, "iterations": 500},
+    {"name": "parseMermaid_stateDiagram", "unit": "us", "value": 5.6849, "p50": 5.5690, "p95": 5.6780, "iterations": 500},
+    {"name": "parseMermaid_erDiagram", "unit": "us", "value": 2.7926, "p50": 2.7440, "p95": 2.7940, "iterations": 500},
+    {"name": "parseMermaid_gantt", "unit": "us", "value": 5.9051, "p50": 5.7580, "p95": 5.8980, "iterations": 500},
+    {"name": "parseMermaid_pie", "unit": "us", "value": 2.9198, "p50": 2.8650, "p95": 2.8940, "iterations": 500},
+    {"name": "parseMermaid_gitGraph", "unit": "us", "value": 4.0501, "p50": 3.9360, "p95": 3.9760, "iterations": 500},
+    {"name": "parseMermaid_mindmap", "unit": "us", "value": 4.9561, "p50": 4.8670, "p95": 4.9180, "iterations": 500},
+    {"name": "parseMermaid_journey", "unit": "us", "value": 4.3707, "p50": 4.2770, "p95": 4.3170, "iterations": 500},
+    {"name": "parseMermaid_timeline", "unit": "us", "value": 3.7991, "p50": 3.7150, "p95": 3.7560, "iterations": 500},
+    {"name": "parseMermaid_kanban", "unit": "us", "value": 4.3632, "p50": 4.2670, "p95": 4.3460, "iterations": 500},
+    {"name": "parseMermaid_quadrantChart", "unit": "us", "value": 4.8093, "p50": 4.7070, "p95": 4.7580, "iterations": 500},
+    {"name": "parseMermaid_xychart", "unit": "us", "value": 4.7331, "p50": 4.6370, "p95": 4.6870, "iterations": 500},
+    {"name": "parseMermaid_requirementDiagram", "unit": "us", "value": 4.8196, "p50": 4.7370, "p95": 4.8070, "iterations": 500},
+    {"name": "parseMermaid_sankey", "unit": "us", "value": 5.4580, "p50": 5.3780, "p95": 5.4680, "iterations": 500},
+    {"name": "parseMermaid_block", "unit": "us", "value": 5.0182, "p50": 4.9480, "p95": 5.0180, "iterations": 500},
+    {"name": "parseMermaid_architecture", "unit": "us", "value": 5.9181, "p50": 5.8390, "p95": 5.9190, "iterations": 500},
+    {"name": "parseMermaid_packet", "unit": "us", "value": 2.9714, "p50": 2.9250, "p95": 2.9540, "iterations": 500},
+    {"name": "parseMermaid_flowchart_n100", "unit": "us", "value": 115.9959, "p50": 112.6570, "p95": 122.6420, "iterations": 50},
+    {"name": "parseMermaid_flowchart_n500", "unit": "ms", "value": 1.3395, "p50": 1.3359, "p95": 1.3729, "iterations": 50},
+    {"name": "parseMermaid_flowchart_n1000", "unit": "ms", "value": 4.9848, "p50": 4.9842, "p95": 5.0257, "iterations": 50},
+    {"name": "jsonRoundTrip_flowchart_n200", "unit": "us", "value": 985.2059, "p50": 958.6760, "p95": 1.1931, "iterations": 100},
+    {"name": "jsonDump_n200", "unit": "us", "value": 129.4650, "p50": 127.8600, "p95": 137.0640, "iterations": 200},
+    {"name": "jsonParse_n200", "unit": "us", "value": 181.8280, "p50": 179.9170, "p95": 190.6130, "iterations": 200},
+    {"name": "toMermaid_n200", "unit": "us", "value": 66.6801, "p50": 65.1670, "p95": 74.0700, "iterations": 100},
+    {"name": "toDrawio_n200", "unit": "us", "value": 280.3162, "p50": 277.2630, "p95": 288.3990, "iterations": 100},
+    {"name": "toSVG_n200", "unit": "us", "value": 607.5606, "p50": 607.0130, "p95": 624.1490, "iterations": 20},
+    {"name": "store_save", "unit": "us", "value": 376.2683, "p50": 372.2940, "p95": 398.6930, "iterations": 100},
+    {"name": "store_load", "unit": "us", "value": 221.2405, "p50": 217.6130, "p95": 234.0280, "iterations": 100},
+    {"name": "mcp_tools_list", "unit": "us", "value": 1.6683, "p50": 1.0120, "p95": 1.0420, "iterations": 200},
+    {"name": "mcp_graph_create", "unit": "us", "value": 353.0335, "p50": 350.0710, "p95": 434.5570, "iterations": 100},
+    {"name": "table_fromCsv_n100", "unit": "us", "value": 54.0008, "p50": 52.9680, "p95": 61.5420, "iterations": 100},
+    {"name": "table_fromCsv_n500", "unit": "us", "value": 275.6377, "p50": 270.3220, "p95": 283.6610, "iterations": 100},
+    {"name": "table_fromCsv_n2000", "unit": "ms", "value": 1.1413, "p50": 1.1371, "p95": 1.1582, "iterations": 100},
+    {"name": "table_toJson_n500", "unit": "us", "value": 162.0679, "p50": 160.3890, "p95": 171.1140, "iterations": 100},
+    {"name": "table_fromJson_n500", "unit": "us", "value": 93.3641, "p50": 92.3280, "p95": 101.5410, "iterations": 100},
+    {"name": "table_cell_n200", "unit": "us", "value": 16.4780, "p50": 16.3340, "p95": 16.3440, "iterations": 5000},
+    {"name": "table_toXml_n50", "unit": "us", "value": 29.4234, "p50": 29.1930, "p95": 29.4040, "iterations": 50},
+    {"name": "table_fromXml_n50", "unit": "us", "value": 97.0813, "p50": 95.3610, "p95": 104.7260, "iterations": 50},
+    {"name": "table_toXml_n200", "unit": "us", "value": 114.6483, "p50": 114.5000, "p95": 122.4820, "iterations": 50},
+    {"name": "table_fromXml_n200", "unit": "us", "value": 381.5276, "p50": 376.7300, "p95": 397.6320, "iterations": 50},
+    {"name": "table_toXml_n500", "unit": "us", "value": 291.5661, "p50": 289.4810, "p95": 297.8720, "iterations": 50},
+    {"name": "table_fromXml_n500", "unit": "us", "value": 945.9831, "p50": 944.0640, "p95": 950.8840, "iterations": 50},
+    {"name": "graphFromTable_n500", "unit": "us", "value": 985.9954, "p50": 989.5310, "p95": 999.7170, "iterations": 100},
+    {"name": "tableFromGraph_edgelist_n200", "unit": "us", "value": 22.0767, "p50": 21.6220, "p95": 22.4330, "iterations": 100},
+    {"name": "tableFromGraph_skeleton_n200", "unit": "us", "value": 49.0671, "p50": 45.4080, "p95": 62.7330, "iterations": 100},
+    {"name": "tableCheck_n300_1rule", "unit": "us", "value": 40.1355, "p50": 39.7090, "p95": 40.1900, "iterations": 50},
+    {"name": "tableAlign_n100", "unit": "us", "value": 18.2672, "p50": 17.5260, "p95": 21.6820, "iterations": 50},
+    {"name": "tableStore_save_n200", "unit": "us", "value": 518.0975, "p50": 527.6650, "p95": 564.2590, "iterations": 50},
+    {"name": "tableStore_load_n200", "unit": "us", "value": 121.7294, "p50": 119.2370, "p95": 132.1870, "iterations": 50},
+    {"name": "tableStore_list", "unit": "us", "value": 7.4980, "p50": 7.2800, "p95": 7.4610, "iterations": 100},
+    {"name": "mcp_table_create_n200", "unit": "us", "value": 586.0924, "p50": 583.1170, "p95": 635.9060, "iterations": 20},
+    {"name": "memory_RSS_repeat_save_same_id", "unit": "MB", "value": 0.0000, "p50": 0.0000, "p95": 0.0000, "iterations": 1},
+    {"name": "memory_RSS_repeat_save_2nd_half", "unit": "MB", "value": 0.0000, "p50": 0.0000, "p95": 0.0000, "iterations": 1},
+    {"name": "memory_RSS_repeat_save_1st_half", "unit": "MB", "value": 0.0000, "p50": 0.0000, "p95": 0.0000, "iterations": 1}
   ]
 }

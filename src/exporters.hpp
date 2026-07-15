@@ -2731,11 +2731,13 @@ inline std::string toSVG(Graph g)
         // 检测直线是否有效穿过中间节点（非擦边）
         double  b1x = 0, b1y = 0, b2x = 0, b2y = 0;
         bool    blocked = false;
+        double xMin = std::min(x1, x2) - 12, xMax = std::max(x1, x2) + 12;
         double yMin = std::min(y1, y2) - 12, yMax = std::max(y1, y2) + 12;
         for (auto& n : g.nodes) {
             if (n.id == e.from || n.id == e.to) continue;
             if (n.shape == "group") continue;
-            if (n.y + n.h < yMin || n.y > yMax) continue;  // y范围外快速跳过
+            if (n.x + n.w < xMin || n.x > xMax) continue;  // x范围外
+            if (n.y + n.h < yMin || n.y > yMax) continue;  // y范围外
             if (lineHitsRect(x1, y1, x2, y2,
                              n.x - 2, n.y - 2, n.w + 4, n.h + 4)) {
                 // 二次确认：线段必须真正穿过节点(零padding)，非仅擦边
@@ -2768,11 +2770,13 @@ inline std::string toSVG(Graph g)
         // 二次验证: 仅当新线段穿过节点核心区(无padding)才推送
         if (blocked) {
             auto segBlocked = [&](double sx, double sy, double ex, double ey) {
-                double smin = std::min(sy, ey) - 4, smax = std::max(sy, ey) + 4;
+                double sxmin = std::min(sx, ex) - 4, sxmax = std::max(sx, ex) + 4;
+                double symin = std::min(sy, ey) - 4, symax = std::max(sy, ey) + 4;
                 for (auto& n : g.nodes) {
                     if (n.id == e.from || n.id == e.to) continue;
                     if (n.shape == "group") continue;
-                    if (n.y + n.h < smin || n.y > smax) continue;
+                    if (n.x + n.w < sxmin || n.x > sxmax) continue;
+                    if (n.y + n.h < symin || n.y > symax) continue;
                     if (lineHitsRect(sx, sy, ex, ey, n.x, n.y, n.w, n.h))
                         return true;
                 }

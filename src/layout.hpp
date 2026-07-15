@@ -357,7 +357,7 @@ inline void layoutCompactLayers(std::map<std::string, int>& rank,
         for (int r = maxRank; r > 0; r--) {
             int cntAbove = (int)layers[r - 1].size();
             int cntCur   = (int)layers[r].size();
-            if (cntAbove > 3 || cntCur > 3) continue;
+            if (cntAbove > 5 || cntCur > 5) continue;
             bool canMerge = true;
             for (auto& id : layers[r]) {
                 for (auto& e : g.edges)
@@ -1021,8 +1021,10 @@ inline void layout(Graph& g, bool force = false,
                 }
             }
         } else if (h > 0 && w / h < 0.5) {
-            // 过窄 → 水平扩展
-            double scale = 0.5 * h / std::max(w, 1.0);
+            // 过窄 → 水平扩展（上限 2.5x 防止过宽）
+            double targetRatio = 0.5;
+            double scale = targetRatio * h / std::max(w, 1.0);
+            if (scale > 2.5) scale = 2.5;
             double cx = (minX + maxX) / 2;
             for (auto& n : g.nodes) n.x = cx + (n.x - cx) * scale;
         }

@@ -2609,7 +2609,7 @@ inline std::string toExcalidraw(Graph g)
         doc.set("files", g.files);
     else
         doc.set("files", Json::obj());
-    return doc.dump(2);
+    return doc.dump();
 }
 
 // -------------------------------------------------------------------- SVG --
@@ -3332,7 +3332,7 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
         content = toSVG(g);
     else if (to == "model" || to == "json") {
         gl::layout(g);
-        content = g.toJson().dump(2);
+        content = g.toJson().dump();
     }
     else if (to == "url") {
         r.ok      = true;

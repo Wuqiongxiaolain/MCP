@@ -156,6 +156,12 @@ inline Json tableExport(gts::TableStore& tables, const Json& a)
             return textContent("failed to write " + path, true);
         return textContent("wrote " + path);
     }
+    if (text.size() > ge::inlineExportMaxBytes())
+        return textContent(
+            "inline export exceeds GRAPHMCP_INLINE_MAX_BYTES (" +
+                std::to_string(ge::inlineExportMaxBytes()) +
+                "); provide path= to write file instead",
+            true);
     return textContent(text);
 }
 

@@ -192,9 +192,9 @@ inline Json toolList()
         req.push(Json("id"));
         tools.push(toolDef(
             "graph_import",
-            "Re-import an externally edited diagram: reads the open.<ext> file "
-            "(or provided content), parses it, validates, and saves as a new "
-            "version.",
+            "Re-import an externally edited diagram after graph_open: reads "
+            "open.<ext> (or provided content), parses, validates, and saves as "
+            "a new version. NOT for first-time import — use graph_create.",
             p, req));
     }
 
@@ -264,16 +264,17 @@ inline Json toolList()
         p.set("strategy",
               prop("string", "layout strategy: auto|layered|tree-h|tree-v|grid "
                              "(default auto)"));
-        p.set("save", prop("boolean",
-                           "save layout result back to store (default false)"));
+        p.set("save",
+              prop("boolean",
+                   "REQUIRED to persist layout: save=true writes a new store "
+                   "version; default false only preview in-memory"));
         Json req = Json::arr();
         req.push(Json("id"));
         tools.push(toolDef(
             "graph_layout",
-            "Apply automatic layout to a stored graph. Supports layered "
-            "(flowchart), "
-            "tree-h (mindmap), tree-v (orgchart), grid, and auto strategies. "
-            "Optionally saves the result as a new version.",
+            "Apply automatic layout to a stored graph (layered/tree/grid/auto). "
+            "Coordinates are NOT saved unless save=true. Prefer save=true "
+            "before graph_export if you need new positions on disk.",
             p, req));
     }
 
@@ -304,12 +305,13 @@ inline Json toolList()
                    "e.g. sequence.participants"));
         Json req = Json::arr();
         req.push(Json("id"));
-        tools.push(toolDef("graph_show",
-                           "Show graph summary, node details, or edge details. "
-                           "Without node/edge params, returns the full "
-                           "structure (nodes + edges list). "
-                           "Use --path to show only a properties subtree.",
-                           p, req));
+        tools.push(toolDef(
+            "graph_show",
+            "Show graph summary with node/edge id lists, or details for one "
+            "node/edge/path. Use this to discover element ids before "
+            "graph_update/graph_insert/graph_apply. Avoid dumping via "
+            "graph_export to=model for ordinary edits.",
+            p, req));
     }
 
     // ── 11b. graph_property 🆕 ────────────────────────────────
@@ -333,14 +335,12 @@ inline Json toolList()
         req.push(Json("id"));
         req.push(Json("action"));
         req.push(Json("path"));
-        tools.push(toolDef("graph_property",
-                           "Read, set, insert, or delete properties sub-data. "
-                           "Use --action get to read a value at a path. "
-                           "Use --action set to write a value at a path. "
-                           "Use --action insert to push into an array. "
-                           "Use --action delete to remove at a path. "
-                           "Changes go to the draft.",
-                           p, req));
+        tools.push(toolDef(
+            "graph_property",
+            "Read, set, insert, or delete values under graph.properties. "
+            "action=get|set|insert|delete. Changes go to the draft; commit "
+            "with graph_commit all=true or graph_apply.",
+            p, req));
     }
 
     // ── 12. graph_update 🆕 ──────────────────────────────────
@@ -363,10 +363,10 @@ inline Json toolList()
         req.push(Json("set"));
         tools.push(toolDef(
             "graph_update",
-            "Update node/edge attributes via cursor operation. Changes go to "
-            "the draft. "
-            "Use --node/--edge for single element or --selector for batch. "
-            "Multiple --set flags allowed (supports fillColor/strokeColor).",
+            "Update node/edge attributes in the draft (in-memory selector; do "
+            "NOT use graph_cursor_* for ordinary edits). Provide node, edge, "
+            "or selector plus set as 'field=value' (array allowed). Then "
+            "graph_commit with all=true, or prefer graph_apply to batch+commit.",
             p, req));
     }
 
@@ -400,10 +400,10 @@ inline Json toolList()
         req.push(Json("element"));
         tools.push(toolDef(
             "graph_insert",
-            "Insert a node or edge into the graph. Changes go to the draft. "
-            "For nodes: specify type, label, position, size, parent, "
-            "fillColor, strokeColor. "
-            "For edges: specify from, to, label, style, arrow, strokeColor.",
+            "Insert a node or edge into the draft. For nodes: type, label, "
+            "position, size, parent, fillColor, strokeColor. For edges: from, "
+            "to, label, style, arrow, strokeColor. Commit with "
+            "graph_commit all=true or graph_apply.",
             p, req));
     }
 
@@ -417,12 +417,13 @@ inline Json toolList()
         p.set("selector", prop("string", "batch selector for mass deletion"));
         Json req = Json::arr();
         req.push(Json("id"));
-        tools.push(toolDef("graph_delete_element",
-                           "Delete a node or edge from the graph via cursor. "
-                           "Changes go to the draft. "
-                           "Deleting a node cascades to its connected edges. "
-                           "Use --selector for batch deletion.",
-                           p, req));
+        tools.push(toolDef(
+            "graph_delete_element",
+            "Delete a node or edge from the draft (in-memory selector; do NOT "
+            "use graph_cursor_*). Deleting a node cascades connected edges. "
+            "Use selector for batch deletion. Commit with all=true or "
+            "graph_apply.",
+            p, req));
     }
 
     // ── 15. graph_status 🆕 ──────────────────────────────────
@@ -482,16 +483,18 @@ inline Json toolList()
         p.set("message", prop("string", "commit message (required)"));
         p.set("all",
               prop("boolean",
-                   "skip staging and commit all draft changes directly"));
+                   "Agents should set all=true to commit all draft ops and "
+                   "skip staging (recommended default path)"));
         p.set("author", prop("string", "author identifier (default 'mcp')"));
         Json req = Json::arr();
         req.push(Json("id"));
         req.push(Json("message"));
         tools.push(toolDef(
             "graph_commit",
-            "Commit staged (or all draft) changes as a new immutable version. "
-            "Clears the staging area and submitted draft operations on "
-            "success.",
+            "Commit draft changes as a new immutable version. Agents: use "
+            "all=true (skips empty-stage failure). Without all=true, only "
+            "staged ops commit; empty stage returns an error. Prefer "
+            "graph_apply for multi-edit+commit in one call.",
             p, req));
     }
 
@@ -528,11 +531,48 @@ inline Json toolList()
         tools.push(toolDef(
             "graph_checkout",
             "Move HEAD to a specified version without creating a new commit. "
-            "Requires a clean working tree (no draft) unless --force is used.",
+            "Requires a clean working tree (no draft) unless force=true.",
             p, req));
     }
 
-    // ── 21-24. graph_cursor_* 🆕 游标磁盘持久化工具 ────────────
+    // ── graph_apply：多改 + 提交（可选导出）编排 ────────────
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "graph id"));
+        p.set("ops",
+              prop("string",
+                   "JSON array of edit ops. Each op has op=update|insert|delete "
+                   "plus the same fields as graph_update/insert/delete_element. "
+                   "Example: "
+                   "[{\"op\":\"update\",\"node\":\"n1\",\"set\":\"label=Hi\"},"
+                   "{\"op\":\"insert\",\"element\":\"node\",\"label\":\"X\"}]"));
+        p.set("message",
+              prop("string",
+                   "commit message (default graph_apply); used when "
+                   "commit=true"));
+        p.set("commit",
+              prop("boolean",
+                   "commit all draft ops after edits (default true)"));
+        p.set("author", prop("string", "author (default mcp)"));
+        p.set("export_to",
+              prop("string",
+                   "optional post-commit export format: "
+                   "drawio|mermaid|excalidraw|svg|png|pdf|url|model"));
+        p.set("export_path",
+              prop("string", "optional export file path (inline if omitted)"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("ops"));
+        tools.push(toolDef(
+            "graph_apply",
+            "Batch-edit a graph then commit in one call (preferred Agent "
+            "path). Applies ops[] to the draft, commits with all=true "
+            "semantics when commit=true (default), optional export_to. "
+            "Do not use graph_cursor_* or empty graph_stage for this workflow.",
+            p, req));
+    }
+
+    // ── 21-24. graph_cursor_* 游标磁盘持久化工具 ────────────
     {
         Json p = Json::obj();
         p.set("id", prop("string", "graph id"));
@@ -543,8 +583,9 @@ inline Json toolList()
         req.push(Json("id"));
         tools.push(toolDef(
             "graph_cursor_open",
-            "Open a persistent cursor over nodes or edges. Creates a draft "
-            "if none exists. Returns a cursor id for subsequent operations.",
+            "Open a persistent disk cursor for sequential traversal only. "
+            "Do NOT use for ordinary few-point edits — use graph_update/"
+            "graph_apply with node/edge/selector instead.",
             p, req));
     }
     {
@@ -1291,12 +1332,12 @@ inline Json opsToJson(const std::vector<gv::Operation>& ops)
     return arr;
 }
 
-// parseSetPairs: 解析 "key=value" 字符串对列表
+// parseSetPairs: 解析 "key=value" 字符串对列表；也接受 object 形式的 set
 inline std::vector<std::pair<std::string, std::string>>
 parseSetPairs(const Json& args)
 {
     std::vector<std::pair<std::string, std::string>> result;
-    // 支持 set 为字符串数组（多次指定）或单字符串
+    // 支持 set 为字符串数组（多次指定）、单字符串或 {field:value} 对象
     auto extract = [&](const std::string& raw) {
         size_t eq = raw.find('=');
         if (eq != std::string::npos) {
@@ -1311,6 +1352,19 @@ parseSetPairs(const Json& args)
         }
         else if (s->isStr()) {
             extract(s->s);
+        }
+        else if (s->isObj() && s->o) {
+            for (auto& kv : *s->o) {
+                if (kv.second.isStr())
+                    result.push_back({kv.first, kv.second.s});
+                else if (kv.second.isNum())
+                    result.push_back({kv.first, std::to_string(kv.second.n)});
+                else if (kv.second.isBool())
+                    result.push_back(
+                        {kv.first, kv.second.b ? "true" : "false"});
+                else
+                    result.push_back({kv.first, kv.second.dump()});
+            }
         }
     }
     return result;
@@ -1374,6 +1428,8 @@ class ToolRunner {
                 return diff(args);
             if (name == "graph_checkout")
                 return checkout(args);
+            if (name == "graph_apply")
+                return apply(args);
             // ── 游标持久化工具 ──
             if (name == "graph_cursor_open")
                 return cursorOpen(args);
@@ -1979,12 +2035,29 @@ class ToolRunner {
             if (!val)
                 return textContent("path not found: " + path, true);
             out.set("path", path);
-            if (val->isStr()) { out.set("value", val->s); out.set("type", "string"); }
-            else if (val->isNum()) { out.set("value", val->n); out.set("type", "number"); }
-            else if (val->isBool()) { out.set("value", val->b); out.set("type", "bool"); }
-            else if (val->isArr()) { out.set("value", val->dump(2)); out.set("type", "array"); }
-            else if (val->isObj()) { out.set("value", val->dump(2)); out.set("type", "object"); }
-            else out.set("type", "null");
+            if (val->isStr()) {
+                out.set("value", val->s);
+                out.set("type", "string");
+            }
+            else if (val->isNum()) {
+                out.set("value", val->n);
+                out.set("type", "number");
+            }
+            else if (val->isBool()) {
+                out.set("value", val->b);
+                out.set("type", "bool");
+            }
+            else if (val->isArr()) {
+                // 嵌真实 Json，避免 dump 字符串再外层转义的双重膨胀
+                out.set("value", *val);
+                out.set("type", "array");
+            }
+            else if (val->isObj()) {
+                out.set("value", *val);
+                out.set("type", "object");
+            }
+            else
+                out.set("type", "null");
             return textContent(out.dump());
         }
 
@@ -2392,7 +2465,11 @@ class ToolRunner {
         }
 
         if (nv == -1)
-            return textContent("nothing to commit (stage is empty)", true);
+            return textContent(
+                "nothing to commit (stage is empty). Retry with all=true to "
+                "commit all draft ops, or call graph_stage first, or use "
+                "graph_apply",
+                true);
         if (nv == -2)
             return textContent(
                 "commit failed: base version is missing or corrupt", true);
@@ -2480,6 +2557,149 @@ class ToolRunner {
         Json out = Json::obj();
         out.set("status", "checkout complete");
         out.set("headVersion", (double)ver);
+        return textContent(out.dump());
+    }
+
+    // apply: 批量编辑草稿并默认一次提交（可选导出）
+    Json apply(const Json& a)
+    {
+        std::string id = a.str("id");
+        if (id.empty())
+            return textContent("graph_apply requires 'id'", true);
+
+        const Json* opsField = a.find("ops");
+        if (!opsField)
+            return textContent("graph_apply requires 'ops'", true);
+
+        Json opsArr;
+        if (opsField->isArr()) {
+            opsArr = *opsField;
+        }
+        else if (opsField->isStr()) {
+            std::string perr;
+            opsArr = Json::parse(opsField->s, &perr);
+            if (!perr.empty() || !opsArr.isArr())
+                return textContent(
+                    "graph_apply 'ops' must be a JSON array: " + perr, true);
+        }
+        else {
+            return textContent("graph_apply 'ops' must be array or JSON string",
+                               true);
+        }
+
+        int applied = 0;
+        for (auto& op : *opsArr.a) {
+            if (!op.isObj())
+                return textContent("each op must be a JSON object", true);
+            std::string kind = op.str("op");
+            if (kind.empty())
+                kind = op.str("action");
+            if (kind.empty())
+                return textContent("each op requires op=update|insert|delete",
+                                   true);
+
+            Json one = Json::obj();
+            one.set("id", id);
+            auto copyStr = [&](const char* key) {
+                if (const Json* v = op.find(key)) {
+                    if (v->isStr())
+                        one.set(key, v->s);
+                    else if (v->isNum())
+                        one.set(key, v->n);
+                    else if (v->isBool())
+                        one.set(key, v->b);
+                    else
+                        one.set(key, *v);
+                }
+            };
+            for (const char* key :
+                 {"node", "edge", "selector", "element", "type", "label",
+                  "position", "size", "parent", "from", "to", "style", "arrow",
+                  "fillColor", "strokeColor"})
+                copyStr(key);
+            if (const Json* s = op.find("set"))
+                one.set("set", *s);
+
+            Json step;
+            if (kind == "update")
+                step = update(one);
+            else if (kind == "insert")
+                step = insert(one);
+            else if (kind == "delete" || kind == "delete_element")
+                step = deleteElement(one);
+            else
+                return textContent("unknown op: " + kind +
+                                       " (use update|insert|delete)",
+                                   true);
+            if (step.boolean("isError", false))
+                return step;
+            applied++;
+        }
+
+        Json out = Json::obj();
+        out.set("status", "applied");
+        out.set("id", id);
+        out.set("opsApplied", (double)applied);
+
+        bool doCommit = a.boolean("commit", true);
+        if (doCommit) {
+            std::string msg = a.str("message");
+            if (msg.empty())
+                msg = "graph_apply";
+            int nv =
+                vm_.commitAll(id, msg, a.str("author", "mcp"));
+            if (nv == -1)
+                return textContent(
+                    "graph_apply edits ok but nothing to commit "
+                    "(draft empty after ops)",
+                    true);
+            if (nv == -2)
+                return textContent(
+                    "graph_apply commit failed: base version missing/corrupt",
+                    true);
+            if (nv == -3)
+                return textContent(
+                    "graph_apply commit failed: store lock/index/IO error; "
+                    "draft preserved",
+                    true);
+            out.set("committed", true);
+            out.set("version", (double)nv);
+            out.set("message", msg);
+        }
+        else {
+            out.set("committed", false);
+            auto st = vm_.status(id);
+            out.set("draftOperations", (double)st.draftOpCount);
+        }
+
+        std::string exportTo = a.str("export_to");
+        if (!exportTo.empty()) {
+            Graph       g;
+            std::string err;
+            if (!store_.load(id, g, 0, &err))
+                return textContent(err, true);
+            ge::ExportResult r =
+                ge::exportGraph(g, exportTo, a.str("export_path"));
+            if (r.timedOut || !r.ok)
+                return textContent(r.message, true);
+            std::string text = r.content.empty() ?
+                                   r.message :
+                                   (r.path.empty() ? r.content : r.message);
+            if (r.path.empty() && a.str("export_path").empty() &&
+                text.size() > ge::inlineExportMaxBytes())
+                return textContent(
+                    "inline export exceeds GRAPHMCP_INLINE_MAX_BYTES (" +
+                        std::to_string(ge::inlineExportMaxBytes()) +
+                        "); provide export_path= to write file instead",
+                    true);
+            out.set("export_to", exportTo);
+            if (!r.path.empty())
+                out.set("export_path", r.path);
+            else if (!a.str("export_path").empty())
+                out.set("export_path", a.str("export_path"));
+            else
+                out.set("export_content", text);
+        }
         return textContent(out.dump());
     }
 

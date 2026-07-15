@@ -1,0 +1,59 @@
+exit_code=0
+input_format=auto
+---
+{
+  "id": "",
+  "name": "",
+  "type": "flowchart",
+  "laidOut": true,
+  "nodes": [
+    {
+      "id": "A",
+      "label": "Start",
+      "shape": "rect",
+      "x": 20,
+      "y": 20,
+      "w": 100,
+      "h": 44
+    },
+    {
+      "id": "B",
+      "label": "B",
+      "shape": "rect",
+      "x": 20,
+      "y": 144,
+      "w": 100,
+      "h": 44
+    },
+    {
+      "id": "C",
+      "label": "Done",
+      "shape": "rect",
+      "x": 20,
+      "y": 268,
+      "w": 100,
+      "h": 44
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "A",
+      "to": "B",
+      "style": "solid",
+      "arrow": "arrow"
+    },
+    {
+      "id": "e2",
+      "from": "B",
+      "to": "C",
+      "label": "yes",
+      "style": "solid",
+      "arrow": "arrow"
+    }
+  ],
+  "files": {},
+  "edgeCounter": 2,
+  "nodeCounter": 0
+}
+

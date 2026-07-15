@@ -1,6 +1,6 @@
 # graphmcp 用户手册
 
-> latest update: v0.1.1, 2026-07-10
+> latest update: v0.1.1, 2026-07-14
 
 > 用户手册（版本以根目录 VERSION 为准）  
 > 命令与参数速查（表格）：[CLI & MCP 指令参考](CLI_MCP_REFERENCE.md)
@@ -89,7 +89,7 @@ graphmcp export to-url --id g7abc
 graphmcp <命令族> <子命令> [参数...]
 ```
 
-共 **10 个命令族**（含新增的 import 编辑回导）。以下按族逐一说明。
+共 **15 个命令族**（含 `table`、`dump-tools` 与 `import` 编辑回导）。以下按族逐一说明。
 
 ---
 
@@ -101,7 +101,7 @@ graphmcp <命令族> <子命令> [参数...]
 
 | 子命令 | 输入格式 | 示例文件 |
 |--------|---------|---------|
-| `from-mermaid` | Mermaid 文本 (flowchart/mindmap/erDiagram) | `examples/flowchart.mmd` |
+| `from-mermaid` | Mermaid 文本（支持 flowchart/mindmap/er/class/state/sequence/pie 等） | `examples/flowchart.mmd` |
 | `from-markdown` | Markdown 大纲 (标题+列表) | `examples/mindmap.md` |
 | `from-csv` | CSV 边表或层级表 | `examples/orgchart.csv` |
 | `from-xml` | XML 图描述 | `examples/architecture.xml` |
@@ -438,6 +438,12 @@ graphmcp graph update --selector "shape=rect" --set shape=round <图ID>
 # 批量更新：parent=g1 的所有子节点
 graphmcp graph update --selector "parent=g1" --set style="fill:blue" <图ID>
 
+# 设置节点填充色 / 描边色（颜色用专用字段，勿塞进 style）
+graphmcp graph update --node A --set fillColor=#eef4ff --set strokeColor=#4a72b8 <图ID>
+
+# 设置边描边色
+graphmcp graph update --edge e1 --set strokeColor=#ff6600 <图ID>
+
 # 模糊匹配：label 包含 "Step" 的节点
 graphmcp graph update --selector "label~=Step" --set shape=diamond <图ID>
 ```
@@ -453,6 +459,9 @@ graphmcp graph insert --node --type diamond --label "判断" --position 400 200 
 
 # 带父节点
 graphmcp graph insert --node --type round --label "子项" --parent A <图ID>
+
+# 带填充色 / 描边色
+graphmcp graph insert --node --type rect --label "高亮" --fillColor #eef4ff --strokeColor #4a72b8 <图ID>
 
 # 插入边
 graphmcp graph insert --edge --from A --to n10 --label "下一步" <图ID>
@@ -512,6 +521,8 @@ Claude Desktop 配置：
 ## 输入格式速查
 
 ### Mermaid 流程图
+
+> 颜色：可用 `classDef` / `class` / `style` / `linkStyle`；模型字段为 `fillColor`/`strokeColor`。样例见 `examples/example_input/flowchart_colors.mmd`。
 
 ```mermaid
 flowchart TD

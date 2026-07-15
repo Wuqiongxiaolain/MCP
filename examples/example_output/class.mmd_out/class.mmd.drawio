@@ -1,0 +1,25 @@
+<mxfile host="graphmcp" agent="graphmcp/1.0" type="device">
+  <diagram name="Page-1" id="d1">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="Animal" value="&lt;b&gt;Animal&lt;/b&gt;&lt;br/&gt;+int age&lt;br/&gt;+String name&lt;br/&gt;+eat()" style="shape=table;startSize=30;container=1;collapsible=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="20" width="100" height="96" as="geometry"/>
+        </mxCell>
+        <mxCell id="Dog" value="&lt;b&gt;Dog&lt;/b&gt;&lt;br/&gt;+bark()" style="shape=table;startSize=30;container=1;collapsible=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="20" y="196" width="100" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="Cat" value="&lt;b&gt;Cat&lt;/b&gt;&lt;br/&gt;+meow()" style="shape=table;startSize=30;container=1;collapsible=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="180" y="196" width="100" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge1" value="inheritance" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="Animal" target="Dog">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge2" value="inheritance" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="Animal" target="Cat">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

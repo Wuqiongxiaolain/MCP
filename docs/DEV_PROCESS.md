@@ -1,10 +1,12 @@
 # graphmcp 开发过程
 
-> latest update: v0.1.1, 2026-07-10
+> latest update: v0.2.0, 2026-07-14
 
-> 本文档依据仓库全部提交记录（`git log --all`，截至 2026-07-10，约 **145** 条）事后整理，按日期还原实际演进，**不是**开发当日的实时日记。  
-> 已并入原 `WORKLOG.md`（Keep a Changelog 式变更归档）、`CHANGELOG.md`、`DEV_LOG.md`。  
-> 阶段编号与 [PROJECT_TIMELINE.md](PROJECT_TIMELINE.md) 对齐；项目全景见 [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md)。
+> 本文档依据仓库提交记录事后整理，按日期还原实际演进，**不是**开发当日的实时日记。  
+> 已并入原 `WORKLOG.md` / `CHANGELOG.md` / `DEV_LOG.md`。  
+> **P1–P6**（至 2026-07-10）为初版收口叙事；**P7 起**（自 `c6e8009` / 2026-07-11 起）为扩展期，与 [PROJECT_TIMELINE.md](PROJECT_TIMELINE.md)、[PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) 对齐。
+
+> 口径说明：文中「当日」数字为历史值。**当前能力**以 `src/main.cpp` / `src/mcp.hpp::toolList()` / OpenAPI 为准（15 个 CLI 命令族、**46** 个 MCP 工具）。
 
 ---
 
@@ -17,7 +19,10 @@
 | 07-07 | 21 | P3 去掉 Jenkins/Ansible，接入 GitHub Actions、clang-format、发布流 |
 | 07-08 | 37 | P4 白板精确导出；并行启动 CLI/版本/游标与编辑器闭环 |
 | 07-09 | 45 | P5 架构合并落地；P6 编辑回导与三层测试补齐 |
-| 07-10 | 23 | P6 收尾：编辑器字段兜底、文档分层、CD 与 macOS 构建调整 |
+| 07-10 | 23 | P6 收尾：编辑器字段兜底、文档分层；**暂禁** macOS CD；新需求开始涌现 |
+| **07-11** | **~4+** | **P7**：macOS 头文件 + 恢复 CD 矩阵（`c6e8009`）；edit/import 改进；Mermaid 全类型支持起步 |
+| **07-13** | **~44** | **P8–P10 高峰**：OpenAPI/`dump-tools`；Table 全链路；Mermaid 深解析与表 XML |
+| **07-14** | **~26** | 表协同增强合入；颜色全链路；状态图 `[*]` 校验；样例/冒烟对齐 |
 
 主要作者（按提交量）：`wldxiaobai`、`wyQuQ`、`kliang`、`yifengsun`（另有少量合并账号与 `copilot-swe-agent`）。
 
@@ -159,7 +164,7 @@
 
 | 类别 | 内容 |
 |------|------|
-| **新增** | Draft-Stage-Commit、Cursor 游标、CLI 多命令族、MCP 扩至约 24～25 工具、`graph_import` / `parseDrawio`、`GRAPHMCP_LOG`、CLI&MCP 参考文档 |
+| **新增** | Draft-Stage-Commit、Cursor 游标、CLI 多命令族、MCP 扩至约 24～25 工具（当日口径，当前已扩展）、`graph_import` / `parseDrawio`、`GRAPHMCP_LOG`、CLI&MCP 参考文档 |
 | **变更** | `Store::save` 同步 HEAD；白板 SVG 与 fixture 对齐 |
 | **修复** | 跨分支合并丢测、冒烟断言、cppcheck 告警 |
 
@@ -181,15 +186,92 @@
 
 | 类别 | 内容 |
 |------|------|
-| **修复** | `availableEditors` 空环境始终写出；mcp_smoke 工具数 25 |
-| **工程** | macOS CD 暂禁；CD 手动触发 / dry_run |
+| **修复** | `availableEditors` 空环境始终写出；mcp_smoke 工具数 25（当日口径） |
+| **工程** | macOS CD **暂禁**（为次日头文件修复埋下）；CD 手动触发 / dry_run |
 | **文档** | 用户/维护者/开发者分层；v0.1.0 对齐 |
 
-**过程特征**：功能以兜底与 CI 对齐为主；文档与发布并行。macOS CD「先禁用再修头文件」是提交中可见的权衡。
+**过程特征**：功能以兜底与 CI 对齐为主；文档与发布并行。当日起明确出现后续扩展期需求：**通用表、Mermaid 类型扩展、恢复 macOS CD**。
+
+---
+
+## 2026-07-11 — macOS CD 恢复与扩展起步（P7 / P10 启动）
+
+以 `c6e8009` 为扩展期标志提交：
+
+| 代表提交 / PR | 说明 |
+|---------------|------|
+| `c6e8009` `fix(build): 补全 macOS 头文件 + 恢复 CD macOS 构建矩阵` | 关闭 07-10「暂禁 macOS」问题；CD 重新纳入 macos Runner |
+| `2c2b483` / PR #62 | edit/import 覆盖提示、版本显示、导入错误消息改进 |
+| `30d72dc` `feat: add support for all Mermaid diagram types` | Mermaid 全类型支持起步（后续 07-13～14 深解析补全） |
+
+### 变更摘要
+
+| 类别 | 内容 |
+|------|------|
+| **工程** | macOS CD **已恢复**（与「尚未解决：macOS CD」条目脱钩） |
+| **功能** | Mermaid 扩展线启动 |
+| **体验** | 编辑回导提示与错误信息可观测性增强 |
+
+---
+
+## 2026-07-13 — OpenAPI、表协作与 Mermaid 深解析（P8 / P9 / P10）
+
+扩展期提交高峰（author date 约 44 条）。三条主线并行合入：
+
+### 线 A：OpenAPI 契约（PR #65）
+
+- `feat(mcp): 新增 dump-tools 从 toolList 导出 OpenAPI`  
+- `chore(build): 接入 docs-api 目标与 CI 文档漂移校验`  
+- `docs/api_reference/openapi.yaml` 入库；兼容说明写入 toolList  
+
+### 线 B：通用表协作（PR #66 一带，后续 #70 增强）
+
+- `feat(table): 新增通用 Table 模型与 TableStore`  
+- `feat(table): 图与表有损投影及对齐校验`；`feat(mcp): 暴露 table 工具族与 CLI`  
+- 表 XML（模式 A）、原子写、兼容环境变量、`table_smoke` / 样例导出脚本  
+- 文档同步表协作语义与维护/抽离约定  
+
+### 线 C：Mermaid 深解析 + graph_property
+
+- `feat: complete deep parsing for all 19 Mermaid diagram types`  
+- `docs(api): regenerate OpenAPI spec with graph_property tool`  
+- 测试与 `detectFormat` 加固；冒烟工具数断言阶段性上调  
+
+### 变更摘要
+
+| 类别 | 内容 |
+|------|------|
+| **新增** | `dump-tools` / OpenAPI；Table 子系统；Mermaid 多类型深解析；`graph_property` |
+| **变更** | MCP 工具面从「图中心」扩为「图 + 表」；CLI 增加 `table` 族与契约导出 |
+| **测试** | 表单测 / MCP 扩展断言 / 样例与 fixture 脚本 |
+| **工程** | CI 校验 OpenAPI 与代码 schema 不漂移 |
+
+---
+
+## 2026-07-14 — 协同增强、颜色链路与回归收口（P9 / P10 收口）
+
+| 代表提交 / PR | 说明 |
+|---------------|------|
+| PR #70 / `7cb51f8` 等 | 图&表协同增强（rules/check/fix/derive/transform/sample/propose） |
+| PR #64 | Mermaid 全类型支持合入 main |
+| `7117b8c` 及后续 | 颜色全链路：`fillColor`/`strokeColor`、`classDef`/`linkStyle`、Draft/游标接通 |
+| `79a19f6` | `validate` 认可状态图起始/终止标记 `[*]`，修复 create 误拒绝 |
+| `ee8b5bb` 等 | 样例导出与冒烟 fixture 对齐颜色/Mermaid 输出 |
+
+### 变更摘要
+
+| 类别 | 内容 |
+|------|------|
+| **新增** | 颜色一等字段与多格式往返；协同增强工具集 |
+| **修复** | 颜色与 Mermaid 扩展字段合并冲突；stateDiagram `[*]` 校验；linkStyle/BOM |
+| **测试** | smoke 覆盖新类型/颜色；fixture whiteboard mermaid 含 classDef/linkStyle |
+| **现状口径** | MCP **46** 工具；CLI **15** 命令族；macOS CD / 表 / Mermaid 扩展均已交付 |
 
 ---
 
 ## 从提交可见的演进结果
+
+### 历史快照（截至 2026-07-10）
 
 | 指标 | 起点（07-05 末） | 收口（07-10） |
 |------|------------------|---------------|
@@ -198,6 +280,18 @@
 | 导出 | 含 rough 近似白板 | 自研精确 SVG + files/字体 |
 | CI | Jenkins 模板 | GitHub Actions + 冒烟 / 可选 Sonar / Tag 发布 |
 | 版本 | 简单 versions 快照 | Draft → Stage → Commit + HEAD 同步 |
+| macOS CD | — | **暂禁** |
+
+### 扩展期后（截至 2026-07-14，当前）
+
+| 指标 | 当前值 |
+|------|--------|
+| MCP 工具 | **46**（图 + 表 + property；以 `toolList()`/OpenAPI 为准） |
+| CLI 命令族 | **15**（含 `table` / `dump-tools` / `import`） |
+| Mermaid | 多类型深解析 + 颜色全链路；坏样例硬/软失败语义明确 |
+| 通用表 | TableStore + CSV/表 XML + 图↔表协同增强 |
+| CD | **含 macOS** 构建矩阵（自 `c6e8009` 起恢复） |
+| 契约 | OpenAPI 自动生成 + CI 漂移校验 |
 
 ---
 
@@ -206,27 +300,33 @@
 | 决策点 | 结论 |
 |--------|------|
 | 依赖策略 | 零第三方库；JSON/XML/Base64 内置 |
-| 架构核心 | 统一图模型居中，N 输入 → Graph → M 输出 |
-| 存储 | JSON 文件版本快照（非 SQLite） |
+| 架构核心 | 统一图模型居中；**表为并列一等对象**（非边表冒充业务宽表） |
+| 存储 | JSON 文件版本快照（图与 `tables/` 分目录） |
 | PNG/PDF | 外部转换器 / 浏览器栅格化 + SVG 回退 |
 | URL | mermaid.live `#base64:`（免 deflate） |
-| MCP | stdio + JSON-RPC 2.0 |
+| MCP | stdio + JSON-RPC 2.0；**代码即文档**（`toolList` → OpenAPI） |
 | 白板导出 | 精确 SVG 栅格化；不追求 rough.js 手绘风对齐 |
-| CI 主链 | GitHub Actions（Jenkins/Ansible 已移除） |
+| CI 主链 | GitHub Actions（Jenkins/Ansible 已移除）；CD 含 macOS |
 | 版本工作流 | Draft → Stage → Commit（仿 Git） |
 
 ---
 
-## 遗留与展望
+## 遗留与展望（对照当前事实）
 
-以下在提交与修复中反复出现，或原 WORKLOG 已列出、**尚未交付**：
+### 扩展期已关闭（勿再当作待办）
+
+1. **macOS CD**：`c6e8009` 已补头文件并恢复 Runner  
+2. **Mermaid 类型扩展**：class/state/sequence/pie 等深解析已落地（可持续打磨质量）  
+3. **通用表格支持**：Table + MCP/CLI + 协同增强已落地  
+
+### 尚未交付 / 需继续跟进
 
 1. **`exporters.hpp` 体量过大**（导出 + 编辑器发现 + 浏览器启动叠在同一头文件）  
-2. **macOS CD**：补全 `dirent.h` / `unistd.h` 后恢复 runner  
-3. **编辑器路径**：Linux/macOS 发现逻辑在 CI 覆盖不足  
-4. **可选画布实时预览**（SVG + 本地 HTML 轮询 `latest.json`）  
-5. **Mermaid 扩展**：classDiagram、stateDiagram；时序图需不同模型抽象  
-6. **draw.io URL**（需 deflate，暂缓以保持零依赖）  
+2. **编辑器路径**：Linux/macOS 发现逻辑在 CI 覆盖仍不足  
+3. **可选画布实时预览**（SVG + 本地 HTML 轮询 `latest.json`）  
+4. **draw.io 能力补齐**（更完整互操作 / draw.io URL 等；零依赖约束下缓步推进）  
+5. **导出图观感过粗**（布局/渲染/样式一致化打磨）  
+6. **潜在性能问题 + 性能测试管线**（大图/大表评估与可回归基准）  
 7. **可选 SQLite 后端**（大图检索）  
 8. **分层布局** median 启发式减交叉  
 
@@ -234,7 +334,6 @@
 
 ## 说明
 
-- 日期与主题以 **author date** 的 `git log` 为准；同一功能可能跨日、跨分支，本文按「首次明显落地日」归类。  
-- 「变更摘要」保留原 WORKLOG 的新增/变更/修复分类，便于对照功能面；07-09/07-10 由提交补记。  
+- 日期与主题以 **author date** 的 `git log` 为准；同一功能可能跨日、跨分支，本文按「首次明显落地日 / 合入日」归类。  
+- 「变更摘要」保留原 WORKLOG 的新增/变更/修复分类；07-09/07-10 由提交补记；**07-11～07-14 按 `c6e8009` 以来提交与合入 PR 补记**。  
 - 若需对外发版条目，可在 Tag 时另写简短 Release notes。  
-- `README.md` 中指向 `WORKLOG.md` 的链接暂未改动，后续统一调整文档索引。

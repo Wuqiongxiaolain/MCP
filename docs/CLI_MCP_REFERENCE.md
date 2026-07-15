@@ -1,6 +1,6 @@
 # CLI & MCP 指令参考
 
-> latest update: v0.1.1, 2026-07-10
+> latest update: v0.1.1, 2026-07-14
 
 > 命令行与 MCP 工具速查（版本以根目录 VERSION 为准）  
 > 操作教程与场景说明见 [USER_GUIDE.md](USER_GUIDE.md)。
@@ -163,7 +163,7 @@
 
 ---
 
-## 三、MCP 工具（39 个）
+## 三、MCP 工具（46 个）
 
 参数与 CLI 对应；通过 `tools/call` 调用。
 
@@ -188,15 +188,27 @@
 | `graph_history` | 版本历史 | `id` |
 | `graph_diff` | 两版本对比 | `id`, `v1`, `v2` |
 | `graph_status` | 工作树状态 | `id` |
+| `graph_property` | 读写图级 properties（结构化 Mermaid 扩展数据） | `id`, `action` |
 
 ### 图编辑（Draft）
 
 | 工具名 | 功能 | 必填参数 |
 |--------|------|----------|
-| `graph_update` | 更新节点/边属性 | `id`, `set` |
-| `graph_insert` | 插入节点/边 | `id`, `element` |
+| `graph_update` | 更新节点/边属性（含 `fillColor`/`strokeColor`） | `id`, `set` |
+| `graph_insert` | 插入节点/边（可选 `fillColor`/`strokeColor`） | `id`, `element` |
 | `graph_delete_element` | 删除节点/边 | `id` |
 | `graph_layout` | 自动布局 | `id` |
+
+**颜色字段约定：**
+
+| 字段 | 作用对象 | 说明 |
+|------|----------|------|
+| `fillColor` | 节点 | 填充色，如 `#eef4ff`；空=默认 |
+| `strokeColor` | 节点 / 边 | 描边色，如 `#4a72b8`；空=默认 |
+
+`graph_update` 示例：`--node A --set fillColor=#eef4ff --set strokeColor=#4a72b8`  
+`graph_insert` 示例：节点带 `--fillColor`/`--strokeColor`；边带 `--strokeColor`。  
+`Node.style` 仅保留线型/遗留提示，**颜色以专用字段为准**。
 
 ### 版本控制
 

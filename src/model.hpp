@@ -27,8 +27,10 @@ struct Node
     std::string shape;  // 节点形状：rect | round | diamond | ellipse | circle |
                         // stadium | group
     std::string              parent;  // 层级关系：父节点 id（空字符串表示根层）
-    std::string              style;   // 自由样式提示（颜色等）
-    std::vector<std::string> attrs;   // ER 属性列表：形如 "type name"
+    std::string style;  // 遗留/自由样式提示（非颜色；颜色用 fillColor/strokeColor）
+    std::string fillColor;    // 填充色 (如 "#eef4ff"；空串用默认)
+    std::string strokeColor;  // 描边色 (如 "#4a72b8"；空串用默认)
+    std::vector<std::string> attrs;        // ER 属性列表：形如 "type name"
     double                   x = 0, y = 0, w = 0, h = 0;
 };
 
@@ -42,13 +44,14 @@ struct Edge
 
     // 箭头装饰（取代单一 arrow 字段的粗糙分类）
     // 旧 arrow 字段保留为派生/兼容属性，toJson 和现有代码仍可使用
-    std::string arrow = "arrow";     // arrow | none | both (backward compat)
-    std::string headStart = "none";  // none | arrow | open | cross
-    std::string headEnd   = "arrow"; // none | arrow | open | cross
+    std::string arrow     = "arrow";  // arrow | none | both (backward compat)
+    std::string headStart = "none";   // none | arrow | open | cross
+    std::string headEnd   = "arrow";  // none | arrow | open | cross
+    std::string strokeColor;          // 描边色 (如 "#333"；空串使用默认)
 
     // 序列图 / gitGraph 专用
-    int  seqNum  = 0;       // 消息序号
-    bool isAsync = false;   // 异步消息（->>）
+    int  seqNum  = 0;      // 消息序号
+    bool isAsync = false;  // 异步消息（->>）
 
     // 边路由路径点：布局阶段填充（虚拟节点在各中间层的坐标），导出阶段用于折线路由
     // 空 vector 表示未设置，导出器自行计算兜底路由
@@ -114,9 +117,9 @@ struct Graph
     // headStart/headEnd 控制两端箭头装饰，默认 from 端无箭头、to 端有箭头
     void addEdge(const std::string& from,
                  const std::string& to,
-                 const std::string& label = "",
-                 const std::string& style = "solid",
-                 const std::string& arrow = "arrow",
+                 const std::string& label     = "",
+                 const std::string& style     = "solid",
+                 const std::string& arrow     = "arrow",
                  const std::string& headStart = "none",
                  const std::string& headEnd   = "arrow")
     {
@@ -154,6 +157,10 @@ struct Graph
                 jn.set("parent", n.parent);
             if (!n.style.empty())
                 jn.set("style", n.style);
+            if (!n.fillColor.empty())
+                jn.set("fillColor", n.fillColor);
+            if (!n.strokeColor.empty())
+                jn.set("strokeColor", n.strokeColor);
             if (!n.attrs.empty()) {
                 Json ja = Json::arr();
                 for (auto& a : n.attrs)
@@ -186,6 +193,8 @@ struct Graph
                 je.set("seqNum", (double)e.seqNum);
             if (e.isAsync)
                 je.set("isAsync", true);
+            if (!e.strokeColor.empty())
+                je.set("strokeColor", e.strokeColor);
             if (!e.waypoints.empty()) {
                 Json wpArr = Json::arr();
                 for (auto& wp : e.waypoints) {
@@ -221,22 +230,24 @@ struct Graph
     static Graph fromJson(const Json& j)
     {
         Graph g;
-        g.id      = j.str("id");
-        g.name    = j.str("name");
-        g.type       = j.str("type", "flowchart");
-        g.rawMermaid = j.str("rawMermaid");
-        g.laidOut    = j.boolean("laidOut", false);
+        g.id           = j.str("id");
+        g.name         = j.str("name");
+        g.type         = j.str("type", "flowchart");
+        g.rawMermaid   = j.str("rawMermaid");
+        g.laidOut      = j.boolean("laidOut", false);
         g.edgeCounter_ = (int)j.num("edgeCounter", 0);
         g.nodeCounter_ = (int)j.num("nodeCounter", 0);
         if (const Json* ns = j.find("nodes")) {
             if (ns->isArr())
                 for (auto& jn : *ns->a) {
                     Node n;
-                    n.id     = jn.str("id");
-                    n.label  = jn.str("label");
-                    n.shape  = jn.str("shape", "rect");
-                    n.parent = jn.str("parent");
-                    n.style  = jn.str("style");
+                    n.id          = jn.str("id");
+                    n.label       = jn.str("label");
+                    n.shape       = jn.str("shape", "rect");
+                    n.parent      = jn.str("parent");
+                    n.style       = jn.str("style");
+                    n.fillColor   = jn.str("fillColor");
+                    n.strokeColor = jn.str("strokeColor");
                     if (const Json* ja = jn.find("attrs")) {
                         if (ja->isArr())
                             for (auto& a : *ja->a)
@@ -261,12 +272,13 @@ struct Graph
                     e.style = je.str("style", "solid");
                     e.arrow = je.str("arrow", "arrow");
                     // 扩展箭头信息：读新字段，若不存在则从 arrow 推导
-                    e.headStart = je.str("headStart",
-                        (e.arrow == "both") ? "arrow" : "none");
-                    e.headEnd   = je.str("headEnd",
-                        (e.arrow == "none") ? "none" : "arrow");
-                    e.seqNum  = (int)je.num("seqNum", 0);
-                    e.isAsync = je.boolean("isAsync", false);
+                    e.headStart = je.str(
+                        "headStart", (e.arrow == "both") ? "arrow" : "none");
+                    e.headEnd = je.str("headEnd",
+                                       (e.arrow == "none") ? "none" : "arrow");
+                    e.seqNum      = (int)je.num("seqNum", 0);
+                    e.isAsync     = je.boolean("isAsync", false);
+                    e.strokeColor = je.str("strokeColor");
                     if (const Json* wp = je.find("waypoints")) {
                         if (wp->isArr())
                             for (auto& wpj : *wp->a)
@@ -306,12 +318,23 @@ inline std::string trim(const std::string& s)
     return s.substr(b, e - b + 1);
 }
 
+// stripUtf8Bom: 去掉文本开头的 UTF-8 BOM（EF BB BF），避免关键字识别失败
+inline std::string stripUtf8Bom(std::string s)
+{
+    if (s.size() >= 3 && (unsigned char)s[0] == 0xEF &&
+        (unsigned char)s[1] == 0xBB && (unsigned char)s[2] == 0xBF)
+        s.erase(0, 3);
+    return s;
+}
+
 // splitLines: 按行拆分文本（兼容 \r\n），供解析器逐行处理
 inline std::vector<std::string> splitLines(const std::string& text)
 {
+    // 关键步骤：先剥 BOM -> 再按换行切分
+    std::string              src = stripUtf8Bom(text);
     std::vector<std::string> lines;
     std::string              cur;
-    for (char c : text) {
+    for (char c : src) {
         if (c == '\n') {
             lines.push_back(cur);
             cur.clear();

@@ -50,17 +50,17 @@ inline std::string nowIso()
 
 // ─── OpType: 原子修改操作类型 ────────────────────────────────────
 enum class OpType {
-    UNKNOWN = -1,  // 无效操作类型（解析错误）
-    NODE_INSERT,   // 插入节点
-    NODE_UPDATE,   // 更新节点属性
-    NODE_DELETE,   // 删除节点（级联删除关联边）
-    EDGE_INSERT,   // 插入边
-    EDGE_UPDATE,   // 更新边属性
-    EDGE_DELETE,   // 删除边
-    META_UPDATE,   // 更新图级元数据（name / type）
-    PROPERTY_SET,  // 设置 properties 中的值
-    PROPERTY_INSERT, // 向 properties 数组插入元素
-    PROPERTY_DELETE  // 从 properties 中删除元素
+    UNKNOWN = -1,     // 无效操作类型（解析错误）
+    NODE_INSERT,      // 插入节点
+    NODE_UPDATE,      // 更新节点属性
+    NODE_DELETE,      // 删除节点（级联删除关联边）
+    EDGE_INSERT,      // 插入边
+    EDGE_UPDATE,      // 更新边属性
+    EDGE_DELETE,      // 删除边
+    META_UPDATE,      // 更新图级元数据（name / type）
+    PROPERTY_SET,     // 设置 properties 中的值
+    PROPERTY_INSERT,  // 向 properties 数组插入元素
+    PROPERTY_DELETE   // 从 properties 中删除元素
 };
 
 inline const char* opTypeName(OpType t)
@@ -138,19 +138,20 @@ struct Operation
     OpType                   type = OpType::NODE_UPDATE;
     std::string              targetId;             // 目标元素 id
     std::string              targetType = "node";  // "node" | "edge" | "graph"
-    std::vector<FieldChange> changes;    // 字段变更明细（UPDATE 操作）
-    Json                     snapshot;   // 插入时的完整元素快照（INSERT 操作）
-    std::string              path;       // JSON 路径（PROPERTY_SET/INSERT/DELETE 用）
-    Json                     value;      // 新值（PROPERTY_SET/INSERT 用）
-    std::string              timestamp;  // ISO 时间戳
+    std::vector<FieldChange> changes;   // 字段变更明细（UPDATE 操作）
+    Json                     snapshot;  // 插入时的完整元素快照（INSERT 操作）
+    std::string path;       // JSON 路径（PROPERTY_SET/INSERT/DELETE 用）
+    Json        value;      // 新值（PROPERTY_SET/INSERT 用）
+    std::string timestamp;  // ISO 时间戳
 
     // 简短摘要（用于 CLI 展示）
     std::string summary() const
     {
-        std::string s =
-            std::string(opTypeName(type)) + " " + targetType;
-        if (!targetId.empty()) s += " " + targetId;
-        if (!path.empty()) s += " @ " + path;
+        std::string s = std::string(opTypeName(type)) + " " + targetType;
+        if (!targetId.empty())
+            s += " " + targetId;
+        if (!path.empty())
+            s += " @ " + path;
         if (type == OpType::NODE_UPDATE || type == OpType::EDGE_UPDATE) {
             if (!changes.empty())
                 s += " (" + std::to_string(changes.size()) + " fields)";
@@ -174,8 +175,8 @@ struct Operation
             j.set("snapshot", snapshot);
         if (!path.empty())
             j.set("path", path);
-        if (value.isObj() || value.isArr() || value.isStr() ||
-            value.isNum() || value.isBool() || value.isNull())
+        if (value.isObj() || value.isArr() || value.isStr() || value.isNum() ||
+            value.isBool() || value.isNull())
             j.set("value", value);
         j.set("timestamp", timestamp);
         return j;
@@ -437,6 +438,10 @@ inline std::string getNodeField(const Node& n, const std::string& field)
         return n.parent;
     if (field == "style")
         return n.style;
+    if (field == "fillColor")
+        return n.fillColor;
+    if (field == "strokeColor")
+        return n.strokeColor;
     if (field == "x")
         return std::to_string(n.x);
     if (field == "y")
@@ -459,6 +464,10 @@ setNodeField(Node& n, const std::string& field, const std::string& val)
         n.parent = val;
     else if (field == "style")
         n.style = val;
+    else if (field == "fillColor")
+        n.fillColor = val;
+    else if (field == "strokeColor")
+        n.strokeColor = val;
     else if (field == "x")
         n.x = std::strtod(val.c_str(), nullptr);
     else if (field == "y")
@@ -483,6 +492,8 @@ inline std::string getEdgeField(const Edge& e, const std::string& field)
         return e.style;
     if (field == "arrow")
         return e.arrow;
+    if (field == "strokeColor")
+        return e.strokeColor;
     return "";
 }
 
@@ -499,6 +510,8 @@ setEdgeField(Edge& e, const std::string& field, const std::string& val)
         e.style = val;
     else if (field == "arrow")
         e.arrow = val;
+    else if (field == "strokeColor")
+        e.strokeColor = val;
 }
 
 // ─── Selector 匹配逻辑 ───────────────────────────────────────────
@@ -596,15 +609,17 @@ inline Graph Commit::rebuild(const Graph&                  parentModel,
         if (op.type == OpType::NODE_INSERT) {
             // 从 snapshot JSON 重建 Node
             Node n;
-            n.id     = op.snapshot.str("id");
-            n.label  = op.snapshot.str("label");
-            n.shape  = op.snapshot.str("shape", "rect");
-            n.parent = op.snapshot.str("parent");
-            n.style  = op.snapshot.str("style");
-            n.x      = op.snapshot.num("x");
-            n.y      = op.snapshot.num("y");
-            n.w      = op.snapshot.num("w");
-            n.h      = op.snapshot.num("h");
+            n.id          = op.snapshot.str("id");
+            n.label       = op.snapshot.str("label");
+            n.shape       = op.snapshot.str("shape", "rect");
+            n.parent      = op.snapshot.str("parent");
+            n.style       = op.snapshot.str("style");
+            n.fillColor   = op.snapshot.str("fillColor");
+            n.strokeColor = op.snapshot.str("strokeColor");
+            n.x           = op.snapshot.num("x");
+            n.y           = op.snapshot.num("y");
+            n.w           = op.snapshot.num("w");
+            n.h           = op.snapshot.num("h");
             if (const Json* attrs = op.snapshot.find("attrs")) {
                 if (attrs->isArr())
                     for (auto& a : *attrs->a)
@@ -634,12 +649,13 @@ inline Graph Commit::rebuild(const Graph&                  parentModel,
         }
         else if (op.type == OpType::EDGE_INSERT) {
             Edge e;
-            e.id    = op.snapshot.str("id");
-            e.from  = op.snapshot.str("from");
-            e.to    = op.snapshot.str("to");
-            e.label = op.snapshot.str("label");
-            e.style = op.snapshot.str("style", "solid");
-            e.arrow = op.snapshot.str("arrow", "arrow");
+            e.id          = op.snapshot.str("id");
+            e.from        = op.snapshot.str("from");
+            e.to          = op.snapshot.str("to");
+            e.label       = op.snapshot.str("label");
+            e.style       = op.snapshot.str("style", "solid");
+            e.arrow       = op.snapshot.str("arrow", "arrow");
+            e.strokeColor = op.snapshot.str("strokeColor");
             g.edges.push_back(e);
         }
         else if (op.type == OpType::EDGE_UPDATE) {
@@ -693,6 +709,10 @@ inline Json nodeToSnapshot(const Node& n)
         j.set("parent", n.parent);
     if (!n.style.empty())
         j.set("style", n.style);
+    if (!n.fillColor.empty())
+        j.set("fillColor", n.fillColor);
+    if (!n.strokeColor.empty())
+        j.set("strokeColor", n.strokeColor);
     if (!n.attrs.empty()) {
         Json arr = Json::arr();
         for (auto& a : n.attrs)
@@ -716,6 +736,8 @@ inline Json edgeToSnapshot(const Edge& e)
         j.set("label", e.label);
     j.set("style", e.style);
     j.set("arrow", e.arrow);
+    if (!e.strokeColor.empty())
+        j.set("strokeColor", e.strokeColor);
     return j;
 }
 

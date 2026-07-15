@@ -549,25 +549,29 @@ inline SelectionCursor select(Graph& g, Draft* draft, const Selector& sel)
 // 返回新节点的 id
 inline std::string insertNode(Graph&             g,
                               Draft*             draft,
-                              const std::string& shape  = "rect",
-                              const std::string& label  = "",
-                              double             x      = 0,
-                              double             y      = 0,
-                              double             w      = 0,
-                              double             h      = 0,
-                              const std::string& parent = "",
-                              const std::string& style  = "")
+                              const std::string& shape       = "rect",
+                              const std::string& label       = "",
+                              double             x           = 0,
+                              double             y           = 0,
+                              double             w           = 0,
+                              double             h           = 0,
+                              const std::string& parent      = "",
+                              const std::string& style       = "",
+                              const std::string& fillColor   = "",
+                              const std::string& strokeColor = "")
 {
     Node n;
-    n.id     = "n" + std::to_string(++g.nodeCounter_);
-    n.label  = label.empty() ? n.id : label;
-    n.shape  = shape;
-    n.x      = x;
-    n.y      = y;
-    n.w      = (w <= 0) ? 120 : w;
-    n.h      = (h <= 0) ? 44 : h;
-    n.parent = parent;
-    n.style  = style;
+    n.id          = "n" + std::to_string(++g.nodeCounter_);
+    n.label       = label.empty() ? n.id : label;
+    n.shape       = shape;
+    n.x           = x;
+    n.y           = y;
+    n.w           = (w <= 0) ? 120 : w;
+    n.h           = (h <= 0) ? 44 : h;
+    n.parent      = parent;
+    n.style       = style;
+    n.fillColor   = fillColor;
+    n.strokeColor = strokeColor;
     if (w <= 0 || h <= 0)
         gm::defaultSize(n);
     g.nodes.push_back(n);
@@ -590,21 +594,23 @@ inline std::string insertEdge(Graph&             g,
                               Draft*             draft,
                               const std::string& from,
                               const std::string& to,
-                              const std::string& label = "",
-                              const std::string& style = "solid",
-                              const std::string& arrow = "arrow")
+                              const std::string& label       = "",
+                              const std::string& style       = "solid",
+                              const std::string& arrow       = "arrow",
+                              const std::string& strokeColor = "")
 {
     // 确保端点节点存在
     g.ensureNode(from);
     g.ensureNode(to);
 
     Edge e;
-    e.id    = "e" + std::to_string(++g.edgeCounter_);
-    e.from  = from;
-    e.to    = to;
-    e.label = label;
-    e.style = style;
-    e.arrow = arrow;
+    e.id          = "e" + std::to_string(++g.edgeCounter_);
+    e.from        = from;
+    e.to          = to;
+    e.label       = label;
+    e.style       = style;
+    e.arrow       = arrow;
+    e.strokeColor = strokeColor;
     g.edges.push_back(e);
 
     if (draft) {

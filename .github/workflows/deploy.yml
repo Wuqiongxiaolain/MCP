@@ -100,7 +100,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           cp bin/graphmcp dist/
-          cp README.md dist/
+          cp README.md VERSION dist/
           ASSET_NAME="graphmcp-${{ github.ref_name }}-${{ matrix.platform }}.tar.gz"
           tar czf "${ASSET_NAME}" -C dist .
 
@@ -111,6 +111,7 @@ jobs:
           New-Item -ItemType Directory -Path dist -Force | Out-Null
           Copy-Item "bin/graphmcp.exe" "dist/graphmcp.exe"
           Copy-Item "README.md" "dist/README.md"
+          Copy-Item "VERSION" "dist/VERSION"
           $asset_name = "graphmcp-${{ github.ref_name }}-${{ matrix.platform }}.zip"
           if (Test-Path $asset_name) { Remove-Item $asset_name -Force }
           Compress-Archive -Path "dist/*" -DestinationPath $asset_name
@@ -162,4 +163,4 @@ jobs:
             本次为 Tag 触发的多平台自动制品发布（CD）。
             - 触发 Tag：`${{ github.ref_name }}`
             - 提交：`${{ github.sha }}`
-            - 平台：Linux / Windows（macOS 待修复后加入）
+            - 平台：Linux / Windows / macOS

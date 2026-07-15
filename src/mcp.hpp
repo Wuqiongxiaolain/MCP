@@ -349,7 +349,10 @@ inline Json toolList()
             prop("string", "batch selector: shape=rect|label~=Step|parent=g1"));
         p.set("set",
               prop("string",
-                   "field=value pairs (can be specified multiple times)"));
+                   "field=value pairs (can be specified multiple times); "
+                   "node fields include label/shape/parent/style/fillColor/"
+                   "strokeColor/x/y/w/h; edge fields include from/to/label/"
+                   "style/arrow/strokeColor"));
         Json req = Json::arr();
         req.push(Json("id"));
         req.push(Json("set"));
@@ -358,7 +361,7 @@ inline Json toolList()
             "Update node/edge attributes via cursor operation. Changes go to "
             "the draft. "
             "Use --node/--edge for single element or --selector for batch. "
-            "Multiple --set flags allowed.",
+            "Multiple --set flags allowed (supports fillColor/strokeColor).",
             p, req));
     }
 
@@ -382,14 +385,20 @@ inline Json toolList()
               prop("string", "edge style: solid|dashed|thick (default solid)"));
         p.set("arrow",
               prop("string", "edge arrow: arrow|none|both (default arrow)"));
+        p.set("fillColor",
+              prop("string", "node fill color (e.g. #eef4ff); empty = default"));
+        p.set("strokeColor",
+              prop("string",
+                   "node/edge stroke color (e.g. #4a72b8); empty = default"));
         Json req = Json::arr();
         req.push(Json("id"));
         req.push(Json("element"));
         tools.push(toolDef(
             "graph_insert",
             "Insert a node or edge into the graph. Changes go to the draft. "
-            "For nodes: specify type, label, position, size, parent. "
-            "For edges: specify from, to, label, style, arrow.",
+            "For nodes: specify type, label, position, size, parent, "
+            "fillColor, strokeColor. "
+            "For edges: specify from, to, label, style, arrow, strokeColor.",
             p, req));
     }
 
@@ -1816,6 +1825,8 @@ class ToolRunner {
             out.set("shape", n->shape);
             out.set("parent", n->parent);
             out.set("style", n->style);
+            out.set("fillColor", n->fillColor);
+            out.set("strokeColor", n->strokeColor);
             out.set("x", n->x);
             out.set("y", n->y);
             out.set("w", n->w);
@@ -1855,6 +1866,7 @@ class ToolRunner {
             out.set("label", e->label);
             out.set("style", e->style);
             out.set("arrow", e->arrow);
+            out.set("strokeColor", e->strokeColor);
             return textContent(out.dump(2));
         }
 
@@ -1888,6 +1900,10 @@ class ToolRunner {
             nj.set("shape", n.shape);
             if (!n.parent.empty())
                 nj.set("parent", n.parent);
+            if (!n.fillColor.empty())
+                nj.set("fillColor", n.fillColor);
+            if (!n.strokeColor.empty())
+                nj.set("strokeColor", n.strokeColor);
             nodesArr.push(nj);
         }
         out.set("nodeList", nodesArr);
@@ -1900,6 +1916,8 @@ class ToolRunner {
             if (!ed.label.empty())
                 ej.set("label", ed.label);
             ej.set("style", ed.style);
+            if (!ed.strokeColor.empty())
+                ej.set("strokeColor", ed.strokeColor);
             edgesArr.push(ej);
         }
         out.set("edgeList", edgesArr);
@@ -2128,9 +2146,12 @@ class ToolRunner {
                     h = std::atof(sizeStr.substr(sp + 1).c_str());
                 }
             }
-            std::string parent = a.str("parent");
-            std::string nid =
-                gv::insertNode(g, &draft, shape, label, x, y, w, h, parent);
+            std::string parent      = a.str("parent");
+            std::string fillColor   = a.str("fillColor");
+            std::string strokeColor = a.str("strokeColor");
+            std::string nid         = gv::insertNode(g, &draft, shape, label, x,
+                                                     y, w, h, parent, "",
+                                                     fillColor, strokeColor);
             out.set("status", "inserted");
             out.set("elementType", "node");
             out.set("elementId", nid);
@@ -2141,11 +2162,12 @@ class ToolRunner {
             if (from.empty() || to.empty())
                 return textContent("edge insert requires 'from' and 'to'",
                                    true);
-            std::string label = a.str("label");
-            std::string style = a.str("style", "solid");
-            std::string arrow = a.str("arrow", "arrow");
-            std::string eid =
-                gv::insertEdge(g, &draft, from, to, label, style, arrow);
+            std::string label       = a.str("label");
+            std::string style       = a.str("style", "solid");
+            std::string arrow       = a.str("arrow", "arrow");
+            std::string strokeColor = a.str("strokeColor");
+            std::string eid = gv::insertEdge(g, &draft, from, to, label, style,
+                                             arrow, strokeColor);
             out.set("status", "inserted");
             out.set("elementType", "edge");
             out.set("elementId", eid);

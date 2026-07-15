@@ -1,0 +1,21 @@
+flowchart TD
+    A["需求输入"]
+    B{"是否可解析?"}
+    C["统一图模型"]
+    D["报错"]
+    E["多格式导出"]
+    A --> B
+    B -->|是| C
+    B -->|否| D
+    C --> E
+classDef c1 fill:#e8f7ec,stroke:#3d9155
+classDef c2 fill:#fff7e0,stroke:#c9a227
+classDef c3 fill:#fde8e8,stroke:#c0392b
+class A c1
+class B c2
+class C c1
+class D c3
+class E c1
+linkStyle 0 stroke:#4a72b8
+linkStyle 1 stroke:#3d9155
+linkStyle 2 stroke:#c0392b

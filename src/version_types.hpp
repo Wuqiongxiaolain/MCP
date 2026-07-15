@@ -211,6 +211,9 @@ struct Draft
     int                    baseVersion = 0;  // 基于哪个 commit 版本
     std::vector<Operation> operations;       // 修改操作序列
     std::string            updatedAt;
+    // 崩溃恢复：save 前写入 inflight；若快照已含同 commitId 则裁剪草稿防重放
+    std::string            inflightCommitId;
+    std::vector<int>       inflightStagedIndices;
 
     bool isEmpty() const
     { return operations.empty(); }
@@ -230,6 +233,13 @@ struct Draft
             ops.push(op.toJson());
         j.set("operations", ops);
         j.set("updatedAt", updatedAt);
+        if (!inflightCommitId.empty()) {
+            j.set("inflightCommitId", inflightCommitId);
+            Json idx = Json::arr();
+            for (int i : inflightStagedIndices)
+                idx.push(Json((double)i));
+            j.set("inflightStagedIndices", idx);
+        }
         return j;
     }
     static Draft fromJson(const Json& j)
@@ -242,7 +252,13 @@ struct Draft
                 for (auto& o : *ops->a)
                     d.operations.push_back(Operation::fromJson(o));
         }
-        d.updatedAt = j.str("updatedAt");
+        d.updatedAt         = j.str("updatedAt");
+        d.inflightCommitId  = j.str("inflightCommitId");
+        if (const Json* idx = j.find("inflightStagedIndices")) {
+            if (idx->isArr())
+                for (auto& v : *idx->a)
+                    d.inflightStagedIndices.push_back((int)v.n);
+        }
         return d;
     }
 };

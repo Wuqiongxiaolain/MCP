@@ -4,11 +4,8 @@
 #pragma once
 #include "storage.hpp"
 #include "version_types.hpp"
-#include <algorithm>
 #include <cstdio>
-#include <fstream>
 #include <set>
-#include <sstream>
 #include <tuple>
 
 namespace gv {
@@ -53,6 +50,7 @@ class GraphVersionManager {
     // ==============================================================
 
     // loadDraft: 加载草稿；不存在则创建空草稿（基于 latest 版本）
+    // 若存在未完成的 inflight commit，先做崩溃恢复，避免重复回放已入库 ops。
     Draft loadDraft(const std::string& graphId)
     {
         std::string path = draftPath(graphId);
@@ -60,8 +58,11 @@ class GraphVersionManager {
         if (!txt.empty()) {
             std::string err;
             Json        j = Json::parse(txt, &err);
-            if (err.empty())
-                return Draft::fromJson(j);
+            if (err.empty()) {
+                Draft d = Draft::fromJson(j);
+                healInflightCommit(d);
+                return d;
+            }
         }
         // 新建空草稿
         Draft d;
@@ -75,7 +76,8 @@ class GraphVersionManager {
     bool saveDraft(const std::string& graphId, const Draft& draft)
     {
         makeGraphDir(graphId);
-        return ge::writeFile(draftPath(graphId), draft.toJson().dump(2));
+        // 草稿热路径用紧凑 dump，减少编辑态 I/O
+        return ge::writeFile(draftPath(graphId), draft.toJson().dump());
     }
 
     // resetDraft: 丢弃草稿（删除 draft.json）
@@ -88,24 +90,33 @@ class GraphVersionManager {
     // materializeDraft: 从 Draft 重建工作区 Graph（base + operations）
     Graph materializeDraft(const std::string& graphId)
     {
-        Draft draft = loadDraft(graphId);
-        if (draft.isEmpty()) {
+        Draft unused;
+        return materializeDraftWithDraft(graphId, unused);
+    }
+
+    // materializeDraftWithDraft: 一次读盘同时返回 Graph 与 Draft，避免二次 loadDraft
+    Graph materializeDraftWithDraft(const std::string& graphId, Draft& outDraft)
+    {
+        outDraft = loadDraft(graphId);
+        if (outDraft.isEmpty()) {
             // 无修改，直接返回 HEAD 版本
             std::string err;
             Graph       g;
             store_.load(graphId, g,
-                        draft.baseVersion > 0 ? draft.baseVersion : 0, &err);
+                        outDraft.baseVersion > 0 ? outDraft.baseVersion : 0,
+                        &err);
             return g;
         }
         Graph       base;
         std::string err;
         if (!store_.load(graphId, base,
-                         draft.baseVersion > 0 ? draft.baseVersion : 0, &err)) {
+                         outDraft.baseVersion > 0 ? outDraft.baseVersion : 0,
+                         &err)) {
             // base 不存在，从空图开始
             base    = Graph();
             base.id = graphId;
         }
-        return draft.materialize(base);
+        return outDraft.materialize(base);
     }
 
     // ==============================================================
@@ -129,7 +140,7 @@ class GraphVersionManager {
     bool saveStage(const std::string& graphId, const Stage& stage)
     {
         makeGraphDir(graphId);
-        return ge::writeFile(stagePath(graphId), stage.toJson().dump(2));
+        return ge::writeFile(stagePath(graphId), stage.toJson().dump());
     }
 
     // stageAll: 暂存 Draft 中全部操作
@@ -208,11 +219,25 @@ class GraphVersionManager {
         std::string cid =
             shortHash(graphId + ":" + std::to_string(parentVersion) + ":" +
                       message + ":" + nowIso());
+        // 先持久化 inflight 意图：若随后 save 成功而裁剪草稿失败/崩溃，
+        // 下次 loadDraft 可按 commitId 识别已入库并裁剪，避免重复回放。
+        draft.inflightCommitId      = cid;
+        draft.inflightStagedIndices = stage.stagedOpIndices;
+        draft.updatedAt             = nowIso();
+        if (!saveDraft(graphId, draft))
+            return -3;
+
         int newVersion =
             store_.save(committedModel, message, parentVersion, cid);
+        if (newVersion < 0) {
+            draft.inflightCommitId.clear();
+            draft.inflightStagedIndices.clear();
+            saveDraft(graphId, draft);
+            return -3;  // 存储锁或 IO 失败；保留 draft/stage 供重试
+        }
 
-        // 先保存 draft（裁剪已提交操作 + 更新 baseVersion），再写 HEAD
-        // 崩溃安全：draft 更新成功后 HEAD 才指向新版本
+        // save 已原子更新快照/latest/HEAD/index，此处裁剪已提交操作。
+        // 若裁剪写盘失败：磁盘仍保留带 inflightCommitId 的旧 draft，heal 可恢复。
         std::set<int>          staged(stage.stagedOpIndices.begin(),
                                       stage.stagedOpIndices.end());
         std::vector<Operation> remaining;
@@ -220,16 +245,16 @@ class GraphVersionManager {
             if (!staged.count(i))
                 remaining.push_back(draft.operations[i]);
         }
-        draft.operations  = remaining;
-        draft.baseVersion = newVersion;
-        draft.updatedAt   = nowIso();
-        saveDraft(graphId, draft);
+        draft.operations            = remaining;
+        draft.baseVersion           = newVersion;
+        draft.updatedAt             = nowIso();
+        draft.inflightCommitId.clear();
+        draft.inflightStagedIndices.clear();
+        if (!saveDraft(graphId, draft))
+            return -4;
 
         // 清空暂存区
         clearStage(graphId);
-
-        // HEAD 最后更新——此时 draft 已正确反映提交后状态
-        writeHead(graphId, newVersion);
 
         return newVersion;
     }
@@ -618,10 +643,21 @@ class GraphVersionManager {
 
     int readHead(const std::string& id)
     {
+        // 新格式优先从受锁保护的 index.head 读取。
+        Json idx = store_.loadIndex();
+        for (auto& item : *idx["graphs"].a) {
+            if (item.str("id") == id) {
+                int head = (int)item.num("head");
+                if (head > 0)
+                    return head;
+                break;
+            }
+        }
+
+        // 兼容旧存储：回退读取独立 HEAD 文件。
         std::string txt = ge::readFile(headPath(id));
         if (txt.empty()) {
             // 回退到 index.json 中的版本数
-            Json idx = store_.loadIndex();
             for (auto& item : *idx["graphs"].a) {
                 if (item.str("id") == id)
                     return (int)item.num("versions");
@@ -634,7 +670,68 @@ class GraphVersionManager {
     void writeHead(const std::string& id, int version)
     {
         makeGraphDir(id);
-        ge::writeFile(headPath(id), std::to_string(version));
+        std::string err;
+        if (!store_.setHead(id, version, &err)) {
+            // 兼容损坏/旧索引：至少保留独立 HEAD，供 readHead 回退。
+            ge::writeFileAtomic(headPath(id), std::to_string(version));
+        }
+    }
+
+    // snapshotCommitId: 读取版本快照中的 commitId（缺失则空串）
+    std::string snapshotCommitId(const std::string& id, int version) const
+    {
+        std::string txt = ge::readFile(versionPath(id, version));
+        if (txt.empty())
+            return "";
+        std::string err;
+        Json        j = Json::parse(txt, &err);
+        if (!err.empty())
+            return "";
+        return j.str("commitId");
+    }
+
+    // healInflightCommit: 若 inflight 对应快照已存在则裁剪草稿，防止重复回放
+    void healInflightCommit(Draft& draft)
+    {
+        if (draft.inflightCommitId.empty() || draft.graphId.empty())
+            return;
+
+        const std::string& cid = draft.inflightCommitId;
+        int                head = readHead(draft.graphId);
+        int                foundVer = 0;
+        int                start =
+            draft.baseVersion > 0 ? draft.baseVersion + 1 : 1;
+        for (int v = start; v <= head; ++v) {
+            if (snapshotCommitId(draft.graphId, v) == cid) {
+                foundVer = v;
+                break;
+            }
+        }
+        if (foundVer == 0) {
+            // save 未成功落地：仅清除 inflight 标记，保留原 ops
+            draft.inflightCommitId.clear();
+            draft.inflightStagedIndices.clear();
+            saveDraft(draft.graphId, draft);
+            return;
+        }
+
+        std::set<int> staged(draft.inflightStagedIndices.begin(),
+                             draft.inflightStagedIndices.end());
+        // 若未记录索引（旧数据），保守地清空全部 ops，避免重放已入库变更
+        std::vector<Operation> remaining;
+        if (!staged.empty()) {
+            for (int i = 0; i < draft.operationCount(); i++) {
+                if (!staged.count(i))
+                    remaining.push_back(draft.operations[i]);
+            }
+        }
+        draft.operations = remaining;
+        draft.baseVersion = foundVer;
+        draft.updatedAt   = nowIso();
+        draft.inflightCommitId.clear();
+        draft.inflightStagedIndices.clear();
+        saveDraft(draft.graphId, draft);
+        clearStage(draft.graphId);
     }
 };
 

@@ -62,6 +62,7 @@ static int g_passed = 0;
 using gj::Json;
 using gm::Edge;
 using gm::Graph;
+using gm::Layer;
 using gm::Node;
 
 static void testJson()
@@ -1476,6 +1477,8 @@ static void testParseDrawio()
         "      <root>\n"
         "        <mxCell id=\"0\"/>\n"
         "        <mxCell id=\"1\" parent=\"0\"/>\n"
+        "        <mxCell id=\"bg\" parent=\"0\" value=\"Background\""
+        " style=\"locked=1\"/>\n"
         "        <mxCell id=\"A\" value=\"Start\" style=\"rounded=1;\" "
         "vertex=\"1\" parent=\"1\">\n"
         "          <mxGeometry x=\"100\" y=\"50\" width=\"120\" height=\"60\" "
@@ -1484,6 +1487,36 @@ static void testParseDrawio()
         "        <mxCell id=\"B\" value=\"End\" style=\"rhombus;\" "
         "vertex=\"1\" parent=\"1\">\n"
         "          <mxGeometry x=\"300\" y=\"50\" width=\"120\" height=\"60\" "
+        "as=\"geometry\"/>\n"
+        "        </mxCell>\n"
+        "        <mxCell id=\"C\" value=\"DB\" style=\"shape=cylinder3;\" "
+        "vertex=\"1\" parent=\"1\">\n"
+        "          <mxGeometry x=\"300\" y=\"130\" width=\"120\" height=\"60\" "
+        "as=\"geometry\"/>\n"
+        "        </mxCell>\n"
+        "        <mxCell id=\"D\" value=\"Cloud\" style=\"shape=cloud;\" "
+        "vertex=\"1\" parent=\"bg\">\n"
+        "          <mxGeometry x=\"100\" y=\"130\" width=\"120\" height=\"60\" "
+        "as=\"geometry\"/>\n"
+        "        </mxCell>\n"
+        "        <mxCell id=\"E\" value=\"IO\" style=\"shape=parallelogram;\" "
+        "vertex=\"1\" parent=\"1\">\n"
+        "          <mxGeometry x=\"100\" y=\"210\" width=\"120\" height=\"60\" "
+        "as=\"geometry\"/>\n"
+        "        </mxCell>\n"
+        "        <mxCell id=\"F\" value=\"Actor\" style=\"shape=umlActor;\" "
+        "vertex=\"1\" parent=\"1\">\n"
+        "          <mxGeometry x=\"300\" y=\"210\" width=\"40\" height=\"80\" "
+        "as=\"geometry\"/>\n"
+        "        </mxCell>\n"
+        "        <mxCell id=\"G\" value=\"Doc\" style=\"shape=document;\" "
+        "vertex=\"1\" parent=\"bg\">\n"
+        "          <mxGeometry x=\"100\" y=\"290\" width=\"120\" height=\"60\" "
+        "as=\"geometry\"/>\n"
+        "        </mxCell>\n"
+        "        <mxCell id=\"H\" value=\"Note\" style=\"shape=note;\" "
+        "vertex=\"1\" parent=\"1\">\n"
+        "          <mxGeometry x=\"300\" y=\"310\" width=\"120\" height=\"50\" "
         "as=\"geometry\"/>\n"
         "        </mxCell>\n"
         "        <mxCell id=\"edge1\" value=\"ok\" style=\"dashed=1;\" "
@@ -1496,41 +1529,253 @@ static void testParseDrawio()
         "</mxfile>";
     Graph g = gp::parseDrawio(d);
     CHECK(g.name == "Test");
-    CHECK(g.nodes.size() == 2);
+    CHECK(g.nodes.size() == 8);
     CHECK(g.edges.size() == 1);
     CHECK(g.findNode("A")->shape == "round");
     CHECK(g.findNode("B")->shape == "diamond");
+    CHECK(g.findNode("C")->shape == "cylinder");
+    CHECK(g.findNode("D")->shape == "cloud");
+    CHECK(g.findNode("E")->shape == "parallelogram");
+    CHECK(g.findNode("F")->shape == "umlActor");
+    CHECK(g.findNode("G")->shape == "document");
+    CHECK(g.findNode("H")->shape == "note");
+    // 图层验证
+    CHECK(g.layers.size() == 1);
+    CHECK(g.layers[0].id == "bg");
+    CHECK(g.layers[0].name == "Background");
+    CHECK(g.layers[0].locked == true);
+    // 默认图层上的节点
+    CHECK(g.findNode("A")->layer.empty());
+    CHECK(g.findNode("C")->layer.empty());
+    // 自定义 Background 图层上的节点
+    CHECK(g.findNode("D")->layer == "Background");
+    CHECK(g.findNode("G")->layer == "Background");
     CHECK(g.edges[0].from == "A");
     CHECK(g.edges[0].style == "dashed");
     Graph g2 = gp::parseAny(d);
-    CHECK(g2.nodes.size() == 2);
+    CHECK(g2.nodes.size() == 8);
 }
 
 static void testDrawioRoundTrip()
 {
+    // 测试所有形状的 drawio → 内部模型 → drawio 往返不丢失
+    std::vector<std::string> shapes = {
+        "rect",      "round",     "diamond",      "ellipse",
+        "circle",    "stadium",   "hexagon",      "group",
+        "process",   "document",  "cylinder",     "parallelogram",
+        "delay",     "manualInput","display",      "cloud",
+        "trapezoid", "triangle",  "step",         "umlActor",
+        "note",      "cube",      "message",
+    };
+    for (auto& shape : shapes) {
+        Graph g;
+        g.name         = "RoundTrip-" + shape;
+        g.type         = "flowchart";
+        Node& n        = g.ensureNode("n1", shape);
+        n.shape        = shape;
+        n.x = 100; n.y = 100; n.w = 120; n.h = 60;
+        std::string dx = ge::toDrawio(g);
+        CHECK(!dx.empty());
+        Graph g2       = gp::parseDrawio(dx);
+        CHECK(g2.name == "RoundTrip-" + shape);
+        CHECK(g2.nodes.size() >= 1);
+        // 验证形状保留（group 和 circle 需特殊处理）
+        if (shape == "group") {
+            // group 在 round-trip 后可能映射回 rect，因为单个节点没有子节点
+            // groups need children to be detected as groups in parsing
+            CHECK(g2.findNode("n1") != nullptr);
+        } else if (shape == "circle") {
+            // draw.io 不区分 circle/ellipse，统一用 ellipse 样式
+            // 往返后 circle → ellipse 是预期行为
+            CHECK(g2.findNode("n1")->shape == "ellipse");
+        } else {
+            CHECK(g2.findNode("n1")->shape == shape);
+        }
+    }
+}
+
+static void testDrawioLayerRoundTrip()
+{
+    // 测试多图层 drawio → 内部模型 → drawio 往返不丢失
     Graph g;
-    g.name   = "RoundTrip";
-    g.type   = "flowchart";
-    Node& n1 = g.ensureNode("n1", "Hello");
-    n1.shape = "round";
-    n1.x     = 100;
-    n1.y     = 100;
-    n1.w     = 120;
-    n1.h     = 60;
-    Node& n2 = g.ensureNode("n2", "World");
-    n2.shape = "diamond";
-    n2.x     = 300;
-    n2.y     = 100;
-    n2.w     = 120;
-    n2.h     = 60;
-    g.addEdge("n1", "n2", "Link", "solid");
+    g.name = "LayerTest";
+    g.type = "flowchart";
+
+    // 添加两个自定义图层
+    Layer l1;
+    l1.id   = "bg";
+    l1.name = "Background";
+    l1.locked = true;
+    g.layers.push_back(l1);
+
+    Layer l2;
+    l2.id   = "annot";
+    l2.name = "Annotations";
+    g.layers.push_back(l2);
+
+    // 默认图层节点
+    Node& n1  = g.ensureNode("n1", "Main");
+    n1.shape  = "rect";
+    n1.x = 100; n1.y = 100; n1.w = 120; n1.h = 60;
+
+    // Background 图层节点
+    Node& n2  = g.ensureNode("n2", "Watermark");
+    n2.shape  = "note";
+    n2.layer  = "Background";
+    n2.x = 200; n2.y = 100; n2.w = 100; n2.h = 60;
+
+    // Annotations 图层节点
+    Node& n3  = g.ensureNode("n3", "Comment");
+    n3.shape  = "cloud";
+    n3.layer  = "Annotations";
+    n3.x = 300; n3.y = 100; n3.w = 120; n3.h = 60;
+
+    g.addEdge("n1", "n2", "link", "solid", "arrow");
     std::string dx = ge::toDrawio(g);
     CHECK(!dx.empty());
     CHECK(dx.find("<mxfile") != std::string::npos);
+
+    // 验证图层 mxCell 出现在导出中
+    CHECK(dx.find("Background") != std::string::npos);
+    CHECK(dx.find("Annotations") != std::string::npos);
+    CHECK(dx.find("locked=1") != std::string::npos);
+
+    // 往返解析
     Graph g2 = gp::parseDrawio(dx);
-    CHECK(g2.name == "RoundTrip");
-    CHECK(g2.nodes.size() >= 2);
+    CHECK(g2.name == "LayerTest");
+    CHECK(g2.nodes.size() >= 3);
+    CHECK(g2.layers.size() == 2);
+
+    // 验证图层名称保留
+    bool hasBg = false, hasAnnot = false;
+    for (auto& l : g2.layers) {
+        if (l.name == "Background") { hasBg = true; CHECK(l.locked == true); }
+        if (l.name == "Annotations") hasAnnot = true;
+    }
+    CHECK(hasBg);
+    CHECK(hasAnnot);
+
+    // 验证节点图层分配
+    const Node* pn1 = g2.findNode("n1");
+    const Node* pn2 = g2.findNode("n2");
+    const Node* pn3 = g2.findNode("n3");
+    CHECK(pn1 != nullptr);
+    CHECK(pn2 != nullptr);
+    CHECK(pn3 != nullptr);
+    CHECK(pn1->layer.empty());  // 默认图层
+    CHECK(pn2->layer == "Background");
+    CHECK(pn3->layer == "Annotations");
+
+    // 边也保留
     CHECK(g2.edges.size() >= 1);
+}
+
+static void testDrawioMultiPageRoundTrip()
+{
+    // 测试多页 drawio → 内部模型 → drawio 往返不丢失
+    Graph g;
+    g.name = "MultiPageDoc";
+    g.type = "flowchart";
+
+    // 首页（主 Graph）
+    Node& n1  = g.ensureNode("n1", "Page1-Main");
+    n1.shape  = "rect";
+    n1.x = 100; n1.y = 100; n1.w = 120; n1.h = 60;
+
+    // 第 2 页
+    Graph p2;
+    p2.name = "Sub Page 2";
+    p2.type = "flowchart";
+    Node& n2  = p2.ensureNode("n2", "Page2-Main");
+    n2.shape  = "round";
+    n2.x = 200; n2.y = 100; n2.w = 120; n2.h = 60;
+
+    // 第 3 页
+    Graph p3;
+    p3.name = "Sub Page 3";
+    p3.type = "flowchart";
+    Node& n3  = p3.ensureNode("n3", "Page3-Main");
+    n3.shape  = "diamond";
+    n3.x = 300; n3.y = 100; n3.w = 120; n3.h = 60;
+
+    g.pages.push_back(p2);
+    g.pages.push_back(p3);
+
+    // 导出为 drawio XML
+    std::string dx = ge::toDrawio(g);
+    CHECK(!dx.empty());
+    CHECK(dx.find("<mxfile") != std::string::npos);
+
+    // 验证 3 个 <diagram> 都出现在导出中
+    CHECK(dx.find("MultiPageDoc") != std::string::npos);
+    CHECK(dx.find("Sub Page 2") != std::string::npos);
+    CHECK(dx.find("Sub Page 3") != std::string::npos);
+
+    // 往返解析
+    Graph g2 = gp::parseDrawio(dx);
+    CHECK(g2.name == "MultiPageDoc");
+    CHECK(g2.nodes.size() >= 1);
+    CHECK(g2.findNode("n1") != nullptr);
+    CHECK(g2.findNode("n1")->shape == "rect");
+
+    // 验证多页结构
+    CHECK(g2.pages.size() == 2);
+    CHECK(g2.pages[0].name == "Sub Page 2");
+    CHECK(g2.pages[1].name == "Sub Page 3");
+    CHECK(g2.pages[0].nodes.size() >= 1);
+    CHECK(g2.pages[0].findNode("n2") != nullptr);
+    CHECK(g2.pages[0].findNode("n2")->shape == "round");
+    CHECK(g2.pages[1].nodes.size() >= 1);
+    CHECK(g2.pages[1].findNode("n3") != nullptr);
+    CHECK(g2.pages[1].findNode("n3")->shape == "diamond");
+}
+
+static void testDrawioEdgeLabelOffset()
+{
+    // 测试边标签偏移的 drawio 往返
+    std::string d =
+        "<mxfile host=\"graphmcp\">\n"
+        "  <diagram name=\"EdgeLabelTest\" id=\"d1\">\n"
+        "    <mxGraphModel>\n"
+        "      <root>\n"
+        "        <mxCell id=\"0\"/>\n"
+        "        <mxCell id=\"1\" parent=\"0\"/>\n"
+        "        <mxCell id=\"A\" value=\"Start\" style=\"rounded=1;\" "
+        "vertex=\"1\" parent=\"1\">\n"
+        "          <mxGeometry x=\"100\" y=\"100\" width=\"120\" height=\"60\" "
+        "as=\"geometry\"/>\n"
+        "        </mxCell>\n"
+        "        <mxCell id=\"B\" value=\"End\" style=\"rounded=1;\" "
+        "vertex=\"1\" parent=\"1\">\n"
+        "          <mxGeometry x=\"300\" y=\"100\" width=\"120\" height=\"60\" "
+        "as=\"geometry\"/>\n"
+        "        </mxCell>\n"
+        "        <mxCell id=\"e1\" value=\"hello\" style=\"dashed=1;\" "
+        "edge=\"1\" parent=\"1\" source=\"A\" target=\"B\">\n"
+        "          <mxGeometry relative=\"1\" as=\"geometry\">\n"
+        "            <mxPoint x=\"30\" y=\"-15\" as=\"offset\"/>\n"
+        "            <mxPoint x=\"220\" y=\"130\" as=\"sourcePoint\"/>\n"
+        "            <mxPoint x=\"300\" y=\"130\" as=\"targetPoint\"/>\n"
+        "          </mxGeometry>\n"
+        "        </mxCell>\n"
+        "      </root>\n"
+        "    </mxGraphModel>\n"
+        "  </diagram>\n"
+        "</mxfile>";
+    Graph g = gp::parseDrawio(d);
+    CHECK(g.name == "EdgeLabelTest");
+    CHECK(g.edges.size() == 1);
+    CHECK(g.edges[0].label == "hello");
+    CHECK(g.edges[0].labelX == 30);
+    CHECK(g.edges[0].labelY == -15);
+
+    // 往返：导出再解析
+    std::string dx = ge::toDrawio(g);
+    Graph g2       = gp::parseDrawio(dx);
+    CHECK(g2.edges.size() == 1);
+    CHECK(g2.edges[0].label == "hello");
+    CHECK(g2.edges[0].labelX == 30);
+    CHECK(g2.edges[0].labelY == -15);
 }
 
 static void testMcpGraphImport()
@@ -2645,6 +2890,9 @@ int runAll()
     testColors();
     testParseDrawio();
     testDrawioRoundTrip();
+    testDrawioLayerRoundTrip();
+    testDrawioMultiPageRoundTrip();
+    testDrawioEdgeLabelOffset();
     testMcpGraphImport();
     testLayerBalancing();
     testEdgeWaypoints();

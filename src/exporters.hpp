@@ -24,19 +24,29 @@
 
 #    include <shellapi.h>
 #elif defined(__APPLE__)
+#    include <cerrno>
 #    include <dirent.h>
+#    include <fcntl.h>
 #    include <limits.h>
+#    include <sys/file.h>
 #    include <unistd.h>
 
 #    include <mach-o/dyld.h>
 #    include <sys/stat.h>
+#    include <sys/wait.h>
+#    include <signal.h>
 #    ifndef PATH_MAX
 #        define PATH_MAX 4096
 #    endif
 #else
+#    include <cerrno>
 #    include <dirent.h>
+#    include <fcntl.h>
 #    include <limits.h>
+#    include <sys/file.h>
 #    include <sys/stat.h>
+#    include <sys/wait.h>
+#    include <signal.h>
 #    include <unistd.h>
 #    ifndef PATH_MAX
 #        define PATH_MAX 4096
@@ -241,12 +251,23 @@ inline bool writeFileAtomic(const std::string& path, const std::string& content)
 #ifdef _WIN32
     std::wstring wtmp  = toWidePath(tmp);
     std::wstring wpath = toWidePath(path);
-    if (!MoveFileExW(wtmp.c_str(), wpath.c_str(),
-                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        DeleteFileW(wtmp.c_str());
-        return false;
+    // Windows 读者未开启 FILE_SHARE_DELETE 时，原子替换会短暂失败；
+    // 对共享冲突进行有界重试，避免 latest/HEAD 已写而 index 未提交。
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        // REPLACE_EXISTING 保证同卷原子替换；不使用 WRITE_THROUGH，
+        // 避免每个 latest/snapshot/meta/index/HEAD 都同步刷盘。
+        if (MoveFileExW(wtmp.c_str(), wpath.c_str(),
+                        MOVEFILE_REPLACE_EXISTING))
+            return true;
+        DWORD code = GetLastError();
+        // 共享冲突常表现为 SHARING_VIOLATION；部分环境下也会变成 ACCESS_DENIED。
+        // 真实权限问题会在有界重试后仍失败并返回 false。
+        if (code != ERROR_SHARING_VIOLATION && code != ERROR_ACCESS_DENIED)
+            break;
+        Sleep(20);
     }
-    return true;
+    DeleteFileW(wtmp.c_str());
+    return false;
 #else
     if (std::rename(tmp.c_str(), path.c_str()) != 0) {
         std::remove(tmp.c_str());
@@ -254,6 +275,138 @@ inline bool writeFileAtomic(const std::string& path, const std::string& content)
     }
     return true;
 #endif
+}
+
+// StoreLock: 跨进程存储互斥（保护 index.json 合并写与图 save 原子性）
+// Windows 用 LockFileEx；POSIX 用 flock。
+class StoreLock {
+  public:
+    // 获取 <root>/.store.lock 独占锁；timeoutMs 为最长等待（0=非阻塞）
+    explicit StoreLock(const std::string& root, int timeoutMs = 30000)
+        : locked_(false)
+    {
+        lockPath_ = root + "/.store.lock";
+        ensureParentDirs(lockPath_);
+#ifdef _WIN32
+        auto toWide = [](const std::string& s) {
+            int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
+            std::wstring w((size_t)(n > 0 ? n - 1 : 0), L'\0');
+            if (n > 0)
+                MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &w[0], n);
+            return w;
+        };
+        handle_ = CreateFileW(toWide(lockPath_).c_str(),
+                              GENERIC_READ | GENERIC_WRITE,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                              OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (handle_ == INVALID_HANDLE_VALUE)
+            return;
+        OVERLAPPED ov;
+        ZeroMemory(&ov, sizeof(ov));
+        auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::milliseconds(timeoutMs > 0 ? timeoutMs
+                                                                : 0);
+        for (;;) {
+            DWORD flags = LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY;
+            if (LockFileEx(handle_, flags, 0, 1, 0, &ov)) {
+                locked_ = true;
+                return;
+            }
+            if (timeoutMs == 0 ||
+                std::chrono::steady_clock::now() >= deadline) {
+                CloseHandle(handle_);
+                handle_ = INVALID_HANDLE_VALUE;
+                return;
+            }
+            Sleep(20);
+        }
+#else
+        fd_ = ::open(lockPath_.c_str(), O_RDWR | O_CREAT, 0644);
+        if (fd_ < 0)
+            return;
+        auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::milliseconds(timeoutMs > 0 ? timeoutMs
+                                                                : 0);
+        for (;;) {
+            int flags = LOCK_EX | (timeoutMs == 0 ? LOCK_NB : 0);
+            if (timeoutMs > 0) {
+                // 非阻塞重试以支持超时
+                flags = LOCK_EX | LOCK_NB;
+            }
+            if (flock(fd_, flags) == 0) {
+                locked_ = true;
+                return;
+            }
+            if (timeoutMs == 0 ||
+                std::chrono::steady_clock::now() >= deadline) {
+                ::close(fd_);
+                fd_ = -1;
+                return;
+            }
+            usleep(20000);
+        }
+#endif
+    }
+
+    ~StoreLock()
+    { unlock(); }
+
+    StoreLock(const StoreLock&)            = delete;
+    StoreLock& operator=(const StoreLock&) = delete;
+
+    bool locked() const
+    { return locked_; }
+
+    void unlock()
+    {
+        if (!locked_)
+            return;
+#ifdef _WIN32
+        if (handle_ != INVALID_HANDLE_VALUE) {
+            OVERLAPPED ov;
+            ZeroMemory(&ov, sizeof(ov));
+            UnlockFileEx(handle_, 0, 1, 0, &ov);
+            CloseHandle(handle_);
+            handle_ = INVALID_HANDLE_VALUE;
+        }
+#else
+        if (fd_ >= 0) {
+            flock(fd_, LOCK_UN);
+            ::close(fd_);
+            fd_ = -1;
+        }
+#endif
+        locked_ = false;
+    }
+
+  private:
+    std::string lockPath_;
+    bool        locked_;
+#ifdef _WIN32
+    HANDLE handle_ = INVALID_HANDLE_VALUE;
+#else
+    int fd_ = -1;
+#endif
+};
+
+// exportTimeoutMs: 外部转换硬超时（毫秒），环境变量 GRAPHMCP_EXPORT_TIMEOUT_MS
+inline int exportTimeoutMs()
+{
+    std::string e = getEnvVar("GRAPHMCP_EXPORT_TIMEOUT_MS");
+    if (e.empty())
+        return 60000;
+    int v = std::atoi(e.c_str());
+    return v > 0 ? v : 60000;
+}
+
+// inlineExportMaxBytes: 内联导出护栏默认 1MB，可被 GRAPHMCP_INLINE_MAX_BYTES 覆盖
+inline size_t inlineExportMaxBytes()
+{
+    std::string e = getEnvVar("GRAPHMCP_INLINE_MAX_BYTES");
+    if (e.empty())
+        return 1024 * 1024;
+    long long v = std::atoll(e.c_str());
+    return v > 0 ? (size_t)v : (size_t)(1024 * 1024);
 }
 
 inline std::string readFile(const std::string& path)
@@ -1300,6 +1453,13 @@ inline std::string sanitizeMermaidId(const std::string& id)
     return out;
 }
 
+// edgeHasEndArrow / edgeHasStartArrow: 从 headStart/headEnd 推导箭头可见性
+// 替代直接读 e.arrow，确保与扩展箭头字段一致
+inline bool edgeHasEndArrow(const Edge& e)
+{ return e.headEnd != "none"; }
+inline bool edgeHasStartArrow(const Edge& e)
+{ return e.headStart != "none"; }
+
 // toMermaid: 统一模型导出为 Mermaid 文本
 // 关键步骤：按图类型分支（mindmap/er/flowchart）-> 输出节点 -> 输出边
 inline std::string toMermaid(const Graph& g)
@@ -2050,10 +2210,12 @@ inline std::string toMermaid(const Graph& g)
             os << " -.->";
         else if (e.style == "thick")
             os << " ==>";
-        else if (e.arrow == "none")
+        else if (!edgeHasEndArrow(e) && !edgeHasStartArrow(e))
             os << " ---";
-        else if (e.arrow == "both")
+        else if (edgeHasStartArrow(e) && edgeHasEndArrow(e))
             os << " <-->";
+        else if (edgeHasStartArrow(e))
+            os << " <--";
         else
             os << " -->";
         if (!e.label.empty())
@@ -2103,21 +2265,14 @@ inline std::string toMermaid(const Graph& g)
 // drawioStyle: 将统一 shape 映射为 draw.io 样式字符串
 inline std::string drawioStyle(const Node& n)
 {
+    // 构建颜色扩展（fillColor / strokeColor）
     std::string extra;
     if (!n.fillColor.empty())
         extra += "fillColor=" + n.fillColor + ";";
     if (!n.strokeColor.empty())
         extra += "strokeColor=" + n.strokeColor + ";";
-    std::string base = "whiteSpace=wrap;html=1;" + extra;
-    if (n.shape == "diamond")
-        return "rhombus;" + base;
-    if (n.shape == "ellipse" || n.shape == "circle")
-        return "ellipse;" + base;
-    if (n.shape == "round" || n.shape == "stadium")
-        return "rounded=1;arcSize=" +
-               std::string(n.shape == "stadium" ? "50" : "10") + ";" + base;
-    if (n.shape == "hexagon")
-        return "shape=hexagon;" + base;
+
+    // 特殊逻辑：group 和 ER entity 不走通用映射表
     if (n.shape == "group") {
         // group 固定透明填充 + 虚线；自定义描边通过 extra 拼接
         std::string gs =
@@ -2128,20 +2283,59 @@ inline std::string drawioStyle(const Node& n)
         return gs;
     }
     if (!n.attrs.empty())
-        return "shape=table;startSize=30;container=1;collapsible=0;" + base;
-    return "rounded=0;" + base;
+        return "shape=table;startSize=30;container=1;collapsible=0;"
+               "whiteSpace=wrap;html=1;" + extra;
+
+    // round/stadium 需要动态 arcSize，单独处理
+    if (n.shape == "round")
+        return "rounded=1;arcSize=10;whiteSpace=wrap;html=1;" + extra;
+    if (n.shape == "stadium")
+        return "rounded=1;arcSize=50;whiteSpace=wrap;html=1;" + extra;
+
+    // 通用形状映射表：统一形状名 → draw.io 样式（不含颜色扩展）
+    static const std::map<std::string, std::string> kShapeStyleMap = {
+        {"diamond",       "rhombus;whiteSpace=wrap;html=1;"},
+        {"ellipse",       "ellipse;whiteSpace=wrap;html=1;"},
+        {"circle",        "ellipse;whiteSpace=wrap;html=1;"},
+        {"hexagon",       "shape=hexagon;whiteSpace=wrap;html=1;"},
+        {"triangle",      "shape=triangle;perimeter=trianglePerimeter;whiteSpace=wrap;html=1;"},
+        {"parallelogram", "shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;"},
+        {"trapezoid",     "shape=trapezoid;perimeter=trapezoidPerimeter;whiteSpace=wrap;html=1;"},
+        {"step",          "shape=step;perimeter=stepPerimeter;whiteSpace=wrap;html=1;"},
+        {"process",       "shape=process;whiteSpace=wrap;html=1;"},
+        {"document",      "shape=document;whiteSpace=wrap;html=1;"},
+        {"cylinder",      "shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;container=0;size=15;"},
+        {"delay",         "shape=delay;whiteSpace=wrap;html=1;"},
+        {"manualInput",   "shape=manualInput;perimeter=manualInputPerimeter;whiteSpace=wrap;html=1;"},
+        {"display",       "shape=display;whiteSpace=wrap;html=1;"},
+        {"cloud",         "shape=cloud;whiteSpace=wrap;html=1;"},
+        {"umlActor",      "shape=umlActor;whiteSpace=wrap;html=1;"},
+        {"note",          "shape=note;whiteSpace=wrap;html=1;size=14;"},
+        {"cube",          "shape=cube;whiteSpace=wrap;html=1;"},
+        {"message",       "shape=message;whiteSpace=wrap;html=1;"},
+    };
+    auto it = kShapeStyleMap.find(n.shape);
+    if (it != kShapeStyleMap.end())
+        return it->second + extra;
+
+    // 默认：普通矩形
+    return "rounded=0;whiteSpace=wrap;html=1;" + extra;
 }
 
-// toDrawio: 导出 draw.io XML
+// toDrawio: 导出 draw.io XML（支持多页）
 // 关键步骤：先 layout 保证有坐标 -> 先输出 group 再输出普通节点 -> 最后输出边
 inline std::string toDrawio(Graph g)
 {
-    gl::layout(g);
-    std::vector<FreedrawStroke> strokes = collectFreedrawStrokes(g);
-    std::ostringstream          os;
+    std::ostringstream os;
     os << "<mxfile host=\"graphmcp\" agent=\"graphmcp/1.0\" type=\"device\">\n";
-    os << "  <diagram name=\"" << xmlEscape(g.name.empty() ? "Page-1" : g.name)
-       << "\" id=\"" << xmlEscape(g.id.empty() ? "d1" : g.id) << "\">\n";
+
+    // writePage: 输出单页 diagram 的节点、边、图层、free 笔画
+    auto writePage = [&](Graph& page, const std::string& diagId) {
+    gl::layout(page);
+    std::vector<FreedrawStroke> strokes = collectFreedrawStrokes(page);
+    os << "  <diagram name=\""
+       << xmlEscape(page.name.empty() ? "Page-1" : page.name)
+       << "\" id=\"" << xmlEscape(diagId) << "\">\n";
     os << "    <mxGraphModel dx=\"800\" dy=\"600\" grid=\"1\" gridSize=\"10\" "
           "guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" "
           "page=\"1\" pageScale=\"1\" pageWidth=\"1169\" pageHeight=\"826\" "
@@ -2149,12 +2343,24 @@ inline std::string toDrawio(Graph g)
     os << "      <root>\n";
     os << "        <mxCell id=\"0\"/>\n";
     os << "        <mxCell id=\"1\" parent=\"0\"/>\n";
+    // 输出自定义图层（默认图层 id=1 已经存在）
+    for (auto& l : page.layers) {
+        os << "        <mxCell id=\"" << xmlEscape(l.id) << "\" parent=\"0\""
+           << " value=\"" << xmlEscape(l.name) << "\"";
+        if (l.locked)
+            os << " style=\"locked=1\"";
+        os << "/>\n";
+    }
+    // 构建 layer 名称 → id 的反向映射，供节点 parent 引用
+    std::map<std::string, std::string> layerIdForName;
+    for (auto& l : page.layers)
+        layerIdForName[l.name] = l.id;
     // 先输出 group，确保子节点可引用其作为 parent
     std::vector<const Node*> ordered;
-    for (auto& n : g.nodes)
+    for (auto& n : page.nodes)
         if (n.shape == "group")
             ordered.push_back(&n);
-    for (auto& n : g.nodes)
+    for (auto& n : page.nodes)
         if (n.shape != "group")
             ordered.push_back(&n);
     for (auto* n : ordered) {
@@ -2164,32 +2370,37 @@ inline std::string toDrawio(Graph g)
             for (auto& a : n->attrs)
                 label += "<br/>" + a;
         }
-        const Node* p = n->parent.empty() ? nullptr : g.findNode(n->parent);
+        const Node* p = n->parent.empty() ? nullptr : page.findNode(n->parent);
         bool        insideGroup = p && p->shape == "group";
         double      x = n->x, y = n->y;
         if (insideGroup) {
             x -= p->x;
             y -= p->y;
         }  // draw.io 子节点使用相对坐标
+        // 确定 parent 引用：group 优先 → 图层 → 默认图层 "1"
+        std::string parentRef = "1";
+        if (insideGroup)
+            parentRef = n->parent;
+        else if (!n->layer.empty() && layerIdForName.count(n->layer))
+            parentRef = layerIdForName[n->layer];
         os << "        <mxCell id=\"" << xmlEscape(n->id) << "\" value=\""
            << xmlEscape(label) << "\" style=\"" << drawioStyle(*n)
-           << "\" vertex=\"1\" parent=\""
-           << (insideGroup ? xmlEscape(n->parent) : "1") << "\">\n";
+           << "\" vertex=\"1\" parent=\"" << xmlEscape(parentRef) << "\">\n";
         os << "          <mxGeometry x=\"" << x << "\" y=\"" << y
            << "\" width=\"" << n->w << "\" height=\"" << n->h
            << "\" as=\"geometry\"/>\n";
         os << "        </mxCell>\n";
     }
     int ei = 0;
-    for (auto& e : g.edges) {
+    for (auto& e : page.edges) {
         std::string style = "edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;";
         if (e.style == "dashed")
             style += "dashed=1;";
         if (e.style == "thick")
             style += "strokeWidth=3;";
-        if (e.arrow == "none")
+        if (!edgeHasEndArrow(e))
             style += "endArrow=none;";
-        if (e.arrow == "both")
+        if (edgeHasStartArrow(e))
             style += "startArrow=classic;";
         if (!e.strokeColor.empty())
             style += "strokeColor=" + e.strokeColor + ";";
@@ -2245,6 +2456,14 @@ inline std::string toDrawio(Graph g)
     os << "      </root>\n";
     os << "    </mxGraphModel>\n";
     os << "  </diagram>\n";
+    };  // writePage lambda
+
+    // 首页和附加页依次输出
+    writePage(g, g.id.empty() ? "d1" : g.id);
+    int di = 2;
+    for (auto& p : g.pages)
+        writePage(p, "d" + std::to_string(di++));
+
     os << "</mxfile>\n";
     return os.str();
 }
@@ -2380,8 +2599,9 @@ inline std::string toExcalidraw(Graph g)
             el.set("startBinding", sb);
             el.set("endBinding", eb);
             el.set("startArrowhead",
-                   e.arrow == "both" ? Json("arrow") : Json());
-            el.set("endArrowhead", e.arrow == "none" ? Json() : Json("arrow"));
+                   edgeHasStartArrow(e) ? Json("arrow") : Json());
+            el.set("endArrowhead",
+                   edgeHasEndArrow(e) ? Json("arrow") : Json());
             if (e.style == "dashed")
                 el.set("strokeStyle", "dashed");
             if (!e.strokeColor.empty())
@@ -2398,7 +2618,7 @@ inline std::string toExcalidraw(Graph g)
         doc.set("files", g.files);
     else
         doc.set("files", Json::obj());
-    return doc.dump(2);
+    return doc.dump();
 }
 
 // -------------------------------------------------------------------- SVG --
@@ -2627,9 +2847,9 @@ inline std::string toSVG(Graph g)
         os << "\"";
         if (edgeDashed)
             os << " stroke-dasharray=\"6,4\"";
-        if (e.arrow != "none")
+        if (edgeHasEndArrow(e))
             os << " marker-end=\"url(#arrow)\"";
-        if (e.arrow == "both")
+        if (edgeHasStartArrow(e))
             os << " marker-start=\"url(#arrow)\"";
         os << "/>\n";
         // 边标签
@@ -2825,23 +3045,6 @@ inline std::string findBrowser()
     return "";
 }
 
-// 静默执行命令。Windows 下通过临时 .bat 规避 cmd.exe 在“带引号可执行路径
-// + 重定向”场景下的引号剥离问题（该问题会让 std::system 悄悄失败）。
-// runQuiet: 静默执行命令（Windows 下通过 .bat 规避 system 引号问题）
-inline int runQuiet(const std::string& cmd, const std::string& tmpBase)
-{
-#ifdef _WIN32
-    std::string bat = tmpBase + ".run.bat";
-    writeFile(bat, "@echo off\r\n" + cmd + "\r\n");
-    int rc = std::system(("\"" + bat + "\"").c_str());
-    std::remove(bat.c_str());
-    return rc;
-#else
-    (void)tmpBase;
-    return std::system(cmd.c_str());
-#endif
-}
-
 #ifdef _WIN32
 inline std::wstring widen(const std::string& s)
 {
@@ -2853,13 +3056,125 @@ inline std::wstring widen(const std::string& s)
 }
 #endif
 
+// 静默执行命令。Windows 下通过临时 .bat 规避 cmd.exe 在“带引号可执行路径
+// + 重定向”场景下的引号剥离问题（该问题会让 std::system 悄悄失败）。
+// runQuiet: 静默执行命令；可选硬超时（毫秒），超时返回 -2 并置 timedOut
+inline int runQuiet(const std::string& cmd,
+                    const std::string& tmpBase,
+                    int                timeoutMs = -1,
+                    bool*              timedOut  = nullptr)
+{
+    if (timedOut)
+        *timedOut = false;
+    if (timeoutMs < 0)
+        timeoutMs = exportTimeoutMs();
+#ifdef _WIN32
+    std::string bat = tmpBase + ".run.bat";
+    writeFile(bat, "@echo off\r\n" + cmd + "\r\n");
+    std::string comspec = getEnvVar("COMSPEC");
+    if (comspec.empty())
+        comspec = "C:\\Windows\\System32\\cmd.exe";
+    std::string cmdline =
+        "\"" + comspec + "\" /d /s /c call \"" + bat + "\"";
+    std::wstring         wexe    = widen(comspec);
+    std::wstring         wcmd    = widen(cmdline);
+    std::vector<wchar_t> buf(wcmd.begin(), wcmd.end());
+    buf.push_back(L'\0');
+    STARTUPINFOW si;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&pi, sizeof(pi));
+    BOOL ok = CreateProcessW(wexe.c_str(), buf.data(), nullptr, nullptr, FALSE,
+                             CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+    if (!ok) {
+        std::remove(bat.c_str());
+        return -1;
+    }
+    // Job Object 确保超时时连同 cmd 拉起的转换器子进程一起结束。
+    // Assign 失败（嵌套 Job 等）时废弃 Job，退化为只终止主进程。
+    HANDLE job = CreateJobObjectW(nullptr, nullptr);
+    if (job) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION info;
+        ZeroMemory(&info, sizeof(info));
+        info.BasicLimitInformation.LimitFlags =
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        SetInformationJobObject(job, JobObjectExtendedLimitInformation, &info,
+                                sizeof(info));
+        if (!AssignProcessToJobObject(job, pi.hProcess)) {
+            CloseHandle(job);
+            job = nullptr;
+        }
+    }
+    DWORD wait = WaitForSingleObject(pi.hProcess, (DWORD)timeoutMs);
+    int   rc   = -1;
+    if (wait == WAIT_TIMEOUT) {
+        if (job)
+            TerminateJobObject(job, 1);
+        else
+            TerminateProcess(pi.hProcess, 1);
+        WaitForSingleObject(pi.hProcess, 5000);
+        if (timedOut)
+            *timedOut = true;
+        rc = -2;
+    }
+    else {
+        DWORD code = 0;
+        GetExitCodeProcess(pi.hProcess, &code);
+        rc = (int)code;
+    }
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    if (job)
+        CloseHandle(job);
+    std::remove(bat.c_str());
+    return rc;
+#else
+    (void)tmpBase;
+    pid_t pid = fork();
+    if (pid < 0)
+        return -1;
+    if (pid == 0) {
+        setpgid(0, 0);
+        execl("/bin/sh", "sh", "-c", cmd.c_str(), (char*)nullptr);
+        _exit(127);
+    }
+    setpgid(pid, pid);
+    auto deadline = std::chrono::steady_clock::now() +
+                    std::chrono::milliseconds(timeoutMs);
+    int status = 0;
+    for (;;) {
+        pid_t done = waitpid(pid, &status, WNOHANG);
+        if (done == pid)
+            break;
+        if (done < 0 && errno != EINTR)
+            return -1;
+        if (std::chrono::steady_clock::now() >= deadline) {
+            kill(-pid, SIGKILL);
+            waitpid(pid, &status, 0);
+            if (timedOut)
+                *timedOut = true;
+            return -2;
+        }
+        usleep(20000);
+    }
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+#endif
+}
+
 // 直接拉起浏览器（不经 shell）。Windows 使用 CreateProcessW，因此不依赖
 // cmd.exe / COMSPEC / PATH。MCP 客户端常在精简环境中启动服务端，这点很关键。
 // bInheritHandles 设为 FALSE，避免子进程写入 stdout（JSON-RPC 通道）。
 // argstr 表示可执行文件之后的完整参数字符串（需提前处理好引号）。
 // launchBrowser: 直接拉起浏览器子进程做渲染，避免依赖 shell 环境
-inline int launchBrowser(const std::string& exe, const std::string& argstr)
+// 返回 -2 表示超时
+inline int launchBrowser(const std::string& exe,
+                         const std::string& argstr,
+                         bool*              timedOut = nullptr)
 {
+    if (timedOut)
+        *timedOut = false;
+    int timeoutMs = exportTimeoutMs();
 #ifdef _WIN32
     std::string          cmdline = "\"" + exe + "\" " + argstr;
     std::wstring         wexe    = widen(exe);
@@ -2875,15 +3190,72 @@ inline int launchBrowser(const std::string& exe, const std::string& argstr)
                              CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
     if (!ok)
         return -1;
-    WaitForSingleObject(pi.hProcess, 60000);
-    DWORD code = 0;
-    GetExitCodeProcess(pi.hProcess, &code);
+    HANDLE job = CreateJobObjectW(nullptr, nullptr);
+    if (job) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION info;
+        ZeroMemory(&info, sizeof(info));
+        info.BasicLimitInformation.LimitFlags =
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        SetInformationJobObject(job, JobObjectExtendedLimitInformation, &info,
+                                sizeof(info));
+        if (!AssignProcessToJobObject(job, pi.hProcess)) {
+            CloseHandle(job);
+            job = nullptr;
+        }
+    }
+    DWORD wait = WaitForSingleObject(pi.hProcess, (DWORD)timeoutMs);
+    int   rc   = -1;
+    if (wait == WAIT_TIMEOUT) {
+        if (job)
+            TerminateJobObject(job, 1);
+        else
+            TerminateProcess(pi.hProcess, 1);
+        WaitForSingleObject(pi.hProcess, 5000);
+        if (timedOut)
+            *timedOut = true;
+        rc = -2;
+    }
+    else {
+        DWORD code = 0;
+        GetExitCodeProcess(pi.hProcess, &code);
+        rc = (int)code;
+    }
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
-    return (int)code;
+    if (job)
+        CloseHandle(job);
+    return rc;
 #else
-    return std::system(
-        ("\"" + exe + "\" " + argstr + " >/dev/null 2>&1").c_str());
+    std::string command =
+        "\"" + exe + "\" " + argstr + " >/dev/null 2>&1";
+    pid_t pid = fork();
+    if (pid < 0)
+        return -1;
+    if (pid == 0) {
+        setpgid(0, 0);
+        execl("/bin/sh", "sh", "-c", command.c_str(), (char*)nullptr);
+        _exit(127);
+    }
+    setpgid(pid, pid);
+    auto deadline = std::chrono::steady_clock::now() +
+                    std::chrono::milliseconds(timeoutMs);
+    int status = 0;
+    for (;;) {
+        pid_t done = waitpid(pid, &status, WNOHANG);
+        if (done == pid)
+            break;
+        if (done < 0 && errno != EINTR)
+            return -1;
+        if (std::chrono::steady_clock::now() >= deadline) {
+            kill(-pid, SIGKILL);
+            waitpid(pid, &status, 0);
+            if (timedOut)
+                *timedOut = true;
+            return -2;
+        }
+        usleep(20000);
+    }
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 #endif
 }
 
@@ -2921,7 +3293,11 @@ inline std::string rasterize(const std::string& svgPathIn,
         {"magick", "magick \"" + svgPath + "\" \"" + outPath + "\"" + quiet});
     for (auto& c : cands) {
         std::remove(outPath.c_str());
-        if (runQuiet(c.second, outPath) == 0 && produced())
+        bool timedOut = false;
+        int  rc       = runQuiet(c.second, outPath, -1, &timedOut);
+        if (timedOut)
+            return std::string("__timeout__");
+        if (rc == 0 && produced())
             return c.first;
     }
 
@@ -2964,8 +3340,11 @@ inline std::string rasterize(const std::string& svgPathIn,
                     std::to_string(w) + "," + std::to_string(h) +
                     " --screenshot=\"" + outPath + "\" \"" + url + "\"";
         std::remove(outPath.c_str());
-        launchBrowser(browser, args);
+        bool timedOut = false;
+        launchBrowser(browser, args, &timedOut);
         std::remove(htmlPath.c_str());
+        if (timedOut)
+            return std::string("__timeout__");
         if (produced()) {
 #ifdef _WIN32
             return browser.find("msedge") != std::string::npos ? "edge" :
@@ -3057,8 +3436,11 @@ inline std::string rasterizeMermaid(const Graph&       g,
     }
 
     std::remove(outPath.c_str());
-    launchBrowser(browser, args);
+    bool timedOut = false;
+    launchBrowser(browser, args, &timedOut);
     std::remove(htmlPath.c_str());
+    if (timedOut)
+        return std::string("__timeout__");
 
     std::ifstream check(outPath, std::ios::binary);
     if (check.good() && check.peek() != std::ifstream::traits_type::eof()) {
@@ -3077,6 +3459,7 @@ inline std::string rasterizeMermaid(const Graph&       g,
 struct ExportResult
 {
     bool        ok = false;
+    bool        timedOut = false;  // 外部转换硬超时
     std::string message;  // 人类可读状态信息
     std::string content;  // 内联内容（文本格式 / URL）
     std::string path;     // 写文件时的输出路径
@@ -3090,8 +3473,15 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
 {
     ExportResult r;
     std::string  content;
-    if (to == "drawio")
+    if (to == "drawio") {
+        // rawMermaid 类型：生成含注释节点的 drawio，避免空白图表
+        if (!g.rawMermaid.empty() && g.nodes.empty()) {
+            Node& note = g.ensureNode("raw-mermaid-note", g.rawMermaid);
+            note.shape = "note";
+            note.x = 20; note.y = 20; note.w = 400; note.h = 200;
+        }
         content = toDrawio(g);
+    }
     else if (to == "mermaid")
         content = toMermaid(g);
     else if (to == "excalidraw")
@@ -3100,7 +3490,7 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
         content = toSVG(g);
     else if (to == "model" || to == "json") {
         gl::layout(g);
-        content = g.toJson().dump(2);
+        content = g.toJson().dump();
     }
     else if (to == "url") {
         r.ok      = true;
@@ -3113,6 +3503,15 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
         // rawMermaid 类型：通过浏览器渲染 Mermaid.js -> 截图/打印
         if (!g.rawMermaid.empty()) {
             std::string tool = rasterizeMermaid(g, base, to);
+            if (tool == "__timeout__") {
+                r.timedOut = true;
+                r.message =
+                    "export timed out after " +
+                    std::to_string(exportTimeoutMs()) +
+                    "ms (set GRAPHMCP_EXPORT_TIMEOUT_MS to adjust); "
+                    "install/check converter or export to svg";
+                return r;
+            }
             if (!tool.empty()) {
                 r.ok      = true;
                 r.path    = base;
@@ -3138,6 +3537,17 @@ exportGraph(Graph g, const std::string& to, const std::string& outPath = "")
         }
         std::string tool = rasterize(svgPath, base, to);
         std::remove(svgPath.c_str());
+        if (tool == "__timeout__") {
+            std::string fallback = base + ".svg";
+            writeFile(fallback, svg);
+            r.timedOut = true;
+            r.path     = fallback;
+            r.message =
+                "export timed out after " + std::to_string(exportTimeoutMs()) +
+                "ms; wrote SVG fallback to " + fallback +
+                " (set GRAPHMCP_EXPORT_TIMEOUT_MS to adjust)";
+            return r;
+        }
         if (tool.empty()) {
             // 平滑兜底：在目标输出旁保留一份 SVG
             std::string fallback = base + ".svg";

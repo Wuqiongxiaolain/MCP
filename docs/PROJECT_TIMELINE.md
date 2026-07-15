@@ -23,7 +23,7 @@
 
 | 维度 | 07-10 收口（历史） | 当前（扩展期后） |
 |------|-------------------|------------------|
-| MCP 工具 | ~25 | **46**（`toolList()` / OpenAPI） |
+| MCP 工具 | ~25 | **47**（`toolList()` / OpenAPI） |
 | CLI | 多命令族（尚未含完整 table 族） | **15** 族（含 `table` / `dump-tools`） |
 | Mermaid | 以 flowchart/mindmap/er 为主 | class/state/sequence/pie 等深解析 + 颜色 |
 | 表 | 无通用 Table | CSV / 表 XML + 图↔表协同 |

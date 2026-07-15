@@ -53,6 +53,9 @@
     {"name": "tableStore_load_n200", "unit": "us", "value": 130.4527, "p50": 126.3580, "p95": 144.9430, "iterations": 50},
     {"name": "tableStore_list", "unit": "us", "value": 6.1068, "p50": 6.0220, "p95": 6.0920, "iterations": 100},
     {"name": "mcp_table_create_n200", "unit": "us", "value": 603.6081, "p50": 597.3940, "p95": 651.0740, "iterations": 20},
-    {"name": "memory_RSS_5000iter", "unit": "MB", "value": 4.5, "p50": 4.5, "p95": 4.5, "iterations": 1}
+    {"name": "memory_RSS_5000iter", "unit": "MB", "value": 4.5, "p50": 4.5, "p95": 4.5, "iterations": 1},
+    {"name": "memory_RSS_repeat_save_same_id", "unit": "MB", "value": 0.0000, "p50": 0.0000, "p95": 0.0000, "iterations": 1},
+    {"name": "memory_RSS_repeat_save_2nd_half", "unit": "MB", "value": 0.0000, "p50": 0.0000, "p95": 0.0000, "iterations": 1},
+    {"name": "memory_RSS_repeat_save_1st_half", "unit": "MB", "value": 0.0000, "p50": 0.0000, "p95": 0.0000, "iterations": 1}
   ]
 }

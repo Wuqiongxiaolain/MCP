@@ -231,6 +231,101 @@ def testBenchUnits(root: pathlib.Path):
         )
         assertTrue(regression_run.returncode == 2, "2x regression was not detected")
 
+        # 内存稳定性：绝对上限（不依赖相对基线百分比）
+        mem_bl = pathlib.Path(temp_dir) / "mem_baseline.json"
+        mem_cur = pathlib.Path(temp_dir) / "mem_current.json"
+        mem_bl.write_text(
+            json.dumps(
+                {
+                    "benchmarks": [
+                        {
+                            "name": "memory_RSS_repeat_save_same_id",
+                            "value": 0.1,
+                            "unit": "MB",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        mem_cur.write_text(
+            json.dumps(
+                {
+                    "benchmarks": [
+                        {
+                            "name": "memory_RSS_repeat_save_same_id",
+                            "value": 5.0,
+                            "unit": "MB",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        mem_fail = subprocess.run(
+            [sys.executable, str(script), str(mem_bl), str(mem_cur)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env={
+                **os.environ,
+                "PYTHONUTF8": "1",
+                "GRAPHMCP_MEMORY_FAIL_MB": "4",
+                "GRAPHMCP_MEMORY_WARN_MB": "3",
+            },
+        )
+        assertTrue(mem_fail.returncode == 2, mem_fail.stdout + mem_fail.stderr)
+        assertTrue(
+            "absolute FAIL cap" in mem_fail.stdout
+            or "absolute FAIL cap" in mem_fail.stderr,
+            "memory absolute cap was not applied",
+        )
+
+        # 后半段相对前半段持续增长
+        half_cur = pathlib.Path(temp_dir) / "half_current.json"
+        half_cur.write_text(
+            json.dumps(
+                {
+                    "benchmarks": [
+                        {
+                            "name": "memory_RSS_repeat_save_1st_half",
+                            "value": 0.2,
+                            "unit": "MB",
+                        },
+                        {
+                            "name": "memory_RSS_repeat_save_2nd_half",
+                            "value": 1.0,
+                            "unit": "MB",
+                        },
+                        {
+                            "name": "memory_RSS_repeat_save_same_id",
+                            "value": 1.2,
+                            "unit": "MB",
+                        },
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        half_fail = subprocess.run(
+            [sys.executable, str(script), str(mem_bl), str(half_cur)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env={
+                **os.environ,
+                "PYTHONUTF8": "1",
+                "GRAPHMCP_MEMORY_FAIL_MB": "4",
+                "GRAPHMCP_MEMORY_HALF_RATIO": "2.5",
+            },
+        )
+        assertTrue(half_fail.returncode == 2, half_fail.stdout + half_fail.stderr)
+        assertTrue(
+            "halves" in half_fail.stdout or "halves" in half_fail.stderr,
+            "half-ratio leak check missing",
+        )
 
 def main() -> int:
     exe = findExe(sys.argv)

@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <string>
@@ -574,56 +575,104 @@ static void benchTableMcpTools()
     ge::removeDirectory("bench-table-mcp-tmp");
 }
 
-// ── 8. 内存泄漏检查 (重复操作后 RSS 增长) ──
+// ── 8. 内存稳定性：固定 graphId 重复 save，检测泄漏而非 index 膨胀 ──
+//
+// 原 memory_RSS_5000iter 每次 genId 导致 index 涨到 5000 条，RSS 反映容量而非泄漏。
+// 现改为：warmup → 同一 id 重复 save；并分段对比后半 delta，避免对古董相对基线过敏。
 
 static size_t getCurrentRSS()
 {
 #ifdef _WIN32
-    // Windows: 使用 GetProcessMemoryInfo
-    return 0;  // 简化：跨平台用文件读取
+    (void)0;
+    return 0;
 #else
-    // Linux: 读取 /proc/self/statm
+    // 优先 RssAnon（更贴近堆泄漏）；否则回退 statm RSS
+    std::string status = ge::readFile("/proc/self/status");
+    if (!status.empty()) {
+        const char* key = "RssAnon:";
+        size_t      pos = status.find(key);
+        if (pos != std::string::npos) {
+            pos += strlen(key);
+            while (pos < status.size() &&
+                   (status[pos] == ' ' || status[pos] == '\t'))
+                pos++;
+            size_t kb = 0;
+            while (pos < status.size() && status[pos] >= '0' &&
+                   status[pos] <= '9') {
+                kb = kb * 10 + (size_t)(status[pos] - '0');
+                pos++;
+            }
+            if (kb > 0)
+                return kb * 1024;
+        }
+    }
     std::string line = ge::readFile("/proc/self/statm");
-    if (line.empty()) return 0;
+    if (line.empty())
+        return 0;
     size_t pos = line.find(' ');
-    if (pos == std::string::npos) return 0;
-    // 第二个字段是 RSS (pages)
+    if (pos == std::string::npos)
+        return 0;
     std::string rssStr = line.substr(pos + 1);
     size_t      pos2   = rssStr.find(' ');
-    if (pos2 != std::string::npos) rssStr = rssStr.substr(0, pos2);
-    return std::stoull(rssStr) * 4096;  // pages → bytes
+    if (pos2 != std::string::npos)
+        rssStr = rssStr.substr(0, pos2);
+    return std::stoull(rssStr) * 4096;
 #endif
 }
 
 static void benchMemoryStability()
 {
 #ifdef _WIN32
-    // Windows 下跳过（需要 PSAPI）
     (void)getCurrentRSS;
     return;
 #else
+    if (ge::readFile("/proc/self/statm").empty() &&
+        ge::readFile("/proc/self/status").empty())
+        return;
+
     std::string text = makeBigFlowchart(50);
+    ge::removeDirectory("bench-leak-tmp");
+    gs::Store   store("bench-leak-tmp");
+    const char* fixedId = "bench-rss-fixed";
 
-    // 检查是否有 /proc/self/statm
-    std::string rss0 = ge::readFile("/proc/self/statm");
-    if (rss0.empty()) return;  // macOS / 不支持，跳过
-
-    size_t before = getCurrentRSS();
-
-    for (int i = 0; i < 5000; i++) {
-        Graph       g = gp::parseMermaid(text);
+    auto runSave = [&]() {
+        Graph g = gp::parseMermaid(text);
+        g.id    = fixedId;
+        g.name  = fixedId;
         Json        j = g.toJson();
         std::string s = j.dump();
-        gs::Store   store("bench-leak-tmp");
-        store.save(g, "leak test");
         (void)s;
-    }
+        store.save(g, "rss-stability");
+    };
 
-    size_t after  = getCurrentRSS();
-    double deltaMB = (double)(after - before) / (1024.0 * 1024.0);
+    // warmup：目录/锁/首次分配不计入 delta
+    for (int i = 0; i < 50; i++)
+        runSave();
 
-    BenchResult r{"memory_RSS_5000iter", "MB", deltaMB, deltaMB, deltaMB, 1};
-    g_results.push_back(r);
+    size_t before = getCurrentRSS();
+    for (int i = 0; i < 2500; i++)
+        runSave();
+    size_t mid = getCurrentRSS();
+    for (int i = 0; i < 2500; i++)
+        runSave();
+    size_t after = getCurrentRSS();
+
+    auto toMB = [](size_t a, size_t b) -> double {
+        if (b <= a)
+            return 0.0;
+        return (double)(b - a) / (1024.0 * 1024.0);
+    };
+    double totalMB  = toMB(before, after);
+    double firstMB  = toMB(before, mid);
+    double secondMB = toMB(mid, after);
+
+    g_results.push_back(BenchResult{"memory_RSS_repeat_save_same_id", "MB",
+                                    totalMB, totalMB, totalMB, 1});
+    g_results.push_back(BenchResult{"memory_RSS_repeat_save_2nd_half", "MB",
+                                    secondMB, secondMB, secondMB, 1});
+    // 附带第一半便于人工看分段；CI 对 memory_* 用绝对阈值，不用旧相对基线
+    g_results.push_back(BenchResult{"memory_RSS_repeat_save_1st_half", "MB",
+                                    firstMB, firstMB, firstMB, 1});
 
     ge::removeDirectory("bench-leak-tmp");
 #endif

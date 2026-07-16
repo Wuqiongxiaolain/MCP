@@ -1,6 +1,6 @@
 # Quick Start — 快速接入 graphmcp
 
-> latest update: v0.2.5-beta, 2026-07-16
+> latest update: v0.2.6-beta, 2026-07-16
 
 > 下载 exe → 改一行配置 → Claude 就能画图（和管表）。不需要 clone 仓库。
 

@@ -1,6 +1,6 @@
 # graphmcp 项目全景总结
 
-> latest update: v0.2.5-beta, 2026-07-16
+> latest update: v0.2.6-beta, 2026-07-16
 
 > 说明：本文包含大量”立项/阶段过程”信息（历史视角）。涉及当前能力的口径，请以 `src/main.cpp`、`src/mcp.hpp::toolList()` 与 `docs/api_reference/openapi.yaml` 为准。
 
@@ -12,6 +12,7 @@
 - 通用表（CSV / 表 XML）与图↔表协同链路（rules/check/fix/derive/transform/sample/propose）已落地。
 - 颜色全链路：`fillColor`/`strokeColor` 一等字段 + `classDef`/`linkStyle` + 多格式往返。
 - Drawio 多图层（layers）/ 多页（pages）/ 形状扩展 / 边标签定位已合入。
+- 布局（v0.2.6）：分层布局含层平衡、barycenter 减交叉、waypoint 折线路由（尚不完善，复杂图观感仍待打磨）。
 - 性能：微基准套件（18 指标）+ CI 性能回归检测 + MCP 热路径优化（写放大削减/存储一致性）。
 - CI/CD：GitHub Actions（构建/测试/冒烟/bench/OpenAPI 校验）+ 本地 Jenkins DevOps（Docker/Ansible Runner/nginx 发布）。
 - OpenAPI 由 `dump-tools` / `make docs-api` 从 `toolList()` 自动生成并由 CI 校验漂移。
@@ -47,7 +48,7 @@
 | Mermaid 扩展类型（19 种子类型） | ✅ | `parseMermaid*` 深解析 flowchart/mindmap/er/class/state/sequence/requirement/gantt/pie/sankey/kanban/gitGraph/journey/timeline/quadrantChart/xychart/block/packet/architecture；未知类型报错或走 `rawMermaid` 透传 |
 | 统一图模型 + 节点/连线/层级/白板元素 + 颜色字段 | ✅ | `Node`/`Edge` 含 `fillColor`/`strokeColor`；白板保留 `elements`/`files` |
 | 生成浏览器 URL + 调起外部编辑器 | ✅ | mermaid.live URL；`edit`/`graph_open` 调起 Draw.io / Excalidraw / SVG / 浏览器 |
-| 图结构校验 + 基础布局 | ✅ | `layout.hpp`：重复 ID / 悬空边 / 层级环 / 孤立点；`auto`/`layered`/`tree-*`/`grid`；状态图认可 `[*]` 端点 |
+| 图结构校验 + 布局引擎 | ✅（尚不完善） | `layout.hpp`：校验 + `auto`/`layered`/`tree-*`/`grid`；v0.2.6 起分层布局含层平衡、barycenter 减交叉、waypoint 折线路由与边标签定位（PR #78）；复杂图观感仍待打磨 |
 | 导出 draw.io / Mermaid / Excalidraw / PNG / SVG / PDF / URL / model | ✅ | `exporters.hpp` 统一分发；PNG/PDF 走外部转换链，失败回退 SVG |
 | 图版本保存 / 草稿暂存提交 / 回溯 | ✅ | Draft→Stage→Commit；`checkout` 移 HEAD；`rollback` 另存新版本 |
 | 游标遍历与细粒度改图 | ✅ | `cursor_*` + `graph_update`/`insert`/`delete_element`/`graph_property` |
@@ -57,6 +58,7 @@
 | **MCP 性能优化**（v0.2.4） | ✅ | 存储一致性/写放大削减/超时语义/跨平台性能回归验证 |
 | **Jenkins DevOps + Ansible 发布**（v0.2.4/5） | ✅ | Docker 镜像/Jenkins Pipeline/Ansible Runner/nginx 下载站 |
 | **性能基准与回归检测**（v0.2.2+） | ✅ | 微基准套件 18 指标 + CI 仅比对（不自动写回）+ workflow_dispatch 按需刷新 |
+| **分层布局增强**（v0.2.6） | ✅（尚不完善） | 层平衡、barycenter 交叉最小化、waypoint 折线路由、边标签按最长段定位；与节点坐标归一化同步（PR #78） |
 | 可选：实时画布预览 | ❎ | 列为后续目标 |
 
 能力与目标的思维导图总览见 [MINDMAP.md](MINDMAP.md)。
@@ -155,11 +157,11 @@
 | 指标 | 数值（约） |
 |------|------|
 | 总提交数 | 280+（含扩展期） |
-| 开发跨度 | 07-05 启动；07-10 初步收尾；07-16 扩展期收口（v0.2.5-beta） |
+| 开发跨度 | 07-05 启动；07-10 初步收尾；07-16 扩展至 v0.2.6-beta（布局增强） |
 | 核心模块 | 图核心 + 表协作模块（`table_*.hpp` / `mcp_table_tools.hpp` 等）+ 性能基准 + DevOps 工具链 |
 | MCP 工具 | 46（以 `toolList()` 为准） |
 | CLI 命令族 | 15（含 `table` / `dump-tools` / `import`） |
-| 版本演进 | v0.1.0 → v0.2.0 → v0.2.2 → v0.2.3-beta → v0.2.4-beta → v0.2.5-beta |
+| 版本演进 | v0.1.0 → v0.2.0 → v0.2.2 → v0.2.3-beta → v0.2.4-beta → v0.2.5-beta → v0.2.6-beta |
 
 ### 4.3 07-10 以来的需求落地（已解决）
 
@@ -177,6 +179,7 @@
 | **MCP 性能重构** | v0.2.4-beta | 存储一致性 / 写放大削减 / 超时语义修正 / 跨平台性能回归验证 |
 | **Jenkins DevOps** | v0.2.4-beta | Docker 镜像（Jenkins/Ansible）+ Jenkins Pipeline + 本地 Bench |
 | **Ansible Runner 发布** | v0.2.5-beta | ansible-runner 容器替代 Semaphore；Jenkins → Ansible → nginx 下载站全自动 |
+| **分层布局增强** | v0.2.6-beta | 层平衡 + barycenter 减交叉 + waypoint 折线路由与边标签定位（尚不完善，复杂图仍待打磨） |
 
 ---
 
@@ -199,8 +202,9 @@ main ─────────────────────────
   ├── fix/drawio-compatibility       → PR #80            (drawio 多图层/多页)
   ├── perf/improve-mcp-overall       → PR #79            (MCP 性能重构)
   ├── feat/local-jenkins-devops      → PR #84            (Jenkins DevOps)
-  └── feat/replace-semaphore-...     → PR #85            (Ansible Runner)
-```    
+  ├── feat/replace-semaphore-...     → PR #85            (Ansible Runner)
+  └── feature/layout-crossing-...    → PR #78            (分层布局增强)
+```
 
 ### 5.2 PR 工作流
 
@@ -252,13 +256,14 @@ main ─────────────────────────
 | 性能基准与回归检测 | ✅ | 微基准 18 指标 + CI 比对 + workflow_dispatch |
 | MCP 性能优化 | ✅ | 存储一致性/写放大削减/超时语义/跨平台回归 |
 | Jenkins DevOps 发布链 | ✅ | Docker/Ansible Runner/nginx 下载站 |
+| 分层布局增强（首轮） | ✅（尚不完善） | v0.2.6：barycenter 减交叉 + waypoint 路由已落地 |
 
 ### 6.2 功能扩展（待做）
 
 | 目标 | 说明 |
 |------|------|
 | **draw.io 能力补齐** | 现有 draw.io 往返仍有缺口（如 draw.io URL schema、更完整互操作）；需在保持零依赖前提下继续补齐 |
-| **导出图质量过粗** | 当前部分导出结果视觉上偏粗糙（布局、渲染与样式一致化），需要系统性打磨 |
+| **导出图质量与布局打磨** | v0.2.6 已改进分层布局与折线路由，但复杂图交叉/间距/观感仍偏粗；渲染与样式一致化尚需继续打磨 |
 | **实时画布预览** | 通过 SVG + 本地 HTML 轮询 `latest.json` 实现实时预览（可选） |
 
 ### 6.3 工程与性能（待做）
@@ -269,7 +274,7 @@ main ─────────────────────────
 | **SQLite 可选后端** | 大图检索场景下可评估替代 JSON 文件存储 |
 | **`exporters.hpp` 拆分** | 导出 + 编辑器发现 + 浏览器启动叠在同一头文件（~3300 行），考虑模块化 |
 | **贡献指南** | 开源协作规范文档（`CONTRIBUTING.md`） |
-| **分层布局增强** | Sugiyama median 启发式减交叉 |
+| **布局引擎继续完善** | 在现有 barycenter / waypoint 基础上继续减交叉、调间距与特殊图类型策略 |
 
 ## 附录：需求对照检查清单
 
@@ -279,7 +284,7 @@ main ─────────────────────────
 | 2 | 流程图 / 架构图 / ER 图 / 组织图 / 脑图 / 白板图 | ✅ |
 | 3 | 统一图模型 + 节点/连线/层级/白板元素 | ✅ |
 | 4 | 生成 URL + 调起外部编辑器 | ✅ |
-| 5 | 图结构校验 + 基础布局 | ✅ |
+| 5 | 图结构校验 + 布局引擎（v0.2.6 增强，尚不完善） | ✅ |
 | 6 | 导出 .drawio / Mermaid / Excalidraw / PNG / SVG / PDF / URL | ✅ |
 | 7 | 图定义保存 + 历史版本管理 + 回溯 | ✅ |
 | 8 | MCP 接口：创建 / 转换 / 打开 / 导出（现含表协作等扩展） | ✅ |

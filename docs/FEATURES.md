@@ -1,6 +1,6 @@
 # 🎯 graphmcp：一份图（和表），任意格式进出
 
-> latest update: v0.2.5-beta, 2026-07-16  
+> latest update: v0.2.6-beta, 2026-07-16  
 > 能力口径以 [`openapi.yaml`](api_reference/openapi.yaml)（由 `toolList()` 生成）与当前源码为准。
 
 不管你手上是 Mermaid、Markdown、CSV、XML、Excalidraw 还是 draw.io，丢给 graphmcp，它都能读懂；不管你要 SVG、PNG、PDF、drawio 还是 Excalidraw，它都能吐给你。中间那道「先转 A 再转 B」的手工活，从此不用你自己干。**Graph 模型与 Table 模型地位相同**：各自独立存取版本，再通过桥接工具协作。
@@ -95,6 +95,8 @@ Mermaid、Markdown 大纲、**图用** CSV（边表/层级表）、图 XML、Exc
 ### 📐 排版不用自己摆
 
 `layout auto` 按图类型选策略：分层 / 树水平 / 树垂直 / 网格。MCP：`graph_layout`。
+
+**v0.2.6**：分层布局已增强——层平衡、barycenter 交叉最小化、waypoint 折线路由与边标签定位；复杂图观感尚不完善，仍可按需 `--force` 重排或手动微调后再导出。
 
 <img src="images/cli-layout.svg" alt="四种自动布局策略" width="100%">
 
@@ -210,7 +212,7 @@ make docs-api    # 或 graphmcp dump-tools --format openapi -o docs/api_referenc
 |----|------|
 | 语言 / 产物 | C++17，单可执行文件，零第三方依赖（JSON/XML/Base64 内置） |
 | 入口 | CLI 15 命令族 + `serve`；Windows 可静态链接运行时，利于 MCP 裁剪 PATH |
-| 版本演进 | v0.1.0 → v0.2.0 → v0.2.2 → v0.2.3-beta → v0.2.4-beta → v0.2.5-beta（5 次迭代） |
+| 版本演进 | v0.1.0 → … → v0.2.5-beta → v0.2.6-beta（布局增强，尚不完善；6 次迭代） |
 | 契约 | OpenAPI 3.0 由 `dump-tools` 生成，CI 防漂移；升版本用 Actions `Bump version` 写回（不自动打 tag） |
 | 性能 | 微基准套件 18 指标；CI `bench-ci` 仅比对，按需 Actions `Update bench baseline` 写回 |
 | CD | 推送 `v*` tag 触发多平台 Release（Windows/Linux/macOS）；或 CD `workflow_dispatch` 试运行 |

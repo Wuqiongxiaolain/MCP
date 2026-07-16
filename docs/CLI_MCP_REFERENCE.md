@@ -1,6 +1,6 @@
 # CLI & MCP 指令参考
 
-> latest update: v0.2.5-beta, 2026-07-16
+> latest update: v0.2.6-beta, 2026-07-16
 
 > 命令行与 MCP 工具速查（版本以根目录 VERSION 为准）  
 > 操作教程与场景说明见 [USER_GUIDE.md](USER_GUIDE.md)。  
@@ -104,7 +104,7 @@
 | 子命令 | 说明 | 常用选项 |
 |--------|------|----------|
 | `auto` | 自动选择策略（按图类型：mindmap→tree-h，orgchart→tree-v，有边→layered，无边→grid） | `--id`、`--save`（保存为新版本） |
-| `layered` | 分层布局（Kahn 拓扑排序 + 环兜底） | `--force`（已布局图强制重排） |
+| `layered` | 分层布局（Kahn + 环兜底；v0.2.6：层平衡 / barycenter 减交叉 / waypoint 折线路由，尚不完善） | `--force`（已布局图强制重排） |
 | `tree-h` | 水平树（脑图） | |
 | `tree-v` | 垂直树（组织图） | |
 | `grid` | 网格（无边兜底） | |
@@ -264,7 +264,7 @@
 | `graph_update` | 更新节点/边属性 | `id`, `set` | `node`、`edge`、`selector`（6 种选择方式） |
 | `graph_insert` | 插入节点/边 | `id`, `element` | `node` / `edge`（element=node\|edge）、`label`、`shape`、`from`/`to`、`parent`、`fillColor`/`strokeColor`、`x`/`y`/`w`/`h` |
 | `graph_delete_element` | 删除节点/边 | `id` | `node`、`edge`、`selector` |
-| `graph_layout` | 自动布局 | `id` | `strategy`（auto\|layered\|tree-h\|tree-v\|grid）、`force` |
+| `graph_layout` | 自动布局（v0.2.6 `layered`：层平衡/减交叉/waypoint，尚不完善） | `id` | `strategy`（auto\|layered\|tree-h\|tree-v\|grid）、`force`、`save` |
 
 **颜色字段约定：**
 

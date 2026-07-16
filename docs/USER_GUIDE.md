@@ -1,6 +1,6 @@
 # graphmcp 用户手册
 
-> latest update: v0.2.5-beta, 2026-07-16
+> latest update: v0.2.6-beta, 2026-07-16
 
 > 用户手册  
 > 命令与参数速查：[CLI & MCP 指令参考](CLI_MCP_REFERENCE.md)  
@@ -276,7 +276,7 @@ graphmcp import --id g7abc --content "flowchart TD\nX-->Y" --format mermaid
 | 子命令 | 布局策略 | 适用场景 |
 |--------|---------|---------|
 | `layout auto` | 自动选择 | 通用 |
-| `layout layered` | Kahn 分层 | 流程图/架构图 |
+| `layout layered` | Kahn 分层 + v0.2.6 增强（层平衡 / 减交叉 / 折线路由，尚不完善） | 流程图/架构图 |
 | `layout tree-h` | 横向树 | 脑图 |
 | `layout tree-v` | 纵向树 | 组织图 |
 | `layout grid` | 网格 | 无结构图 |
@@ -290,6 +290,8 @@ graphmcp import --id g7abc --content "flowchart TD\nX-->Y" --format mermaid
 graphmcp layout auto --id g7abc --save
 graphmcp layout layered --id g7abc
 ```
+
+> **说明（v0.2.6）**：`layered` 会尽量减少边交叉并用 waypoint 画折线，但复杂图仍可能观感不佳；可用 `--force` 重排，或导出后在外部编辑器微调。
 
 ---
 

@@ -1,10 +1,10 @@
 # graphmcp 开发过程
 
-> latest update: v0.2.5-beta, 2026-07-16
+> latest update: v0.2.6-beta, 2026-07-16
 
 > 本文档依据仓库提交记录事后整理，按日期还原实际演进，**不是**开发当日的实时日记。  
 > 已并入原 `WORKLOG.md` / `CHANGELOG.md` / `DEV_LOG.md`。  
-> **P1–P6**（至 2026-07-10）为初版收口叙事；**P7 起**（自 `c6e8009` / 2026-07-11 起）为扩展期，与 [PROJECT_TIMELINE.md](PROJECT_TIMELINE.md)、[PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) 对齐。
+> **P1–P6**（至 2026-07-10）为初版收口叙事；**P7 起**（自 `c6e8009` / 2026-07-11 起）为扩展期，与 [PROJECT_TIMELINE.md](PROJECT_TIMELINE.md)、[PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) 对齐；**P13** 为 v0.2.6 布局增强。
 
 > 口径说明：文中「当日」数字为历史值。**当前能力**以 `src/main.cpp` / `src/mcp.hpp::toolList()` / OpenAPI 为准（15 个 CLI 命令族、**47** 个 MCP 工具）。
 
@@ -23,8 +23,8 @@
 | **07-11** | **~4+** | **P7**：macOS 头文件 + 恢复 CD 矩阵（`c6e8009`）；edit/import 改进；Mermaid 全类型支持起步 |
 | **07-13** | **~44** | **P8–P10 高峰**：OpenAPI/`dump-tools`；Table 全链路；Mermaid 深解析与表 XML |
 | **07-14** | **~45** | **P9–P10 收口**：颜色全链路/BOM/`[*]` 校验；Benchmark CI 套件；CI 策略重构（基线仅比对、workflow_dispatch）；v0.2.2 / v0.2.3-beta；drawio 多图层/多页起步 |
-| **07-15** | **~30** | **P11**：MCP 性能重构（存储一致性/写放大/跨平台回归）；drawio 兼容合入（形状/图层/页/边标签）；Jenkins 本地 DevOps 链（Docker/Ansible）；v0.2.4-beta |
-| **07-16** | **~8** | **P12**：Ansible Runner 替代 Semaphore；Docker 固化；Jenkins→Ansible→nginx 发布链；v0.2.5-beta |
+| **07-15** | **~30** | **P11**：MCP 性能重构（存储一致性/写放大/跨平台回归）；drawio 兼容合入（形状/图层/页/边标签）；Jenkins 本地 DevOps 链（Docker/Ansible）；v0.2.4-beta；**P13 起步**：分层布局增强（层平衡/减交叉/waypoint） |
+| **07-16** | **~12** | **P12**：Ansible Runner 替代 Semaphore；Docker 固化；Jenkins→Ansible→nginx 发布链；v0.2.5-beta；**P13**：布局增强合入（PR #78）+ v0.2.6-beta |
 
 主要作者（按提交量）：`wldxiaobai`、`wyQuQ`、`kliang`、`yifengsun`（另有少量合并账号与 `copilot-swe-agent`）。
 
@@ -377,6 +377,31 @@
 
 ---
 
+## 2026-07-15～16 — 分层布局增强（P13 / v0.2.6-beta）
+
+布局引擎在基础 Kahn / 树 / 网格之上增强分层策略（`feature/layout-crossing-minimization`，PR #78），并发布 **v0.2.6-beta**。能力已可用，但复杂图观感仍不完善。
+
+| 代表提交 | 说明 |
+|----------|------|
+| `26eaa00` | `feat(layout): layer balancing, enhanced crossing minimization, and waypoint-based edge routing` |
+| `8c22255` | `feat(layout): compute edge label position from longest waypoint segment` |
+| `0eaf4df` | `fix(layout): sync edge waypoints and labels with node position normalization` |
+| `2f77df1` | `Merge pull request #78`（布局增强合入 main） |
+| `a9c9175` | `chore(release): bump version to v0.2.6-beta` |
+
+### 变更摘要
+
+| 类别 | 内容 |
+|------|------|
+| **新增** | 分层布局：层平衡（限制单层节点数并下沉超额节点）；barycenter 启发式交叉最小化（上下扫 + 局部交换）；长边虚拟节点 → `Edge.waypoints` 折线路由；边标签按最长折线段落中定位 |
+| **修复** | 节点坐标归一化（dx/dy）时同步平移 waypoints 与 `labelX`/`labelY`，避免折线落入负坐标 |
+| **导出** | SVG 等路径可消费 waypoints 做折线边 |
+| **边界** | 尚不完善：密集交叉、特殊图类型间距与整体观感仍需继续打磨 |
+
+**过程特征**：布局从「能排开」走向「可减交叉 + 折线路由」；与导出侧 waypoint 消费联动，但未宣称达到生产级美观。
+
+---
+
 ## 从提交可见的演进结果
 
 ### 历史快照（截至 2026-07-10）
@@ -399,6 +424,7 @@
 | Mermaid | 19 种深解析 + 颜色全链路（`classDef`/`linkStyle`/BOM）；坏样例硬/软失败语义明确 |
 | 通用表 | TableStore + CSV/表 XML + 图↔表协同增强（rules/check/fix/derive/transform/sample/propose） |
 | Drawio | 多图层/多页/形状扩展/边标签定位 |
+| 布局 | 分层增强（层平衡 / barycenter 减交叉 / waypoint 折线路由，v0.2.6，尚不完善） |
 | 性能 | 微基准套件（18 指标）+ MCP 热路径优化（写放大/存储一致性/超时语义）+ CI 性能回归检测 |
 | CI/CD | GitHub Actions（构建/单测/冒烟/bench/OpenAPI 校验）+ 本地 Jenkins DevOps + Ansible 发布到 nginx |
 | CD | **含 macOS** 构建矩阵（已恢复） |

@@ -60,7 +60,7 @@ make docs-api
 
 ### 版本 / 基线 / 发布（GitHub Actions + Jenkins）
 
-- **日常 CI**：只比对 OpenAPI 与性能基线，**不会**自动改仓库 tip。
+- **日常 CI**：借助GitHub服务器的Github Acitons用于快速验证、快捷落地、敏捷迭代；部署于本地Docker镜像的Jenkins+Ansible用于最终验证、独立部署。
 - **刷新性能基线**：Actions → `Update bench baseline`（`workflow_dispatch`，须勾选确认）。
 - **写回 VERSION + OpenAPI**：Actions → `Bump version`（传入完整版本号并确认；**不**自动打 tag）。
 - **发布制品**：推送 `v*` tag 触发多平台 CD Release（Windows/Linux/macOS）。

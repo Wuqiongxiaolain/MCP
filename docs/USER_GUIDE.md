@@ -2,19 +2,19 @@
 
 > latest update: v0.2.5-beta, 2026-07-16
 
-> 用户手册（版本以根目录 VERSION 为准）  
-> 命令与参数速查（表格）：[CLI & MCP 指令参考](CLI_MCP_REFERENCE.md)  
+> 用户手册  
+> 命令与参数速查：[CLI & MCP 指令参考](CLI_MCP_REFERENCE.md)  
 > 应用运作原理：[APPLICATION_LOGIC.md](APPLICATION_LOGIC.md)
 
 ## 这是什么？
 
 **graphmcp** 是一个图形设计与绘图命令行工具。你只需要用文字描述图的结构，它就能自动生成流程图、架构图、ER 图、组织架构图、思维导图、白板草图，并导出为 Drawio、SVG、PNG、PDF 等格式。**通用表（CSV/XML）作为并列一等公民**，支持规则校验、枚举修复、派生等协作能力。
 
-**一句话：用文字描述图（和表）→ 自动生成可编辑的图形文件（和校验过的数据表）。**
+**一句话：用文字描述图→ 自动生成可编辑的图形文件。**
 
 ---
 
-## 安装（零依赖，一条命令）
+## 安装
 
 ```bash
 # 编译
@@ -33,7 +33,7 @@ export GRAPHMCP_STORE=/home/me/my-graphs
 
 ---
 
-## 快速入门（5 分钟）
+## 快速入门
 
 ### 第一步：从文字创建一张图
 
@@ -90,7 +90,7 @@ graphmcp export to-url --id g7abc
 graphmcp <命令族> <子命令> [参数...]
 ```
 
-共 **15 个命令族**（含 `table`、`dump-tools` 与 `import` 编辑回导）。以下按族逐一说明。
+共 **15 个命令族**（只支持6种类型的解析）。以下按族逐一说明。
 
 ---
 

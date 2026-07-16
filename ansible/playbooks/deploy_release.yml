@@ -65,7 +65,7 @@
           </head>
           <body>
             <h1>graphmcp downloads</h1>
-            <p>Built by Jenkins CI/CD, published by Ansible (Semaphore).</p>
+            <p>Built by Jenkins CI/CD, published by Ansible.</p>
             <h2>Artifacts</h2>
             <ul>
           {% for f in packages.files | sort(attribute='mtime', reverse=true) %}

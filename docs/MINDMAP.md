@@ -1,6 +1,6 @@
 # graphmcp 项目思维导图
 
-> latest update: v0.1.1, 2026-07-10
+> latest update: v0.2.6-beta, 2026-07-16
 
 > 本文件同时是本工具的合法输入：
 > `graphmcp create --input docs/MINDMAP.md --name 项目思维导图`
@@ -39,6 +39,7 @@ mindmap
       处理层
         规则校验 重复ID/悬空边/层级环
         分层布局 Kahn拓扑
+        v0.2.6 层平衡/barycenter减交叉/waypoint折线（尚不完善）
         树布局 脑图/组织图
         分组容器包围盒
       导出层 exporters

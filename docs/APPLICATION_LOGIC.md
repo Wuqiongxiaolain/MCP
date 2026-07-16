@@ -1,6 +1,6 @@
 # graphmcp 应用运作逻辑详解
 
-> latest update: v0.2.5-beta, 2026-07-16
+> latest update: v0.2.6-beta, 2026-07-16
 
 > 应用运作逻辑说明（版本以根目录 VERSION 为准）  
 > 下文已对照当前源码核对（`model.hpp` / `table_model.hpp` / `storage.hpp` / `table_storage.hpp` / `table_bridge.hpp` / `table_xml.hpp` / `csv_util.hpp` / `mcp.hpp` / `mcp_table_tools.hpp` / `main.cpp` / `version_manager.hpp` / `version_types.hpp` / `exporters.hpp` / `parsers.hpp` / `layout.hpp`）。
@@ -374,7 +374,7 @@ Draft 基于操作序列（非快照）：存储 `OpType` 11 种操作（含 `ME
 | JSON | `json.hpp` | 递归下降解析；**对象键保持插入顺序** |
 | 图解析 | `parsers.hpp` | 多格式 → Graph；`ParseError` |
 | 图模型 | `model.hpp` | Graph / Node / Edge（含颜色与 `properties`） |
-| 布局+校验 | `layout.hpp` | 图校验与布局（Kahn + 环兜底、tree/grid、group 包围盒；状态图允许 `[*]`） |
+| 布局+校验 | `layout.hpp` | 图校验与布局（Kahn + 环兜底、tree/grid、group 包围盒；状态图允许 `[*]`）；v0.2.6：层平衡、barycenter 减交叉、waypoint 折线路由与边标签定位（尚不完善） |
 | 图导出 | `exporters.hpp` | 多格式导出、栅格化、编辑器调起 |
 | 图存储 | `storage.hpp` | index / latest / versions / Draft 相关文件 |
 | 图版本 | `version_manager.hpp` | Draft/Stage/Commit、checkout、游标路径 |
@@ -425,7 +425,7 @@ Draft 基于操作序列（非快照）：存储 `OpType` 11 种操作（含 `ME
 |------|----------|
 | Mermaid 支持 19 种子类型 | `parseMermaid*` 深解析（含 sankey/kanban/gitGraph/journey/timeline/quadrantChart/xychart/block/packet/architecture）；其余可 `rawMermaid` 或报错；结构化扩展进 `properties` |
 | ER 基数不建模为箭头类型 | `addEdge(..., "none")`，标签保留 |
-| 布局 | Kahn + 环兜底；group 包围盒；`tree-h` / `tree-v` / `grid` / `auto`（`layered` 别名）；state 允许 `[*]`；`rawMermaid` 图标记已布局不处理 |
+| 布局 | Kahn + 环兜底；group 包围盒；`tree-h` / `tree-v` / `grid` / `auto`（`layered` 别名）；state 允许 `[*]`；`rawMermaid` 图标记已布局不处理；**v0.2.6** 分层另含层平衡、barycenter 减交叉、`Edge.waypoints` 折线路由与边标签定位（复杂图观感尚不完善） |
 | PNG/PDF | 依赖本机转换器或浏览器（inkscape→rsvg-convert→magick→Chrome/Edge headless）；无则 SVG 回退；Mermaid 可直接经 headless 浏览器渲染 |
 | 多图层/多页 | draw.io 往返保留；其他导出格式可能有损（如 Mermaid 不支持图层） |
 | 图↔表桥接有损 | `table_bridge.hpp`；不保证往返幂等 |

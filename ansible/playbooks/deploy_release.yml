@@ -54,24 +54,23 @@
         mode: "0644"
         content: |
           <!DOCTYPE html>
-          <html lang="zh-CN">
+          <html lang="en">
           <head>
             <meta charset="utf-8" />
-            <title>graphmcp 下载站</title>
+            <title>graphmcp downloads</title>
             <style>
               body { font-family: sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
-              code { background: #f4f4f4; padding: 0.1rem 0.3rem; }
               li { margin: 0.4rem 0; }
             </style>
           </head>
           <body>
-            <h1>graphmcp 下载站</h1>
-            <p>由 Jenkins CI/CD 构建，经 Ansible（Semaphore）发布。</p>
-            <h2>可用制品</h2>
+            <h1>graphmcp downloads</h1>
+            <p>Built by Jenkins CI/CD, published by Ansible (Semaphore).</p>
+            <h2>Artifacts</h2>
             <ul>
           {% for f in packages.files | sort(attribute='mtime', reverse=true) %}
               <li><a href="/{{ f.path | basename }}">{{ f.path | basename }}</a>
-                （{{ (f.size / 1024) | round(1) }} KB）</li>
+                ({{ (f.size / 1024) | round(1) }} KB)</li>
           {% endfor %}
             </ul>
           </body>

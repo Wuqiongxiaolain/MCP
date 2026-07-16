@@ -10,6 +10,12 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#    include <process.h>
+#else
+#    include <unistd.h>
+#endif
+
 namespace gm {
 
 using gj::Json;
@@ -419,11 +425,17 @@ inline bool startsWith(const std::string& s, const std::string& p)
 inline std::string genId(const std::string& prefix = "g")
 {
     static const char* al = "0123456789abcdefghijklmnopqrstuvwxyz";
-    // 线程安全的随机引擎，以 time + rd 混合播种
-    static std::mt19937 rng([]() {
+    // 进程内随机引擎（跨进程靠 pid 区分，避免同秒碰撞）
+    static std::mt19937                       rng([]() {
         std::random_device rd;
-        unsigned seed = (unsigned)time(nullptr);
-        for (int i = 0; i < 4; i++) seed ^= (unsigned)rd() << (i * 8);
+        unsigned           seed = (unsigned)time(nullptr);
+        for (int i = 0; i < 4; i++)
+            seed ^= (unsigned)rd() << (i * 8);
+#ifdef _WIN32
+        seed ^= (unsigned)_getpid();
+#else
+        seed ^= (unsigned)getpid();
+#endif
         return seed;
     }());
     static std::uniform_int_distribution<int> dist(0, 35);
@@ -434,8 +446,18 @@ inline std::string genId(const std::string& prefix = "g")
         v /= 36;
     }
     std::reverse(s.begin(), s.end());
-    s += al[dist(rng)];
-    s += al[dist(rng)];
+#ifdef _WIN32
+    unsigned long pid = (unsigned long)_getpid();
+#else
+    unsigned long pid = (unsigned long)getpid();
+#endif
+    // 编码 pid（缩短）+ 更多随机尾缀，降低多进程同秒碰撞
+    while (pid) {
+        s += al[pid % 36];
+        pid /= 36;
+    }
+    for (int i = 0; i < 4; i++)
+        s += al[dist(rng)];
     return prefix + s;
 }
 

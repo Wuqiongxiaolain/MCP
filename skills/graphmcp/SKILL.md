@@ -1,0 +1,31 @@
+---
+name: graphmcp
+description: >-
+  Optional host-side guidance for graphmcp MCP diagram tools. Use when editing
+  versioned graphs via graph_create/graph_apply/graph_export. Installing this
+  Skill does not install the MCP server; the server ships as graphmcp[.exe].
+---
+
+# graphmcp（可选增益 Skill）
+
+本 Skill **不是**产品正确性依赖。防误用黄金路径已写入 MCP `tools/list`（随 exe 发布）。
+仅在 Cursor 等支持 Skill 的宿主中额外安装后生效；Claude Desktop 等只配 exe 的环境不会加载本文件。
+
+## 黄金路径
+
+1. 首次入库：`graph_create`（不要用 `graph_import`）
+2. 查 id：`graph_show`
+3. 多点修改并提交：一次 `graph_apply`（ops + message）；或 `graph_update`/`graph_insert` 后 `graph_commit` 且 **`all=true`**
+4. 导出：`graph_export`（或 `graph_apply` 的 `export_to`）
+
+## 禁止项
+
+- 不要用 `graph_cursor_*` 做「改几点」
+- 不要空 stage 后 `graph_commit`（不加 `all=true`）
+- 不要默认 `graph_layout` 却期望落盘（必须 `save=true`）
+- 大导出用 `path=` / `export_path=`，勿把整图 model 灌进对话
+
+## 安装说明
+
+将本目录复制到宿主 Skill 搜索路径，或从 Release 中的 `skills/graphmcp/` 解压安装。
+**安装 MCP ≠ 安装本 Skill。**

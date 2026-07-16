@@ -6,7 +6,7 @@
 > 已并入原 `WORKLOG.md` / `CHANGELOG.md` / `DEV_LOG.md`。  
 > **P1–P6**（至 2026-07-10）为初版收口叙事；**P7 起**（自 `c6e8009` / 2026-07-11 起）为扩展期，与 [PROJECT_TIMELINE.md](PROJECT_TIMELINE.md)、[PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) 对齐。
 
-> 口径说明：文中「当日」数字为历史值。**当前能力**以 `src/main.cpp` / `src/mcp.hpp::toolList()` / OpenAPI 为准（15 个 CLI 命令族、**46** 个 MCP 工具）。
+> 口径说明：文中「当日」数字为历史值。**当前能力**以 `src/main.cpp` / `src/mcp.hpp::toolList()` / OpenAPI 为准（15 个 CLI 命令族、**47** 个 MCP 工具）。
 
 ---
 
@@ -394,7 +394,7 @@
 
 | 指标 | 当前值 |
 |------|--------|
-| MCP 工具 | **46**（图 + 表 + property；以 `toolList()`/OpenAPI 为准） |
+| MCP 工具 | **47**（图 + 表 + property；以 `toolList()`/OpenAPI 为准） |
 | CLI 命令族 | **15**（含 `table` / `dump-tools` / `import`） |
 | Mermaid | 19 种深解析 + 颜色全链路（`classDef`/`linkStyle`/BOM）；坏样例硬/软失败语义明确 |
 | 通用表 | TableStore + CSV/表 XML + 图↔表协同增强（rules/check/fix/derive/transform/sample/propose） |

@@ -1,0 +1,14 @@
+# 通过 Docker API 管理同机容器（控制节点需挂载 docker.sock）
+# 实际任务使用 localhost + community.docker，本清单保留 jenkins 元数据供变量引用
+all:
+  hosts:
+    localhost:
+      ansible_connection: local
+      ansible_python_interpreter: auto_silent
+  vars:
+    jenkins_container_name: jenkins
+    # 写入 Jenkins 家目录的示例标记文件（数据卷持久）
+    jenkins_marker_path: /var/jenkins_home/managed-by-ansible.txt
+    # CD 制品共享目录（宿主机 D:/Schoolworks/Coding/DevOps/artifacts）
+    artifacts_dir: /artifacts
+    nginx_container_name: download-server

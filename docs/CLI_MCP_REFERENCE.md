@@ -228,7 +228,7 @@
 
 ---
 
-## 三、MCP 工具（46 个）
+## 三、MCP 工具（47 个）
 
 参数与 CLI 对应；通过 `tools/call` 调用。完整 schema 以 `toolList()` → OpenAPI 为准，以下为速查。
 

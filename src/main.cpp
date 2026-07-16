@@ -252,6 +252,10 @@ bool handleLegacyCommand(const std::string& command, Args& a, gs::Store& store)
         }
         gl::layout(g);
         int v = store.save(g, a.get("note", "created via CLI"));
+        if (v < 0) {
+            std::cerr << "error: failed to save graph (store lock, index, or IO)\n";
+            exit(5);
+        }
         std::cout << "created graph '" << g.name << "' id=" << g.id << " v" << v
                   << " (" << g.nodes.size() << " nodes, " << g.edges.size()
                   << " edges, type=" << g.type << ")\n";
@@ -477,6 +481,10 @@ int cmdCreate(Args& a, gs::Store& store)
         gl::layout(g);
 
     int v = store.save(g, a.get("note", "created via CLI"));
+    if (v < 0) {
+        std::cerr << "error: failed to save graph (store lock, index, or IO)\n";
+        return 5;
+    }
     std::cout << "created graph '" << g.name << "' id=" << g.id << " v" << v
               << " (" << g.nodes.size() << " nodes, " << g.edges.size()
               << " edges, type=" << g.type << ")\n";
@@ -667,6 +675,10 @@ int cmdImport(Args& a, gs::Store& store)
     gl::layout(imported);
     int v =
         store.save(imported, a.get("note", "re-imported after external edit"));
+    if (v < 0) {
+        std::cerr << "error: failed to save imported graph\n";
+        return 5;
+    }
     std::cout << "imported '" << imported.name << "' id=" << imported.id << " v"
               << v << " (" << imported.nodes.size() << " nodes, "
               << imported.edges.size() << " edges)\n";
@@ -701,6 +713,10 @@ int cmdLayout(Args& a, gs::Store& store)
 
     if (a.has("save")) {
         int v = store.save(g, "layout updated");
+        if (v < 0) {
+            std::cerr << "error: failed to save layout\n";
+            return 5;
+        }
         std::cout << "layout applied and saved as v" << v << "\n";
     }
     else {
@@ -830,18 +846,14 @@ int cmdStore(Args& a, gs::Store& store)
                       << "use --force to confirm deletion.\n";
             return 1;
         }
-        // 删除存储目录
-        std::string dir = store.root() + "/" + id;
-        ge::removeDirectory(dir);
-        // 更新 index
-        Json idx       = store.loadIndex();
-        Json newGraphs = Json::arr();
-        for (auto& e : *idx["graphs"].a) {
-            if (e.str("id") != id)
-                newGraphs.push(e);
+        // Store 内部持锁完成目录与 index 删除。
+        std::string ierr;
+        if (!store.removeGraphFromIndex(id, &ierr)) {
+            std::cerr << "error: "
+                      << (ierr.empty() ? "failed to update index" : ierr)
+                      << "\n";
+            return 1;
         }
-        idx.set("graphs", newGraphs);
-        ge::writeFile(store.root() + "/index.json", idx.dump(2));
         std::cout << "deleted graph: " << id << "\n";
         return 0;
     }
@@ -1149,6 +1161,10 @@ int cmdTable(Args& a, gs::Store& store)
         if (a.has("name"))
             g.name = a.get("name");
         int v = store.save(g, "from table");
+        if (v < 0) {
+            std::cerr << "error: failed to save graph from table\n";
+            return 5;
+        }
         std::cout << "graph " << g.id << " v" << v
                   << " nodes=" << g.nodes.size() << " edges=" << g.edges.size()
                   << "\n";

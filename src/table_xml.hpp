@@ -336,7 +336,7 @@ inline std::string exportTableText(const Table& t, const std::string& to)
     if (fmt == "csv")
         return t.toCsv();
     if (fmt == "model" || fmt == "json")
-        return t.toJson().dump(2);
+        return t.toJson().dump();
     if (fmt == "xml")
         return toXml(t);
     throw TableError("unsupported table export format: " + to +

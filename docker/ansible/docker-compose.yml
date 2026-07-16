@@ -1,0 +1,21 @@
+# Ansible 运行容器：供 Jenkins 经 docker.sock 执行 playbook
+# 用法（在仓库根目录）：
+#   docker compose -f docker/ansible/docker-compose.yml up -d --build
+
+services:
+  ansible-runner:
+    build: .
+    image: mcp-ansible-runner:local
+    container_name: ansible-runner
+    restart: unless-stopped
+    networks:
+      - devops-net
+    volumes:
+      - D:/Schoolworks/Coding/DevOps/MCP-:/ansible-projects/MCP-:ro
+      - D:/Schoolworks/Coding/DevOps/artifacts:/artifacts
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: ["sleep", "infinity"]
+
+networks:
+  devops-net:
+    external: true

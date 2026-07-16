@@ -313,6 +313,69 @@ static void testVersionManagerLifecycle()
     rmtree(storeDir);
 }
 
+// ─── Test: inflight commit 崩溃恢复，防止已入库 ops 重复回放 ───
+static void testInflightCommitHeal()
+{
+    std::string storeDir = "test-inflight-heal-store";
+    rmtree(storeDir);
+    {
+        GraphVersionManager vm(storeDir);
+        Graph               g;
+        g.id = "ih1";
+        g.ensureNode("A", "Alpha");
+        int v1 = vm.store().save(g, "base");
+        CHECK(v1 == 1);
+
+        Draft draft = vm.loadDraft("ih1");
+        Operation op;
+        op.type       = OpType::NODE_INSERT;
+        op.targetId   = "B";
+        op.targetType = "node";
+        Json snap     = Json::obj();
+        snap.set("id", "B");
+        snap.set("label", "Beta");
+        snap.set("shape", "rect");
+        snap.set("x", 0.0);
+        snap.set("y", 0.0);
+        snap.set("w", 100.0);
+        snap.set("h", 44.0);
+        op.snapshot  = snap;
+        op.timestamp = gv::nowIso();
+        draft.operations.push_back(op);
+        draft.baseVersion = 1;
+        vm.saveDraft("ih1", draft);
+        vm.stageAll("ih1");
+
+        // 模拟：版本已写入但 draft 仍带 inflight（裁剪前崩溃）
+        Graph rebuilt = draft.materialize(g);
+        rebuilt.id    = "ih1";
+        rebuilt.name  = "ih1";
+        std::string cid = "healcid01";
+        int         v2  = vm.store().save(rebuilt, "inflight-test", 1, cid);
+        CHECK(v2 == 2);
+
+        draft.inflightCommitId = cid;
+        draft.inflightStagedIndices = {0};
+        // 仍保留已提交的 insert ops（崩溃窗口）
+        vm.saveDraft("ih1", draft);
+
+        Draft healed = vm.loadDraft("ih1");
+        CHECK(healed.inflightCommitId.empty());
+        CHECK(healed.isEmpty());
+        CHECK(healed.baseVersion == 2);
+
+        // 再次 commitAll 不应再插入 B
+        Graph latest = vm.loadLatest("ih1");
+        CHECK(latest.findNode("B") != nullptr);
+        int beforeNodes = (int)latest.nodes.size();
+        int nv = vm.commitAll("ih1", "should-noop");
+        CHECK(nv == -1);
+        latest = vm.loadLatest("ih1");
+        CHECK((int)latest.nodes.size() == beforeNodes);
+    }
+    rmtree(storeDir);
+}
+
 // ─── Test 6: resetDraft ──────────────────────────────────────
 static void testResetDraft()
 {
@@ -416,6 +479,7 @@ int main()
     testCommitFromStorageSnap();
     testCommitRebuild();
     testVersionManagerLifecycle();
+    testInflightCommitHeal();
     testResetDraft();
     testSelectorParse();
     testFieldAccess();

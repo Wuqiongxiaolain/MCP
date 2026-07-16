@@ -51,7 +51,7 @@
 | 导出 draw.io / Mermaid / Excalidraw / PNG / SVG / PDF / URL / model | ✅ | `exporters.hpp` 统一分发；PNG/PDF 走外部转换链，失败回退 SVG |
 | 图版本保存 / 草稿暂存提交 / 回溯 | ✅ | Draft→Stage→Commit；`checkout` 移 HEAD；`rollback` 另存新版本 |
 | 游标遍历与细粒度改图 | ✅ | `cursor_*` + `graph_update`/`insert`/`delete_element`/`graph_property` |
-| MCP 接口（创建 / 转换 / 打开 / 导出及扩展） | ✅ | **46** 个工具（`toolList()` / OpenAPI）；另有 CLI **15** 命令族 + `dump-tools` |
+| MCP 接口（创建 / 转换 / 打开 / 导出及扩展） | ✅ | **47** 个工具（`toolList()` / OpenAPI）；另有 CLI **15** 命令族 + `dump-tools` |
 | **通用表格 + 图↔表协作**（07-10 后扩展） | ✅ | `table_*` / `graph_from_table`：CSV 与表 XML、规则校验修复、派生与样例提案行 |
 | **Drawio 多图层/多页/形状扩展**（v0.2.3） | ✅ | `parseDrawio`/`toDrawio`：layers/pages/形状/边标签定位往返 |
 | **MCP 性能优化**（v0.2.4） | ✅ | 存储一致性/写放大削减/超时语义/跨平台性能回归验证 |
@@ -91,7 +91,7 @@
 | 导出 | `exporters.hpp` | 多格式导出、栅格化回退、编辑器发现与调起 |
 | 图存储 / 版本 / 游标 | `storage.hpp`、`version_*.hpp`、`cursor_types.hpp` | 图库快照、Draft/Stage/Commit、游标持久化 |
 | 通用表 | `table_model.hpp`、`table_storage.hpp`、`table_bridge.hpp`、`table_xml.hpp`、`csv_util.hpp` | 表模型、版本存储、图↔表投影、表 XML |
-| MCP | `mcp.hpp`、`mcp_table_tools.hpp` | **46** 工具；OpenAPI 由 `dump-tools` 导出 |
+| MCP | `mcp.hpp`、`mcp_table_tools.hpp` | **47** 工具；OpenAPI 由 `dump-tools` 导出 |
 | CLI | `main.cpp` | **15** 命令族：`create`/`convert`/`export`/`edit`/`import`/`layout`/`validate`/`store`/`table`/`version`/`graph`/`cursor`/`draft`/`serve`/`dump-tools` |
 | 性能 | `tests/bench_main.cpp`、`tests/bench_baseline.json`、`scripts/bench_compare.py` | 微基准套件（18 指标）+ CI 基线比对 + 按需刷新 |
 | DevOps | `Jenkinsfile`、`ansible/`、`docker/` | 本地 Jenkins Pipeline + Docker 镜像 + Ansible Runner 发布 |

@@ -1,0 +1,92 @@
+---
+# 目的：把 /artifacts 中的 CD/CI 制品发布为可下载页（nginx download-server）
+# 原理：共享卷已挂到 nginx 的 html 目录；本 playbook 生成索引页并校验服务可用
+- name: Publish release artifacts to download-server
+  hosts: localhost
+  gather_facts: false
+  vars:
+    artifacts_dir: /artifacts
+    nginx_container_name: download-server
+    download_base_url: http://host.docker.internal:8081
+
+  tasks:
+    - name: 确认制品目录存在
+      ansible.builtin.stat:
+        path: "{{ artifacts_dir }}"
+      register: art_dir
+
+    - name: 制品目录必须存在
+      ansible.builtin.assert:
+        that:
+          - art_dir.stat.exists
+          - art_dir.stat.isdir
+        fail_msg: "共享卷 {{ artifacts_dir }} 不存在，请检查容器挂载"
+
+    - name: 列出可下载制品
+      ansible.builtin.find:
+        paths: "{{ artifacts_dir }}"
+        patterns:
+          - "graphmcp*.tar.gz"
+          - "graphmcp*.zip"
+      register: packages
+
+    - name: 至少有一个制品
+      ansible.builtin.assert:
+        that:
+          - packages.files | length > 0
+        fail_msg: "在 {{ artifacts_dir }} 未找到 graphmcp 制品，请先跑 Jenkins 打包"
+
+    - name: 确认 nginx 下载站容器在运行
+      community.docker.docker_container_info:
+        name: "{{ nginx_container_name }}"
+      register: nginx_info
+
+    - name: nginx 容器必须在跑
+      ansible.builtin.assert:
+        that:
+          - nginx_info.exists
+          - nginx_info.container.State.Running | default(false)
+        fail_msg: "容器 {{ nginx_container_name }} 未运行"
+
+    - name: 生成下载站首页 index.html
+      ansible.builtin.copy:
+        dest: "{{ artifacts_dir }}/index.html"
+        mode: "0644"
+        content: |
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <title>graphmcp downloads</title>
+            <style>
+              body { font-family: sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+              li { margin: 0.4rem 0; }
+            </style>
+          </head>
+          <body>
+            <h1>graphmcp downloads</h1>
+            <p>Built by Jenkins CI/CD, published by Ansible.</p>
+            <h2>Artifacts</h2>
+            <ul>
+          {% for f in packages.files | sort(attribute='mtime', reverse=true) %}
+              <li><a href="/{{ f.path | basename }}">{{ f.path | basename }}</a>
+                ({{ (f.size / 1024) | round(1) }} KB)</li>
+          {% endfor %}
+            </ul>
+          </body>
+          </html>
+
+    - name: 通过 Docker 网络探测下载站
+      ansible.builtin.uri:
+        url: "http://{{ nginx_container_name }}/"
+        return_content: true
+        status_code: 200
+      register: home
+      delegate_to: localhost
+
+    - name: 打印发布结果
+      ansible.builtin.debug:
+        msg:
+          - "下载站首页 OK，长度={{ home.content | length }}"
+          - "浏览器访问: {{ download_base_url }}/"
+          - "制品数: {{ packages.files | length }}"

@@ -1,0 +1,34 @@
+# 自定义 Jenkins（mcp-jenkins:local）— 依赖已写入镜像
+# 用法（在仓库根目录）：
+#   docker compose -f docker/jenkins/docker-compose.yml up -d --build
+#
+# 说明：Debian 源提供 docker.io（含客户端，用于连接宿主机 docker.sock）；
+# 不在镜像内启动 dockerd。jenkins_home 使用已有外部卷，重建不丢 Job。
+
+services:
+  jenkins:
+    build: .
+    image: mcp-jenkins:local
+    container_name: jenkins
+    restart: unless-stopped
+    networks:
+      - devops-net
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    environment:
+      JAVA_OPTS: "-Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - D:/Schoolworks/Coding/DevOps/MCP-:/workspace/MCP-:ro
+      - D:/Schoolworks/Coding/DevOps/artifacts:/artifacts
+      - /var/run/docker.sock:/var/run/docker.sock
+
+networks:
+  devops-net:
+    external: true
+
+volumes:
+  jenkins_home:
+    external: true
+    name: b6273e83a9acd4c0acd98591b9bb193109fd398ae12bebe33af9152ef1ebb2f3

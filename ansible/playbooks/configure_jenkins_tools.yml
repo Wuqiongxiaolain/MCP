@@ -1,0 +1,69 @@
+---
+# 目的：在 Jenkins 容器内写入文件并安装常用工具（不重建容器）
+# 原理：控制节点挂载 docker.sock，用 community.docker.docker_container_exec 进入 jenkins
+- name: Configure tools and files inside Jenkins container
+  hosts: localhost
+  gather_facts: false
+  vars:
+    # 可被 inventory / extra vars 覆盖
+    jenkins_container_name: jenkins
+    jenkins_marker_path: /var/jenkins_home/managed-by-ansible.txt
+
+  tasks:
+    - name: 确认 Jenkins 容器存在且在运行
+      community.docker.docker_container_info:
+        name: "{{ jenkins_container_name }}"
+      register: jenkins_info
+
+    - name: 若容器未运行则失败
+      ansible.builtin.assert:
+        that:
+          - jenkins_info.exists
+          - jenkins_info.container.State.Running | default(false)
+        fail_msg: "容器 {{ jenkins_container_name }} 不存在或未运行"
+
+    - name: 写入 Ansible 管理标记文件到 Jenkins Home
+      community.docker.docker_container_exec:
+        container: "{{ jenkins_container_name }}"
+        user: root
+        argv:
+          - bash
+          - -lc
+          - |
+            set -euo pipefail
+            cat > "{{ jenkins_marker_path }}" <<'EOF'
+            managed-by: ansible
+            purpose: jenkins-container-tools
+            EOF
+            chown jenkins:jenkins "{{ jenkins_marker_path }}"
+            ls -la "{{ jenkins_marker_path }}"
+
+    - name: 在 Jenkins 容器内安装常用工具 curl jq git
+      community.docker.docker_container_exec:
+        container: "{{ jenkins_container_name }}"
+        user: root
+        argv:
+          - bash
+          - -lc
+          - |
+            set -euo pipefail
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update
+            apt-get install -y curl jq git
+            git --version
+            curl --version | head -1
+            jq --version
+
+    - name: 读取标记文件确认写入成功
+      community.docker.docker_container_exec:
+        container: "{{ jenkins_container_name }}"
+        user: root
+        argv:
+          - bash
+          - -lc
+          - cat "{{ jenkins_marker_path }}"
+      register: marker
+
+    - name: 打印标记内容
+      ansible.builtin.debug:
+        var: marker.stdout_lines

@@ -45,6 +45,11 @@ pipeline {
       defaultValue: false,
       description: 'CD 是否构建 Windows（需 Agent 标签 windows + MSYS2）'
     )
+    booleanParam(
+      name: 'DO_DEPLOY',
+      defaultValue: true,
+      description: '构建成功后发布制品到 nginx 下载站（经 Ansible/Semaphore）'
+    )
   }
 
   environment {
@@ -179,6 +184,10 @@ pipeline {
               cp bin/graphmcp dist/
               cp README.md VERSION dist/
               tar czf "graphmcp-${BUILD_NUMBER}.tar.gz" -C dist .
+              # 写入共享卷，供 Ansible/nginx 下载站发布
+              mkdir -p /artifacts
+              cp -f "graphmcp-${BUILD_NUMBER}.tar.gz" /artifacts/
+              ls -la /artifacts/graphmcp-${BUILD_NUMBER}.tar.gz
             '''
           }
         }
@@ -260,6 +269,10 @@ pipeline {
                     cp -R skills/graphmcp dist/skills/
                   fi
                   tar czf "graphmcp-${GRAPHMCP_TAG_NAME}-linux-x64.tar.gz" -C dist .
+                  # 写入共享卷，供 Ansible/nginx 下载站发布
+                  mkdir -p /artifacts
+                  cp -f graphmcp-*-linux-x64.tar.gz /artifacts/
+                  ls -la /artifacts/graphmcp-*-linux-x64.tar.gz
                 '''
                 stash name: 'cd-linux', includes: 'graphmcp-*-linux-x64.tar.gz'
                 archiveArtifacts artifacts: 'graphmcp-*-linux-x64.tar.gz', fingerprint: true
@@ -440,6 +453,42 @@ pipeline {
             fi
           '''
         }
+      }
+    }
+
+    // -------------------- 发布：共享卷制品 → Ansible → nginx 下载站 --------------------
+    stage('Deploy download-server') {
+      when {
+        beforeAgent true
+        allOf {
+          expression { params.DO_DEPLOY == true }
+          anyOf {
+            expression { env.GRAPHMCP_PIPELINE_MODE == 'ci' }
+            expression { env.GRAPHMCP_PIPELINE_MODE == 'cd' }
+          }
+        }
+      }
+      agent { label 'linux' }
+      options { timeout(time: 10, unit: 'MINUTES') }
+      steps {
+        // 原理：Jenkins 已把 tar 写入 /artifacts；经 docker.sock 调用 Semaphore 内 ansible-playbook 生成首页并校验 nginx
+        sh '''
+          set -euo pipefail
+          echo "=== /artifacts 当前制品 ==="
+          ls -la /artifacts || true
+          if ! ls /artifacts/graphmcp*.tar.gz /artifacts/graphmcp*.zip >/dev/null 2>&1; then
+            echo "共享卷中尚无制品，跳过 Ansible 发布"
+            exit 1
+          fi
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "Jenkins 容器内无 docker 客户端，无法触发 Semaphore"
+            exit 1
+          fi
+          docker exec semaphore ansible-playbook \
+            -i /ansible-projects/MCP-/ansible/inventories/docker.yml \
+            /ansible-projects/MCP-/ansible/playbooks/deploy_release.yml
+          echo "发布完成：请访问 http://localhost:8081/"
+        '''
       }
     }
   }

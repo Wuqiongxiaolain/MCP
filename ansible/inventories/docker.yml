@@ -9,3 +9,6 @@ all:
     jenkins_container_name: jenkins
     # 写入 Jenkins 家目录的示例标记文件（数据卷持久）
     jenkins_marker_path: /var/jenkins_home/managed-by-ansible.txt
+    # CD 制品共享目录（宿主机 D:/Schoolworks/Coding/DevOps/artifacts）
+    artifacts_dir: /artifacts
+    nginx_container_name: download-server

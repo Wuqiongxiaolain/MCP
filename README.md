@@ -1,6 +1,6 @@
 # graphmcp — 图形设计与绘图 MCP 工具
 
-> latest update: v0.2.0, 2026-07-14
+> latest update: v0.2.5-beta, 2026-07-16
 
 > Gitlab 为镜像备份仓，活跃项目管理见 GitHub：https://github.com/Wuqiongxiaolain/MCP
 
@@ -14,22 +14,22 @@
 
 | 层级 | 文档 | 说明 |
 |------|------|------|
-| **项目信息** | [项目全景](docs/PROJECT_OVERVIEW.md) | 来源、目标、启动与开发流程（精简）、代码管理、下一阶段目标 |
-| **流程详情** | [时间线](docs/PROJECT_TIMELINE.md) · [开发过程](docs/DEV_PROCESS.md) | 里程碑列表；按提交还原的逐日演进与变更摘要 |
-| **功能概览** | [功能介绍](docs/FEATURES.md) | 六种图、格式进出、版本/编辑闭环、MCP 能力与技术规格 |
-| **快速开始** | [Quick Start](docs/QUICK_START.md) | 下载 exe、配置 Claude / Cursor、验证 MCP |
-| **原理说明** | [应用运作逻辑](docs/APPLICATION_LOGIC.md) | 总架构、MCP、存储、IO、统一图模型、版本管理、业务流程 |
+| **项目信息** | [项目全景](docs/PROJECT_OVERVIEW.md) | 来源、目标、启动与开发流程、代码管理、下一阶段目标 |
+| **流程详情** | [时间线](docs/PROJECT_TIMELINE.md) · [开发过程](docs/DEV_PROCESS.md) | P1–P12 里程碑列表（07-05→07-16）；按提交还原的逐日演进与变更摘要 |
+| **功能概览** | [功能介绍](docs/FEATURES.md) | 六种图、19 种 Mermaid、格式进出、颜色/图层/多页、版本/编辑闭环、MCP 与 Table 能力 |
+| **快速开始** | [Quick Start](docs/QUICK_START.md) | 下载 exe、配置 Claude Code / Desktop、验证 MCP、调试 |
+| **用户手册** | [用户手册](docs/USER_GUIDE.md) | 场景化教程、完整命令示例、输入输出格式速查、FAQ |
+| **原理说明** | [应用运作逻辑](docs/APPLICATION_LOGIC.md) | 总架构、双一等模型、存储、IO 管道、版本管理、桥接协作 |
 
 ### 附录与参考
 
 | 文档 | 说明 |
 |------|------|
-| [用户手册](docs/USER_GUIDE.md) | 场景化教程与完整命令说明 |
-| [CLI & MCP 指令参考](docs/CLI_MCP_REFERENCE.md) | 命令族与 46 个 MCP 工具速查表（以 `toolList()`/OpenAPI 为准） |
+| [CLI & MCP 指令参考](docs/CLI_MCP_REFERENCE.md) | 15 个命令族与 46 个 MCP 工具完整参数速查（以 `toolList()`/OpenAPI 为准） |
 | [OpenAPI 契约](docs/api_reference/openapi.yaml) | 由 `make docs-api` 从 `toolList()` 生成，可供 Swagger 打开 |
 | [项目思维导图](docs/MINDMAP.md) | 能力与 DevOps 全景（Mermaid / 大纲） |
 
-示例输入见 [`examples/example_input/`](examples/example_input/)，导出基准见 [`examples/README.md`](examples/README.md)。MCP 配置模板：[`mcp-config.example.json`](mcp-config.example.json)。
+示例输入见 [`examples/example_input/`](examples/example_input/)，导出基准见 [`examples/README.md`](examples/README.md)。MCP 配置模板：[`mcp-config.example.json`](mcp-config.example.json)。Skill 定义：[`skills/graphmcp/SKILL.md`](skills/graphmcp/SKILL.md)。
 
 ---
 
@@ -38,21 +38,33 @@
 ```sh
 # Windows (MinGW)
 mingw32-make all
-# 或: g++ -std=c++17 -O2 -Wall -Wextra -o bin/graphmcp.exe src/main.cpp
+# 或: g++ -std=c++17 -O2 -Wall -Wextra -static -o bin/graphmcp.exe src/main.cpp
 
-# Linux / CI
+# Linux / macOS
 make all && make test
 
 # 从 toolList() 生成 OpenAPI（改 MCP schema 后执行并提交）
 make docs-api
 ```
 
-### 版本 / 基线 / 发布（GitHub Actions）
+### 常用 make 目标
 
-- **日常 CI**：只比对 OpenAPI 与性能基线，**不会**自动改仓库 tip。
-- **刷新性能基线**：Actions → `Update bench baseline`（`workflow_dispatch`，须勾选确认；会多 1 个 `[skip ci]` commit）。
-- **写回 VERSION + OpenAPI**：Actions → `Bump version`（传入完整版本号并确认；会多 1 个 commit，**不**自动打 tag）。
-- **发布制品**：人工推送 `v*` annotated tag，触发 CD Release（或 CD 的 `workflow_dispatch` 试运行）。
+| 目标 | 说明 |
+|------|------|
+| `make all` | 编译主程序 + 测试 |
+| `make test` / `make test-all` | 单元测试（模型/版本/游标） |
+| `make bench` / `make bench-ci` | 性能基准（18 指标）/ CI 基线比对 |
+| `make smoke` / `make mcp-smoke` | 冒烟测试 / MCP 协议测试 |
+| `make table-smoke` | 表与图↔表协作冒烟 |
+| `make docs-api` | `dump-tools` → OpenAPI YAML |
+
+### 版本 / 基线 / 发布（GitHub Actions + Jenkins）
+
+- **日常 CI**：借助GitHub服务器的Github Acitons用于快速验证、快捷落地、敏捷迭代；部署于本地Docker镜像的Jenkins+Ansible用于最终验证、独立部署。
+- **刷新性能基线**：Actions → `Update bench baseline`（`workflow_dispatch`，须勾选确认）。
+- **写回 VERSION + OpenAPI**：Actions → `Bump version`（传入完整版本号并确认；**不**自动打 tag）。
+- **发布制品**：推送 `v*` tag 触发多平台 CD Release（Windows/Linux/macOS）。
+- **本地 DevOps**：Jenkins（Docker 镜像）→ Ansible Runner → nginx 下载站（见 `Jenkinsfile`、`ansible/`、`docker/`）。
 
 无第三方依赖：JSON / XML / Base64 均为内置实现。
 

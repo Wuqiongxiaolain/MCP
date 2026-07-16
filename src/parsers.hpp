@@ -74,6 +74,9 @@ namespace detail {
             if (label.size() >= 2 && label.front() == '"' &&
                 label.back() == '"')
                 label = label.substr(1, label.size() - 2);
+            // <br> / <br/> → 换行符
+            { size_t p = 0; while ((p = label.find("<br/>", p)) != std::string::npos) label.replace(p, 5, "\n"); }
+            { size_t p = 0; while ((p = label.find("<br>", p)) != std::string::npos)  label.replace(p, 4, "\n"); }
             shape = shp;
             pos   = end + closeTok.size();
             return true;

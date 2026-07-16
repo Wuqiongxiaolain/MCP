@@ -2673,6 +2673,29 @@ inline std::string toSVG(Graph g)
     os << "  <style>text{font-family:'Segoe "
           "UI',Arial,sans-serif;font-size:13px;}"
           ".lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>\n";
+    // 辅助：多行文本（含 \n 时用 <tspan> 分行）
+    auto writeText = [&](double x, double y, const std::string& cls,
+                         const std::string& text, const std::string& extra) {
+        if (text.find('\n') == std::string::npos) {
+            os << "  <text class=\"" << cls << "\" x=\"" << x << "\" y=\"" << y
+               << "\"" << extra << ">" << xmlEscape(text) << "</text>\n";
+            return;
+        }
+        os << "  <text class=\"" << cls << "\"" << extra << ">";
+        size_t pos = 0, dy = 0;
+        while (pos < text.size()) {
+            size_t nl = text.find('\n', pos);
+            std::string line = (nl == std::string::npos)
+                ? text.substr(pos) : text.substr(pos, nl - pos);
+            os << "<tspan x=\"" << x << "\"";
+            if (dy > 0) os << " dy=\"" << dy << "\"";
+            os << ">" << xmlEscape(line) << "</tspan>";
+            if (nl == std::string::npos) break;
+            pos = nl + 1;
+            dy = 16;
+        }
+        os << "</text>\n";
+    };
     // 边先绘制在底层（智能端口 + 折线绕行）
     // ---- 辅助：轴对齐智能端口（偏好最近侧出发）------------------------------
     auto smartPort = [](double cx, double cy, double w, double h,
@@ -2865,9 +2888,8 @@ inline std::string toSVG(Graph g)
                << sc("#999")
                << "\" "
                   "stroke-dasharray=\"5,4\" rx=\"6\"/>\n";
-            os << "  <text class=\"lbl\" x=\"" << n.x + 8 << "\" y=\""
-               << n.y + 18 << "\" fill=\"#777\">" << xmlEscape(n.label)
-               << "</text>\n";
+            writeText(n.x + 8, n.y + 18, "lbl", n.label,
+                      " fill=\"#777\"");
             continue;
         }
         double cx = n.x + n.w / 2, cy = n.y + n.h / 2;
@@ -2889,21 +2911,18 @@ inline std::string toSVG(Graph g)
                << fc("#eef4ff") << "\" stroke=\"" << sc("#4a72b8") << "\"/>\n";
         }
         if (n.attrs.empty()) {
-            os << "  <text class=\"lbl\" x=\"" << cx << "\" y=\"" << cy + 5
-               << "\" text-anchor=\"middle\">" << xmlEscape(n.label)
-               << "</text>\n";
+            writeText(cx, cy + 5, "lbl", n.label,
+                      " text-anchor=\"middle\"");
         }
         else {  // ER 实体（包含属性行）
-            os << "  <text class=\"lbl\" x=\"" << cx << "\" y=\"" << n.y + 20
-               << "\" text-anchor=\"middle\" font-weight=\"bold\">"
-               << xmlEscape(n.label) << "</text>\n";
+            writeText(cx, n.y + 20, "lbl", n.label,
+                      " text-anchor=\"middle\" font-weight=\"bold\"");
             os << "  <line x1=\"" << n.x << "\" y1=\"" << n.y + 28 << "\" x2=\""
                << n.x + n.w << "\" y2=\"" << n.y + 28 << "\" stroke=\""
                << sc("#4a72b8") << "\"/>\n";
             double ty = n.y + 46;
             for (auto& a : n.attrs) {
-                os << "  <text class=\"lbl\" x=\"" << n.x + 10 << "\" y=\""
-                   << ty << "\">" << xmlEscape(a) << "</text>\n";
+                writeText(n.x + 10, ty, "lbl", a, "");
                 ty += 22;
             }
         }

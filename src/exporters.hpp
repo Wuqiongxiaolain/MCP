@@ -2746,10 +2746,14 @@ inline std::string toSVG(Graph g)
                 if (!lineHitsRect(x1, y1, x2, y2, n.x, n.y, n.w, n.h))
                     continue;  // 仅擦边，不绕行
                 blocked = true;
-                // 源和目标之间的层间空隙中点，离两端至少20px
+                // safeY 放在阻挡节点与邻层之间的空隙(避开中间节点)
+                double aboveGap = n.y - 24;           // 阻挡节点上方空隙
+                double belowGap = n.y + n.h + 24;     // 阻挡节点下方空隙
                 double srcBot = a->y + a->h, dstTop = b->y;
+                // 选更靠近源目标中点的空隙
                 double gapMid = (std::max(srcBot, dstTop) + std::min(srcBot, dstTop)) / 2;
-                double safeY = gapMid;
+                double safeY = (std::abs(aboveGap - gapMid) < std::abs(belowGap - gapMid))
+                                   ? aboveGap : belowGap;
                 if (std::abs(safeY - y1) < 20) safeY = y1 + (y2 > y1 ? 20 : -20);
                 if (std::abs(safeY - y2) < 20) safeY = y2 + (y1 > y2 ? 20 : -20);
                 if (std::abs(x2 - x1) < 8) {

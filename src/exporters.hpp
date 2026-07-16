@@ -863,6 +863,39 @@ inline std::vector<std::string> splitTextLinesNonEmpty(const std::string& text)
     return lines;
 }
 
+// splitLabelLinesForSvg: 将 label 中的 <br>/<br/>/\n 拆成多行供 SVG <tspan> 渲染
+inline std::vector<std::string> splitLabelLinesForSvg(const std::string& label)
+{
+    std::vector<std::string> lines;
+    std::string              cur;
+    for (size_t i = 0; i < label.size();) {
+        if (label.compare(i, 5, "<br/>") == 0 ||
+            label.compare(i, 5, "<BR/>") == 0) {
+            lines.push_back(cur);
+            cur.clear();
+            i += 5;
+        }
+        else if (label.compare(i, 4, "<br>") == 0 ||
+                 label.compare(i, 4, "<BR>") == 0) {
+            lines.push_back(cur);
+            cur.clear();
+            i += 4;
+        }
+        else if (label[i] == '\n') {
+            lines.push_back(cur);
+            cur.clear();
+            i++;
+        }
+        else {
+            cur += label[i++];
+        }
+    }
+    lines.push_back(cur);
+    if (lines.empty())
+        lines.push_back("");
+    return lines;
+}
+
 // excalidrawFileDataUrl: 按 fileId 从 Excalidraw files 取 dataURL
 inline std::string excalidrawFileDataUrl(const Graph&       g,
                                          const std::string& fileId)
@@ -2755,30 +2788,26 @@ inline std::string toSVG(Graph g)
         std::vector<std::pair<double,double>> pts;
 
         if (la >= 0 && lb >= 0 && la != lb) {
-            // ---- 端口分配：根据目标方向选择最近出口 ----
+            // ---- 端口分配：不同层始终 bottom→top，同层 side→side ----
             double dx = b_cx - a_cx;
             double aBot = a->y + a->h, aLft = a->x, aRgt = a->x + a->w;
             double bTop = b->y, bLft = b->x, bRgt = b->x + b->w;
 
             if (!feedback) {
-                // 正向边：从 A 的底部/侧边出，从 B 的顶部/侧边入
+                // 正向边：A 在上层 → B 在下层
                 double sx, sy;  // source port (on A)
-                if (std::abs(dx) > a->w * 0.8) {
-                    sx = (dx > 0) ? aRgt : aLft;
-                    sy = a_cy;
+                double tx, ty;  // target port (on B)
+                if (la == lb) {
+                    // 同层节点：从侧边进出
+                    if (dx > 0) { sx = aRgt; tx = bLft; }
+                    else        { sx = aLft; tx = bRgt; }
+                    sy = a_cy; ty = b_cy;
                 } else {
+                    // 不同层节点：始终从 A 底部出，B 顶部入
                     sx = a_cx; sy = aBot;
-                }
-                pts.push_back({sx, sy});
-
-                // 目标端口
-                double tx, ty;
-                if (std::abs(dx) > b->w * 0.8) {
-                    tx = (dx > 0) ? bLft : bRgt;
-                    ty = b_cy;
-                } else {
                     tx = b_cx; ty = bTop;
                 }
+                pts.push_back({sx, sy});
 
                 if (!e.waypoints.empty()) {
                     // 使用布局阶段计算好的路径点（虚拟节点在各中间层的坐标）
@@ -2858,9 +2887,21 @@ inline std::string toSVG(Graph g)
             size_t nxt = std::min(mid + 1, pts.size() - 1);
             double lx = (pts[mid].first + pts[nxt].first) / 2;
             double ly = (pts[mid].second + pts[nxt].second) / 2;
-            os << "  <text class=\"elabel\" x=\"" << lx << "\" y=\""
-               << ly - 4 << "\" text-anchor=\"middle\">"
-               << xmlEscape(e.label) << "</text>\n";
+            auto   elines = splitLabelLinesForSvg(e.label);
+            if (elines.size() == 1) {
+                os << "  <text class=\"elabel\" x=\"" << lx << "\" y=\""
+                   << ly - 4 << "\" text-anchor=\"middle\">"
+                   << xmlEscape(elines[0]) << "</text>\n";
+            }
+            else {
+                double lineH = 14;
+                double sy     = ly - 4 - (elines.size() - 1) * lineH / 2;
+                os << "  <text class=\"elabel\" text-anchor=\"middle\">\n";
+                for (size_t i = 0; i < elines.size(); i++)
+                    os << "    <tspan x=\"" << lx << "\" y=\"" << sy + i * lineH
+                       << "\">" << xmlEscape(elines[i]) << "</tspan>\n";
+                os << "  </text>\n";
+            }
         }
     }
     // 再绘制节点
@@ -2878,9 +2919,21 @@ inline std::string toSVG(Graph g)
                << sc("#999")
                << "\" "
                   "stroke-dasharray=\"5,4\" rx=\"6\"/>\n";
-            os << "  <text class=\"lbl\" x=\"" << n.x + 8 << "\" y=\""
-               << n.y + 18 << "\" fill=\"#777\">" << xmlEscape(n.label)
-               << "</text>\n";
+            auto glines = splitLabelLinesForSvg(n.label);
+            if (glines.size() == 1) {
+                os << "  <text class=\"lbl\" x=\"" << n.x + 8 << "\" y=\""
+                   << n.y + 18 << "\" fill=\"#777\">" << xmlEscape(glines[0])
+                   << "</text>\n";
+            }
+            else {
+                double lineH = 16;
+                os << "  <text class=\"lbl\" fill=\"#777\">\n";
+                for (size_t i = 0; i < glines.size(); i++)
+                    os << "    <tspan x=\"" << n.x + 8 << "\" y=\""
+                       << n.y + 18 + i * lineH << "\">"
+                       << xmlEscape(glines[i]) << "</tspan>\n";
+                os << "  </text>\n";
+            }
             continue;
         }
         double cx = n.x + n.w / 2, cy = n.y + n.h / 2;
@@ -2902,14 +2955,39 @@ inline std::string toSVG(Graph g)
                << fc("#eef4ff") << "\" stroke=\"" << sc("#4a72b8") << "\"/>\n";
         }
         if (n.attrs.empty()) {
-            os << "  <text class=\"lbl\" x=\"" << cx << "\" y=\"" << cy + 5
-               << "\" text-anchor=\"middle\">" << xmlEscape(n.label)
-               << "</text>\n";
+            auto nlines = splitLabelLinesForSvg(n.label);
+            if (nlines.size() == 1) {
+                os << "  <text class=\"lbl\" x=\"" << cx << "\" y=\"" << cy + 5
+                   << "\" text-anchor=\"middle\">" << xmlEscape(nlines[0])
+                   << "</text>\n";
+            }
+            else {
+                double lineH = 16;
+                double sy     = cy + 5 - (nlines.size() - 1) * lineH / 2;
+                os << "  <text class=\"lbl\" text-anchor=\"middle\">\n";
+                for (size_t i = 0; i < nlines.size(); i++)
+                    os << "    <tspan x=\"" << cx << "\" y=\"" << sy + i * lineH
+                       << "\">" << xmlEscape(nlines[i]) << "</tspan>\n";
+                os << "  </text>\n";
+            }
         }
         else {  // ER 实体（包含属性行）
-            os << "  <text class=\"lbl\" x=\"" << cx << "\" y=\"" << n.y + 20
-               << "\" text-anchor=\"middle\" font-weight=\"bold\">"
-               << xmlEscape(n.label) << "</text>\n";
+            auto elines = splitLabelLinesForSvg(n.label);
+            if (elines.size() == 1) {
+                os << "  <text class=\"lbl\" x=\"" << cx << "\" y=\"" << n.y + 20
+                   << "\" text-anchor=\"middle\" font-weight=\"bold\">"
+                   << xmlEscape(elines[0]) << "</text>\n";
+            }
+            else {
+                double lineH = 16;
+                double sy     = n.y + 20 - (elines.size() - 1) * lineH / 2;
+                os << "  <text class=\"lbl\" text-anchor=\"middle\""
+                   << " font-weight=\"bold\">\n";
+                for (size_t i = 0; i < elines.size(); i++)
+                    os << "    <tspan x=\"" << cx << "\" y=\"" << sy + i * lineH
+                       << "\">" << xmlEscape(elines[i]) << "</tspan>\n";
+                os << "  </text>\n";
+            }
             os << "  <line x1=\"" << n.x << "\" y1=\"" << n.y + 28 << "\" x2=\""
                << n.x + n.w << "\" y2=\"" << n.y + 28 << "\" stroke=\""
                << sc("#4a72b8") << "\"/>\n";

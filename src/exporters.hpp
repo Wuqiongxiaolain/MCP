@@ -863,6 +863,39 @@ inline std::vector<std::string> splitTextLinesNonEmpty(const std::string& text)
     return lines;
 }
 
+// splitLabelLinesForSvg: 将 label 中的 <br>/<br/>/\n 拆成多行供 SVG <tspan> 渲染
+inline std::vector<std::string> splitLabelLinesForSvg(const std::string& label)
+{
+    std::vector<std::string> lines;
+    std::string              cur;
+    for (size_t i = 0; i < label.size();) {
+        if (label.compare(i, 5, "<br/>") == 0 ||
+            label.compare(i, 5, "<BR/>") == 0) {
+            lines.push_back(cur);
+            cur.clear();
+            i += 5;
+        }
+        else if (label.compare(i, 4, "<br>") == 0 ||
+                 label.compare(i, 4, "<BR>") == 0) {
+            lines.push_back(cur);
+            cur.clear();
+            i += 4;
+        }
+        else if (label[i] == '\n') {
+            lines.push_back(cur);
+            cur.clear();
+            i++;
+        }
+        else {
+            cur += label[i++];
+        }
+    }
+    lines.push_back(cur);
+    if (lines.empty())
+        lines.push_back("");
+    return lines;
+}
+
 // excalidrawFileDataUrl: 按 fileId 从 Excalidraw files 取 dataURL
 inline std::string excalidrawFileDataUrl(const Graph&       g,
                                          const std::string& fileId)
@@ -2408,15 +2441,22 @@ inline std::string toDrawio(Graph g)
            << xmlEscape(e.label) << "\" style=\"" << style
            << "\" edge=\"1\" parent=\"1\" source=\"" << xmlEscape(e.from)
            << "\" target=\"" << xmlEscape(e.to) << "\">\n";
-        os << "          <mxGeometry relative=\"1\" as=\"geometry\"";
-        if (e.labelX != 0 || e.labelY != 0) {
-            os << ">\n";
-            os << "            <mxPoint x=\"" << e.labelX << "\" y=\""
-               << e.labelY << "\" as=\"offset\"/>\n";
-            os << "          </mxGeometry>\n";
-        } else {
-            os << "/>\n";
+        os << "          <mxGeometry relative=\"1\" as=\"geometry\">\n";
+        // 边标签位置：layout 设置了 labelX/labelY（画布绝对坐标），
+        // draw.io 需要的是相对边中心的偏移量
+        if (!e.label.empty() && (e.labelX != 0 || e.labelY != 0)) {
+            const Node* src = g.findNode(e.from);
+            const Node* dst = g.findNode(e.to);
+            if (src && dst) {
+                double cx = (src->x + src->w / 2.0 + dst->x + dst->w / 2.0) / 2.0;
+                double cy = (src->y + src->h / 2.0 + dst->y + dst->h / 2.0) / 2.0;
+                double ox = e.labelX - cx;
+                double oy = e.labelY - cy;
+                os << "            <mxPoint x=\"" << ox << "\" y=\"" << oy
+                   << "\" as=\"offset\"/>\n";
+            }
         }
+        os << "          </mxGeometry>\n";
         os << "        </mxCell>\n";
     }
     // Excalidraw freedraw -> draw.io 矢量线段（按相邻采样点拆分）
@@ -2673,45 +2713,195 @@ inline std::string toSVG(Graph g)
     os << "  <style>text{font-family:'Segoe "
           "UI',Arial,sans-serif;font-size:13px;}"
           ".lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>\n";
-    // 边先绘制在底层
+    // ---- 正交折线边路由 + 端口分配 + 槽位消重叠 + 反馈边样式 ----
+    // 推断每层节点所属图层
+    std::map<std::string, int> nodeLayer;
+    {
+        std::vector<double> layerY;
+        for (auto& n : g.nodes) {
+            bool dup = false;
+            for (auto ly : layerY) { if (std::abs(ly - n.y) < 5) { dup = true; break; } }
+            if (!dup) layerY.push_back(n.y);
+        }
+        std::sort(layerY.begin(), layerY.end());
+        for (auto& n : g.nodes) {
+            int best = 0; double bestD = 1e18;
+            for (size_t i = 0; i < layerY.size(); i++) {
+                double d = std::abs(layerY[i] - n.y);
+                if (d < bestD) { bestD = d; best = (int)i; }
+            }
+            nodeLayer[n.id] = best;
+        }
+    }
+    // 第一遍：统计层对边数 + 为每条边算初始 rX（槽位初值）
+    std::map<std::pair<int,int>, int> pairTotal;
+    struct EdgeRoute { std::string edgeId; double rX; int slot; };
+    std::map<std::pair<int,int>, std::vector<EdgeRoute>> pairRoutes;
+    for (auto& e : g.edges) {
+        auto ai = nodeLayer.find(e.from), bi = nodeLayer.find(e.to);
+        if (ai == nodeLayer.end() || bi == nodeLayer.end()) continue;
+        int la = ai->second, lb = bi->second;
+        if (la == lb) continue;
+        auto key = std::make_pair(std::min(la, lb), std::max(la, lb));
+        const Node* a = g.findNode(e.from);
+        const Node* b = g.findNode(e.to);
+        if (!a || !b) continue;
+        double rX = (a->x + a->w/2 + b->x + b->w/2) / 2;
+        pairRoutes[key].push_back({e.id, rX, 0});
+        pairTotal[key]++;
+    }
+    // 第二遍：每对层内按 rX 排序后左右扫描，推开重叠的边
+    std::map<std::string, double> edgeRouteX;  // 每条边最终路由 X
+    for (auto& kv : pairRoutes) {
+        auto& routes = kv.second;
+        std::sort(routes.begin(), routes.end(),
+            [](const EdgeRoute& a, const EdgeRoute& b) { return a.rX < b.rX; });
+        for (size_t i = 0; i < routes.size(); i++) routes[i].slot = (int)i;
+        // 左右扫描，保证相邻边至少间隔 16px
+        for (int sweep = 0; sweep < 2; sweep++) {
+            for (size_t i = 1; i < routes.size(); i++) {
+                double need = routes[i-1].rX + 16;
+                if (routes[i].rX < need) routes[i].rX = need;
+            }
+            for (size_t i = routes.size() - 1; i > 0; i--) {
+                double need = routes[i].rX - 16;
+                if (routes[i-1].rX > need) routes[i-1].rX = need;
+            }
+        }
+        for (auto& rt : routes) edgeRouteX[rt.edgeId] = rt.rX;
+    }
+
+    // 第三遍：绘制边
     for (auto& e : g.edges) {
         const Node* a = g.findNode(e.from);
         const Node* b = g.findNode(e.to);
-        if (!a || !b)
-            continue;
-        double ax = a->x + a->w / 2, ay = a->y + a->h / 2;
-        double bx = b->x + b->w / 2, by = b->y + b->h / 2;
-        // 将连线端点裁剪到节点边界（近似、轴对齐）
-        auto clip = [](double cx, double cy, double w, double h, double tx,
-                       double ty, double& ox, double& oy) {
-            double dx = tx - cx, dy = ty - cy;
-            double sx = dx != 0 ? (w / 2) / std::fabs(dx) : 1e18;
-            double sy = dy != 0 ? (h / 2) / std::fabs(dy) : 1e18;
-            double s  = std::min(sx, sy);
-            s         = std::min(s, 1.0);
-            ox        = cx + dx * s;
-            oy        = cy + dy * s;
-        };
-        double x1, y1, x2, y2;
-        clip(ax, ay, a->w, a->h, bx, by, x1, y1);
-        clip(bx, by, b->w, b->h, ax, ay, x2, y2);
-        os << "  <line x1=\"" << x1 << "\" y1=\"" << y1 << "\" x2=\"" << x2
-           << "\" y2=\"" << y2 << "\" stroke=\""
-           << xmlEscape(e.strokeColor.empty() ? "#333" : e.strokeColor)
-           << "\" stroke-width=\"" << (e.style == "thick" ? 3 : 1.5) << "\"";
-        if (e.style == "dashed")
+        if (!a || !b) continue;
+
+        auto ai = nodeLayer.find(e.from), bi = nodeLayer.find(e.to);
+        int  la = (ai != nodeLayer.end()) ? ai->second : -1;
+        int  lb = (bi != nodeLayer.end()) ? bi->second : -1;
+
+        double a_cx = a->x + a->w / 2, a_cy = a->y + a->h / 2;
+        double b_cx = b->x + b->w / 2, b_cy = b->y + b->h / 2;
+        // 反馈边判定：源在目标下方 3 层以上才视为"反向流"，避免过度标记
+        bool   feedback = (la >= 0 && lb >= 0 && la - lb >= 3);
+        std::vector<std::pair<double,double>> pts;
+
+        if (la >= 0 && lb >= 0 && la != lb) {
+            // ---- 端口分配：不同层始终 bottom→top，同层 side→side ----
+            double dx = b_cx - a_cx;
+            double aBot = a->y + a->h, aLft = a->x, aRgt = a->x + a->w;
+            double bTop = b->y, bLft = b->x, bRgt = b->x + b->w;
+
+            if (!feedback) {
+                // 正向边：A 在上层 → B 在下层
+                double sx, sy;  // source port (on A)
+                double tx, ty;  // target port (on B)
+                if (la == lb) {
+                    // 同层节点：从侧边进出
+                    if (dx > 0) { sx = aRgt; tx = bLft; }
+                    else        { sx = aLft; tx = bRgt; }
+                    sy = a_cy; ty = b_cy;
+                } else {
+                    // 不同层节点：始终从 A 底部出，B 顶部入
+                    sx = a_cx; sy = aBot;
+                    tx = b_cx; ty = bTop;
+                }
+                pts.push_back({sx, sy});
+
+                if (!e.waypoints.empty()) {
+                    // 使用布局阶段计算好的路径点（虚拟节点在各中间层的坐标）
+                    for (auto& wp : e.waypoints) {
+                        auto& last = pts.back();
+                        if (std::abs(last.first - wp.first) > 4 ||
+                            std::abs(last.second - wp.second) > 4)
+                            pts.push_back(wp);
+                    }
+                } else {
+                    // 兜底：单中点路由
+                    auto rxit = edgeRouteX.find(e.id);
+                    double midY = (aBot + bTop) / 2;
+                    double rX = (rxit != edgeRouteX.end()) ? rxit->second
+                                                           : (a_cx + b_cx) / 2;
+                    if (std::abs(sx - rX) > 4 || std::abs(sy - midY) > 4)
+                        pts.push_back({rX, midY});
+                }
+
+                auto& last = pts.back();
+                if (std::abs(last.first - tx) > 4 ||
+                    std::abs(last.second - ty) > 4)
+                    pts.push_back({tx, ty});
+                else if (pts.size() < 2)
+                    pts.push_back({tx, ty});
+            } else {
+                // 反馈边：从右侧绕行
+                double rX = std::max(aRgt, bRgt) + 34;
+                auto rxit = edgeRouteX.find(e.id);
+                if (rxit != edgeRouteX.end()) rX = rxit->second;
+                pts.push_back({aRgt, a_cy});
+                pts.push_back({rX, a_cy});
+                pts.push_back({rX, b_cy});
+                pts.push_back({bRgt, b_cy});
+            }
+        }
+        if (pts.size() < 2) {
+            // 兜底：直线裁剪
+            auto clip = [](double cx, double cy, double w, double h,
+                           double tx, double ty, double& ox, double& oy) {
+                double dx = tx - cx, dy = ty - cy;
+                double sx = dx != 0 ? (w / 2) / std::fabs(dx) : 1e18;
+                double sy = dy != 0 ? (h / 2) / std::fabs(dy) : 1e18;
+                double s  = std::min(sx, sy); s = std::min(s, 1.0);
+                ox = cx + dx * s; oy = cy + dy * s;
+            };
+            double x1, y1, x2, y2;
+            clip(a_cx, a_cy, a->w, a->h, b_cx, b_cy, x1, y1);
+            clip(b_cx, b_cy, b->w, b->h, a_cx, a_cy, x2, y2);
+            pts.push_back({x1, y1});
+            pts.push_back({x2, y2});
+        }
+        // 输出 polyline（支持 strokeColor 定制，fallback 到默认色）
+        std::string edgeColor = e.strokeColor.empty()
+            ? (feedback ? "#b0714b" : "#333")
+            : e.strokeColor;
+        bool edgeDashed = feedback || e.style == "dashed";
+        os << "  <polyline fill=\"none\" stroke=\""
+           << xmlEscape(edgeColor)
+           << "\" stroke-width=\"" << (e.style == "thick" ? 3 : 1.5) << "\""
+           << " stroke-linejoin=\"round\" points=\"";
+        for (size_t i = 0; i < pts.size(); i++) {
+            if (i) os << " ";
+            os << pts[i].first << "," << pts[i].second;
+        }
+        os << "\"";
+        if (edgeDashed)
             os << " stroke-dasharray=\"6,4\"";
         if (edgeHasEndArrow(e))
             os << " marker-end=\"url(#arrow)\"";
         if (edgeHasStartArrow(e))
             os << " marker-start=\"url(#arrow)\"";
         os << "/>\n";
+        // 边标签
         if (!e.label.empty()) {
-            double lx = (x1 + x2) / 2 + e.labelX;
-            double ly = (y1 + y2) / 2 + e.labelY - 4;
-            os << "  <text class=\"elabel\" x=\"" << lx << "\" y=\""
-               << ly << "\" text-anchor=\"middle\">"
-               << xmlEscape(e.label) << "</text>\n";
+            size_t mid = pts.size() / 2;
+            size_t nxt = std::min(mid + 1, pts.size() - 1);
+            double lx = (pts[mid].first + pts[nxt].first) / 2;
+            double ly = (pts[mid].second + pts[nxt].second) / 2;
+            auto   elines = splitLabelLinesForSvg(e.label);
+            if (elines.size() == 1) {
+                os << "  <text class=\"elabel\" x=\"" << lx << "\" y=\""
+                   << ly - 4 << "\" text-anchor=\"middle\">"
+                   << xmlEscape(elines[0]) << "</text>\n";
+            }
+            else {
+                double lineH = 14;
+                double sy     = ly - 4 - (elines.size() - 1) * lineH / 2;
+                os << "  <text class=\"elabel\" text-anchor=\"middle\">\n";
+                for (size_t i = 0; i < elines.size(); i++)
+                    os << "    <tspan x=\"" << lx << "\" y=\"" << sy + i * lineH
+                       << "\">" << xmlEscape(elines[i]) << "</tspan>\n";
+                os << "  </text>\n";
+            }
         }
     }
     // 再绘制节点
@@ -2729,9 +2919,21 @@ inline std::string toSVG(Graph g)
                << sc("#999")
                << "\" "
                   "stroke-dasharray=\"5,4\" rx=\"6\"/>\n";
-            os << "  <text class=\"lbl\" x=\"" << n.x + 8 << "\" y=\""
-               << n.y + 18 << "\" fill=\"#777\">" << xmlEscape(n.label)
-               << "</text>\n";
+            auto glines = splitLabelLinesForSvg(n.label);
+            if (glines.size() == 1) {
+                os << "  <text class=\"lbl\" x=\"" << n.x + 8 << "\" y=\""
+                   << n.y + 18 << "\" fill=\"#777\">" << xmlEscape(glines[0])
+                   << "</text>\n";
+            }
+            else {
+                double lineH = 16;
+                os << "  <text class=\"lbl\" fill=\"#777\">\n";
+                for (size_t i = 0; i < glines.size(); i++)
+                    os << "    <tspan x=\"" << n.x + 8 << "\" y=\""
+                       << n.y + 18 + i * lineH << "\">"
+                       << xmlEscape(glines[i]) << "</tspan>\n";
+                os << "  </text>\n";
+            }
             continue;
         }
         double cx = n.x + n.w / 2, cy = n.y + n.h / 2;
@@ -2753,14 +2955,39 @@ inline std::string toSVG(Graph g)
                << fc("#eef4ff") << "\" stroke=\"" << sc("#4a72b8") << "\"/>\n";
         }
         if (n.attrs.empty()) {
-            os << "  <text class=\"lbl\" x=\"" << cx << "\" y=\"" << cy + 5
-               << "\" text-anchor=\"middle\">" << xmlEscape(n.label)
-               << "</text>\n";
+            auto nlines = splitLabelLinesForSvg(n.label);
+            if (nlines.size() == 1) {
+                os << "  <text class=\"lbl\" x=\"" << cx << "\" y=\"" << cy + 5
+                   << "\" text-anchor=\"middle\">" << xmlEscape(nlines[0])
+                   << "</text>\n";
+            }
+            else {
+                double lineH = 16;
+                double sy     = cy + 5 - (nlines.size() - 1) * lineH / 2;
+                os << "  <text class=\"lbl\" text-anchor=\"middle\">\n";
+                for (size_t i = 0; i < nlines.size(); i++)
+                    os << "    <tspan x=\"" << cx << "\" y=\"" << sy + i * lineH
+                       << "\">" << xmlEscape(nlines[i]) << "</tspan>\n";
+                os << "  </text>\n";
+            }
         }
         else {  // ER 实体（包含属性行）
-            os << "  <text class=\"lbl\" x=\"" << cx << "\" y=\"" << n.y + 20
-               << "\" text-anchor=\"middle\" font-weight=\"bold\">"
-               << xmlEscape(n.label) << "</text>\n";
+            auto elines = splitLabelLinesForSvg(n.label);
+            if (elines.size() == 1) {
+                os << "  <text class=\"lbl\" x=\"" << cx << "\" y=\"" << n.y + 20
+                   << "\" text-anchor=\"middle\" font-weight=\"bold\">"
+                   << xmlEscape(elines[0]) << "</text>\n";
+            }
+            else {
+                double lineH = 16;
+                double sy     = n.y + 20 - (elines.size() - 1) * lineH / 2;
+                os << "  <text class=\"lbl\" text-anchor=\"middle\""
+                   << " font-weight=\"bold\">\n";
+                for (size_t i = 0; i < elines.size(); i++)
+                    os << "    <tspan x=\"" << cx << "\" y=\"" << sy + i * lineH
+                       << "\">" << xmlEscape(elines[i]) << "</tspan>\n";
+                os << "  </text>\n";
+            }
             os << "  <line x1=\"" << n.x << "\" y1=\"" << n.y + 28 << "\" x2=\""
                << n.x + n.w << "\" y2=\"" << n.y + 28 << "\" stroke=\""
                << sc("#4a72b8") << "\"/>\n";

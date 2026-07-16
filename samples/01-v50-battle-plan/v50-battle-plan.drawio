@@ -1,0 +1,79 @@
+<mxfile host="graphmcp" agent="graphmcp/1.0" type="device">
+  <diagram name="v50-battle-plan" id="gti9b5tk71c3to">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="A" value="🎯 急需50块钱" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="685.323" y="180" width="144" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="B" value="🤔 选择战术" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="273.125" y="40" width="116" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="C" value="📖 编造故事:&lt;br&gt;猫生病/房租到期" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="73.3233" y="180" width="144" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="D" value="💰 承诺回报:&lt;br&gt;下周还60!" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="277.323" y="180" width="130" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="E" value="📱 群发消息:&lt;br&gt;考验友情的时候到了" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="467.323" y="180" width="158" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="F" value="⌛ 等待回应" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="125.35" y="320" width="116" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="G" value="🎉 V我50!&lt;br&gt;感谢老板!" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="22.6604" y="460" width="130" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="H" value="💀 被拉黑&lt;br&gt;换个目标再来" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="254.329" y="460" width="116" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="A" target="B">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge2" value="😢 卖惨流" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="B" target="C">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-7.22139" y="-9.58392" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge3" value="🎁 利诱流" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="B" target="D">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-11.9618" y="0.956785" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge4" value="😤 社交流" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="B" target="E">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-6.54384" y="10.0587" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="C" target="F">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="D" target="F">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge7" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="E" target="F">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge8" value="✅ 成功" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="F" target="G">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-9.90698" y="-6.77139" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge9" value="❌ 失败" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="F" target="H">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-8.82555" y="8.13079" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="H" target="A">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

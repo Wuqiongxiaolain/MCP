@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="526" height="724" viewBox="0 0 526 724">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <line x1="253" y1="64" x2="253" y2="144" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="253" y1="188" x2="253" y2="268" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="253" y1="312" x2="253" y2="392" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="253" y1="436" x2="253" y2="516" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <line x1="253" y1="560" x2="253" y2="640" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="139" y="20" width="228" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="253" y="47" text-anchor="middle">打开 Claude Code</text>
+  <rect x="132" y="144" width="242" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="253" y="171" text-anchor="middle">配置 .mcp.json 连接</text>
+  <rect x="20" y="268" width="466" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="253" y="295" text-anchor="middle">Claude Code 自动拉起 graphmcp serve</text>
+  <rect x="167" y="392" width="172" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="253" y="419" text-anchor="middle">用户用自然语言下指令</text>
+  <rect x="118" y="516" width="270" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="253" y="543" text-anchor="middle">AI 调用 MCP 工具与结果返回</text>
+  <rect x="160" y="640" width="186" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="253" y="667" text-anchor="middle">关闭会话，进程自动退出</text>
+</svg>

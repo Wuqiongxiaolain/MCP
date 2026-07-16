@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1256" height="864" viewBox="0 0 1256 864">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="400.238,64 411.646,104 423.054,144" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="365.054,174 348.721,244 346.387,306" marker-end="url(#arrow)"/>
+  <text class="elabel" x="347.554" y="271" text-anchor="middle">不懂的人</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="423.054,204 443.721,244 464.387,284" marker-end="url(#arrow)"/>
+  <text class="elabel" x="454.054" y="260" text-anchor="middle">同行</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="481.054,174 545.154,244 595.254,306" marker-end="url(#arrow)"/>
+  <text class="elabel" x="570.204" y="271" text-anchor="middle">面试官</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="274.387,328 232.194,368 190,408" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="190,452 177.983,492 165.966,532" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="165.966,576 171.158,616 176.35,656" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="176.35,700 180.876,740 185.402,780" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="464.387,328 506.194,368 548,408" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="548,452 508.093,492 468.186,532" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="468.186,576 455.917,616 443.649,656" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="739.254,306 821.627,368 976,408" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="976,452 900.924,492 825.848,532" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="825.848,576 799.012,616 772.175,656" marker-end="url(#arrow)"/>
+  <rect x="321.238" y="20" width="158" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="400.238" y="47" text-anchor="middle">🤖 想假装很懂AI</text>
+  <polygon points="423.054,144 481.054,174 423.054,204 365.054,174" fill="#fff7e0" stroke="#c9a227"/>
+  <text class="lbl" x="423.054" y="179" text-anchor="middle">👥 聊天对象</text>
+  <rect x="202.387" y="284" width="144" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="274.387" y="311" text-anchor="middle">🎤 疯狂输出术语</text>
+  <rect x="406.387" y="284" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="464.387" y="311" text-anchor="middle">🤫 谨慎发言</text>
+  <rect x="595.254" y="284" width="144" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="667.254" y="311" text-anchor="middle">😎 展示项目经验</text>
+  <rect x="20" y="408" width="340" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="190" y="435" text-anchor="middle">💬 Large Language Model</text>
+  <rect x="44.9661" y="532" width="242" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="165.966" y="559" text-anchor="middle">💬 Transformer架构</text>
+  <rect x="55.3497" y="656" width="242" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="176.35" y="683" text-anchor="middle">💬 涌现能力Emergence</text>
+  <rect x="43.4019" y="780" width="284" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="185.402" y="807" text-anchor="middle">🤯 对方已被绕晕&lt;br&gt;你成功装到了</text>
+  <rect x="420" y="408" width="256" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="548" y="435" text-anchor="middle">💬 最近在看一篇paper...</text>
+  <rect x="375.186" y="532" width="186" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="468.186" y="559" text-anchor="middle">💬 嗯对 就是那个思路</text>
+  <rect x="385.649" y="656" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="443.649" y="683" text-anchor="middle">🙏 安全过关</text>
+  <rect x="736" y="408" width="480" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="976" y="435" text-anchor="middle">💬 我用LangChain&lt;br&gt;搭了个RAG pipeline</text>
+  <rect x="690.848" y="532" width="270" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="825.848" y="559" text-anchor="middle">💬 Fine-tune了Llama</text>
+  <rect x="686.175" y="656" width="172" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="772.175" y="683" text-anchor="middle">🤝 拿到Offer!</text>
+</svg>

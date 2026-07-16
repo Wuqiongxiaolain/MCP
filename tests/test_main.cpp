@@ -1766,16 +1766,18 @@ static void testDrawioEdgeLabelOffset()
     CHECK(g.name == "EdgeLabelTest");
     CHECK(g.edges.size() == 1);
     CHECK(g.edges[0].label == "hello");
-    CHECK(g.edges[0].labelX == 30);
-    CHECK(g.edges[0].labelY == -15);
+    // 解析后 labelX/Y 是绝对坐标：边中心 (260,130) + offset (30,-15)
+    CHECK(g.edges[0].labelX == 290);
+    CHECK(g.edges[0].labelY == 115);
 
     // 往返：导出再解析
     std::string dx = ge::toDrawio(g);
     Graph g2       = gp::parseDrawio(dx);
     CHECK(g2.edges.size() == 1);
     CHECK(g2.edges[0].label == "hello");
-    CHECK(g2.edges[0].labelX == 30);
-    CHECK(g2.edges[0].labelY == -15);
+    // 往返后 layout 会重算 label 位置：垂直边中点(80,120) + perp(-12,0) = (68,120)
+    CHECK(g2.edges[0].labelX == 68);
+    CHECK(g2.edges[0].labelY == 120);
 }
 
 static void testMcpGraphImport()
@@ -2639,6 +2641,216 @@ static void testTableXml()
     ge::removeDirectory("test-table-xml-mcp-tmp");
 }
 
+// ---- 布局改善新增测试 ----
+
+static void testLayerBalancing()
+{
+    // 构造 10 节点图，8 个扇出节点从 A 到同层，验证层次均衡分散
+    Graph g;
+    g.type = "flowchart";
+    g.ensureNode("A", "Start");
+    for (int i = 0; i < 8; i++) {
+        std::string id = std::string(1, (char)('B' + i));
+        g.ensureNode(id, "Step " + std::to_string(i + 1));
+        g.addEdge("A", id);
+    }
+    g.ensureNode("Z", "End");
+    for (int i = 0; i < 8; i++) {
+        std::string id = std::string(1, (char)('B' + i));
+        g.addEdge(id, "Z");
+    }
+    gl::layout(g);
+    CHECK(g.laidOut);
+
+    // 统计不同 Y 坐标（层次）数，层次均衡应产生 ≥3 层
+    std::set<double> yLayers;
+    for (auto& n : g.nodes)
+        yLayers.insert(n.y);
+    CHECK(yLayers.size() >= 3);
+
+    // 没有一层超过 6 个节点
+    for (auto y : yLayers) {
+        int count = 0;
+        for (auto& n : g.nodes)
+            if (std::abs(n.y - y) < 1.0) count++;
+        CHECK(count <= 6);
+    }
+
+    // 验证 SVG 可正常生成
+    std::string svg = ge::toSVG(g);
+    CHECK(svg.find("<svg") != std::string::npos);
+    CHECK(svg.find("<polyline") != std::string::npos);
+}
+
+static void testEdgeWaypoints()
+{
+    // 构造跨 3 层的长边 A->D，验证路径点持久化和 SVG 折线路由
+    Graph g = gp::parseMermaid(
+        "flowchart TD\nA[Top]-->B[Mid1]\nB-->C[Mid2]\nC-->D[Bottom]\n"
+        "A-->D\n");
+    gl::layout(g);
+    CHECK(g.laidOut);
+
+    // A->D 跨 3 层 → 应有 2 个虚拟节点 → 2 个路径点
+    bool foundLongEdge = false;
+    for (auto& e : g.edges) {
+        if (e.from == "A" && e.to == "D") {
+            foundLongEdge = true;
+            CHECK(e.waypoints.size() == 2);
+            CHECK(std::abs(e.waypoints[0].second - e.waypoints[1].second) > 10);
+            break;
+        }
+    }
+    CHECK(foundLongEdge);
+
+    std::string svg = ge::toSVG(g);
+    CHECK(svg.find("<svg") != std::string::npos);
+    CHECK(svg.find("<polyline") != std::string::npos);
+}
+
+static void testWaypointSerialization()
+{
+    // 验证 waypoints 的 JSON 序列化/反序列化 round-trip
+    Graph g;
+    g.type = "flowchart";
+    g.ensureNode("S", "Source");
+    g.ensureNode("T", "Target");
+    g.addEdge("S", "T");
+    g.edges.back().waypoints.push_back({100.5, 200.5});
+    g.edges.back().waypoints.push_back({300.0, 400.0});
+
+    Json j = g.toJson();
+    Graph g2 = Graph::fromJson(j);
+
+    CHECK(g2.edges.size() == 1);
+    CHECK(g2.edges[0].waypoints.size() == 2);
+    CHECK(g2.edges[0].waypoints[0].first == 100.5);
+    CHECK(g2.edges[0].waypoints[0].second == 200.5);
+    CHECK(g2.edges[0].waypoints[1].first == 300.0);
+    CHECK(g2.edges[0].waypoints[1].second == 400.0);
+}
+
+static void testDashLabelEdge()
+{
+    // 验证 -- "label" --> 语法被正确解析
+    Graph g = gp::parseMermaid(
+        "flowchart TD\nA[Start]-- \"有\" -->B[Next]\n"
+        "B-- \"否\" -->C[End]\n"
+        "C-- \"是\" -->D[Done]\n");
+    CHECK(g.nodes.size() == 4);
+    CHECK(g.edges.size() == 3);
+    CHECK(g.edges[0].label == "有");
+    CHECK(g.edges[0].from == "A" && g.edges[0].to == "B");
+    CHECK(g.edges[1].label == "否");
+    CHECK(g.edges[2].label == "是");
+
+    // 验证 SVG 可正常生成
+    std::string svg = ge::toSVG(g);
+    CHECK(svg.find("<svg") != std::string::npos);
+}
+
+static void testEdgeLabelPosition()
+{
+    // 验证 layout 为有 label 的边计算 labelX/labelY，并正确序列化
+    Graph g = gp::parseMermaid(
+        "flowchart TD\nA[Start]-- \"是\" -->B[Next]\n"
+        "B-- \"否\" -->C[End]\n"
+        "C-- \"未知\" -->D[Done]\n");
+    gl::layout(g);
+    CHECK(g.laidOut);
+
+    // 所有 3 条边都有 label，都应该有 labelX/labelY
+    for (auto& e : g.edges) {
+        CHECK(!e.label.empty());
+        // labelX/labelY 至少有一个非零（不可能正好在原点）
+        CHECK(e.labelX != 0 || e.labelY != 0);
+    }
+
+    // JSON 序列化 round-trip
+    Json j = g.toJson();
+    Graph g2 = Graph::fromJson(j);
+    for (size_t i = 0; i < g.edges.size() && i < g2.edges.size(); i++) {
+        CHECK(g2.edges[i].labelX == g.edges[i].labelX);
+        CHECK(g2.edges[i].labelY == g.edges[i].labelY);
+    }
+
+    // SVG 也能正常生成
+    std::string svg = ge::toSVG(g);
+    CHECK(svg.find("elabel") != std::string::npos);
+}
+
+static void testDrawioEdgeLabelRoundTrip()
+{
+    // 验证 draw.io 导出包含 label offset，并能 round-trip 回来
+    Graph g;
+    g.name = "LabelTest";
+    g.type = "flowchart";
+    Node& n1 = g.ensureNode("n1", "Start");
+    n1.shape = "round";
+    n1.x = 100; n1.y = 100; n1.w = 120; n1.h = 60;
+    Node& n2 = g.ensureNode("n2", "End");
+    n2.shape = "diamond";
+    n2.x = 300; n2.y = 100; n2.w = 120; n2.h = 60;
+    g.addEdge("n1", "n2", "go", "solid");
+    // labelX/labelY 需要 layout 来设置
+    gl::layout(g);
+    CHECK(g.laidOut);
+    CHECK(!g.edges.empty());
+    CHECK(g.edges[0].label == "go");
+    CHECK(g.edges[0].labelX != 0 || g.edges[0].labelY != 0);
+
+    // 导出 draw.io XML
+    std::string dx = ge::toDrawio(g);
+    CHECK(dx.find("<mxfile") != std::string::npos);
+    // 应包含 offset 信息
+    CHECK(dx.find("as=\"offset\"") != std::string::npos);
+
+    // round-trip 读回
+    Graph g2 = gp::parseDrawio(dx);
+    CHECK(g2.name == "LabelTest");
+    CHECK(g2.nodes.size() >= 2);
+    CHECK(g2.edges.size() >= 1);
+    // 标签应该被保留
+    CHECK(g2.edges[0].label == "go");
+    // label 位置应该被保留且非零
+    CHECK(g2.edges[0].labelX != 0 || g2.edges[0].labelY != 0);
+}
+
+static void testMcpJsonRoundTripDashLabel()
+{
+    // 模拟 MCP JSON-RPC 传输链路：原始内容 → JSON 序列化 → JSON 解析 → parseMermaid
+    // 验证 " 字符在 JSON 往返后不丢失，-- "label" --> 语法正常工作
+    std::string mermaidSrc =
+        "flowchart TD\n"
+        "A[Start]-- \"有\" -->B[Next]\n"
+        "B-- \"否\" -->C[End]\n";
+
+    // 构造一个包含此内容的 JSON 对象（模拟 MCP arguments）
+    gj::Json args = gj::Json::obj();
+    args.set("content", mermaidSrc);
+
+    // JSON 序列化（模拟 MCP 客户端发送）
+    std::string jsonWire = args.dump();
+
+    // JSON 解析（模拟 MCP 服务端接收）
+    std::string parseErr;
+    gj::Json   parsed = gj::Json::parse(jsonWire, &parseErr);
+    CHECK(parseErr.empty());
+
+    // 提取 content 字段
+    std::string content = parsed.str("content");
+    CHECK(!content.empty());
+
+    // 解析 Mermaid
+    Graph g = gp::parseMermaid(content);
+    CHECK(g.nodes.size() == 3);
+    CHECK(g.edges.size() == 2);
+    CHECK(g.edges[0].label == "有");
+    CHECK(g.edges[0].from == "A" && g.edges[0].to == "B");
+    CHECK(g.edges[1].label == "否");
+    CHECK(g.edges[1].from == "B" && g.edges[1].to == "C");
+}
+
 int runAll()
 {
     // 防止 graph_open / export 等路径意外拉起浏览器或外部编辑器
@@ -2684,6 +2896,13 @@ int runAll()
     testDrawioMultiPageRoundTrip();
     testDrawioEdgeLabelOffset();
     testMcpGraphImport();
+    testLayerBalancing();
+    testEdgeWaypoints();
+    testWaypointSerialization();
+    testDashLabelEdge();
+    testEdgeLabelPosition();
+    testDrawioEdgeLabelRoundTrip();
+    testMcpJsonRoundTripDashLabel();
     std::cout << "tests: " << g_passed << " passed, " << g_failed
               << " failed\n";
     return g_failed == 0 ? 0 : 1;

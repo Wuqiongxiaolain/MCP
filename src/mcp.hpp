@@ -3033,16 +3033,38 @@ inline bool handleMessage(const Json& msg, gs::Store& store, Json& response)
     return true;
 }
 
-// 阻塞式 stdio 服务循环（按行读取 JSON-RPC）
-// serve: MCP stdio 主循环（逐行读取 JSON-RPC）
+// 阻塞式 stdio 服务循环（支持 Content-Length 帧 + 纯换行分隔）
+// serve: MCP stdio 主循环（MCP spec: Content-Length 帧或换行分隔 JSON-RPC）
 inline int serve(gs::Store& store)
 {
     std::string line;
     while (std::getline(std::cin, line)) {
+        // 去除行尾 \r（CRLF 兼容）
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
         if (gm::trim(line).empty())
             continue;
+
+        std::string jsonLine;
+        // Content-Length 帧格式：MCP stdio transport 标准
+        // Content-Length: <bytes>\r\n\r\n<json>
+        if (gm::startsWith(line, "Content-Length:")) {
+            std::string rest = gm::trim(line.substr(14));
+            size_t      contentLength =
+                (size_t)std::strtoul(rest.c_str(), nullptr, 10);
+            // 跳过 header 后的空行
+            std::getline(std::cin, line);
+            // 读取指定字节的 JSON body（可能跨多行）
+            std::string body(contentLength, '\0');
+            std::cin.read(&body[0], contentLength);
+            jsonLine = body;
+        } else {
+            // 旧格式：纯换行分隔（向后兼容）
+            jsonLine = line;
+        }
+
         std::string err;
-        Json        msg = Json::parse(line, &err);
+        Json        msg = Json::parse(jsonLine, &err);
         if (!err.empty()) {
             std::cout << rpcError(Json(), -32700, "parse error: " + err).dump()
                       << "\n"

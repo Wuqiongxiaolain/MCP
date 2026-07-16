@@ -326,6 +326,10 @@ inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines,
                 glabel = trim(rest.substr(br + 1, close == std::string::npos ?
                                                       std::string::npos :
                                                       close - br - 1));
+                // 去掉包裹在两端的引号（与 readNodeRef 的 grab 一致）
+                if (glabel.size() >= 2 && glabel.front() == '"' &&
+                    glabel.back() == '"')
+                    glabel = glabel.substr(1, glabel.size() - 2);
             }
             if (gid.empty())
                 gid = "sg" + std::to_string(g.nodes.size());
@@ -355,14 +359,31 @@ inline Graph parseMermaidFlowchart(const std::vector<std::string>& lines,
         }
         std::string prev = id;
         while (true) {
+            // 先处理 -- "label" --> 或 -- "label" --- 语法
+            std::string elabel;
+            {
+                size_t tmpPos = pos;
+                while (tmpPos < line.size() &&
+                       isspace((unsigned char)line[tmpPos]))
+                    tmpPos++;
+                if (tmpPos + 3 < line.size() &&
+                    line.compare(tmpPos, 3, "-- ") == 0 &&
+                    line[tmpPos + 3] == '"') {
+                    size_t closeQ = line.find('"', tmpPos + 4);
+                    if (closeQ != std::string::npos) {
+                        elabel =
+                            line.substr(tmpPos + 4, closeQ - tmpPos - 4);
+                        pos = closeQ + 1;  // 跳过 -- "label"
+                    }
+                }
+            }
             std::string style, arrow;
             if (!detail::readArrow(line, pos, style, arrow))
                 break;
-            // 可选边标签 |label|
+            // 可选边标签 |label|（若上面没提取到 -- "label" 标签）
             while (pos < line.size() && isspace((unsigned char)line[pos]))
                 pos++;
-            std::string elabel;
-            if (pos < line.size() && line[pos] == '|') {
+            if (elabel.empty() && pos < line.size() && line[pos] == '|') {
                 size_t end = line.find('|', pos + 1);
                 if (end != std::string::npos) {
                     elabel = trim(line.substr(pos + 1, end - pos - 1));
@@ -3114,9 +3135,8 @@ inline Graph parseDrawio(const std::string& text)
         std::string source, target;
         bool        vertex = false, edge = false;
         double      x = 0, y = 0, w = 140, h = 80;
-        bool        hasSourcePoint  = false;
-        bool        hasLabelOffset  = false;
-        double      labelOffX = 0, labelOffY = 0;
+        bool        hasSourcePoint = false;
+        double      labelOffsetX = 0, labelOffsetY = 0;
     };
     std::vector<Cell> cells;
 
@@ -3151,18 +3171,15 @@ inline Graph parseDrawio(const std::string& text)
                 for (auto& pt : gc.children) {
                     if (pt.tag == "mxPoint") {
                         auto it = pt.attrs.find("as");
-                        if (it != pt.attrs.end()) {
-                            if (it->second == "sourcePoint")
-                                cell.hasSourcePoint = true;
-                            else if (it->second == "offset") {
-                                cell.hasLabelOffset = true;
-                                auto ox = pt.attrs.find("x");
-                                auto oy = pt.attrs.find("y");
-                                if (ox != pt.attrs.end())
-                                    cell.labelOffX = std::stod(ox->second);
-                                if (oy != pt.attrs.end())
-                                    cell.labelOffY = std::stod(oy->second);
-                            }
+                        if (it != pt.attrs.end() && it->second == "sourcePoint")
+                            cell.hasSourcePoint = true;
+                        if (it != pt.attrs.end() && it->second == "offset") {
+                            auto ox = pt.attrs.find("x");
+                            auto oy = pt.attrs.find("y");
+                            if (ox != pt.attrs.end())
+                                cell.labelOffsetX = std::stod(ox->second);
+                            if (oy != pt.attrs.end())
+                                cell.labelOffsetY = std::stod(oy->second);
                         }
                     }
                 }
@@ -3338,13 +3355,23 @@ inline Graph parseDrawio(const std::string& text)
             arrow = "both";
 
         g.addEdge(cell.source, cell.target, label, edgeStyle, arrow);
-        if (cell.hasLabelOffset) {
-            g.edges.back().labelX = cell.labelOffX;
-            g.edges.back().labelY = cell.labelOffY;
-        }
-        if (!g.edges.empty())
-            g.edges.back().strokeColor =
+        if (!g.edges.empty()) {
+            gm::Edge& edge = g.edges.back();
+            edge.strokeColor =
                 extractStyleVal(cell.style, "strokeColor");
+            // 还原边标签位置：draw.io offset 是相对边中心的偏移量
+            if (!label.empty() &&
+                (cell.labelOffsetX != 0 || cell.labelOffsetY != 0)) {
+                const Node* src = g.findNode(cell.source);
+                const Node* dst = g.findNode(cell.target);
+                if (src && dst) {
+                    double cx = (src->x + src->w / 2.0 + dst->x + dst->w / 2.0) / 2.0;
+                    double cy = (src->y + src->h / 2.0 + dst->y + dst->h / 2.0) / 2.0;
+                    edge.labelX = cx + cell.labelOffsetX;
+                    edge.labelY = cy + cell.labelOffsetY;
+                }
+            }
+        }
     }
 
     return g;

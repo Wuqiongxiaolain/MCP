@@ -1,0 +1,105 @@
+<mxfile host="graphmcp" agent="graphmcp/1.0" type="device">
+  <diagram name="bubble-tea" id="gti8xmdcyjsbd2">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="A" value="🧋 想喝奶茶" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="124.678" y="40" width="116" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="B" value="🏪 选品牌" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="255.493" y="164" width="102" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="C" value="💰 喜茶/奈雪&lt;br&gt;30块一杯" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="74.9722" y="304" width="256" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="D" value="😊 蜜雪冰城&lt;br&gt;你爱我我爱你" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="390.972" y="304" width="256" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="E" value="🎲 外卖软件&lt;br&gt;哪家优惠点哪家" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="706.972" y="304" width="270" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="F" value="🍬 糖度选择" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="309.878" y="428" width="116" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="G" value="😈 快乐加倍&lt;br&gt;热量翻倍" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="84.0224" y="568" width="228" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="H" value="😐 自欺欺人&lt;br&gt;还是会长胖" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="372.022" y="568" width="242" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="I" value="🤔 为什么不直接喝茶" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="674.022" y="568" width="172" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="J" value="😋 吨吨吨~&lt;br&gt;嗝~" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="184.621" y="692" width="200" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="K" value="😱 一看热量表:&lt;br&gt;今天白健身了" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="29.6314" y="816" width="284" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="A" target="B">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge2" value="高端" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="B" target="C">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-9.44254" y="-7.4053" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge3" value="平价" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="B" target="D">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-6.33238" y="10.1932" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge4" value="随机" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="B" target="E">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-2.87212" y="11.6512" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="C" target="F">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="D" target="F">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge7" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="E" target="F">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge8" value="全糖" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="F" target="G">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-7.36347" y="-9.47519" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge9" value="半糖" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="F" target="H">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-8.7084" y="8.25613" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge10" value="无糖" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="F" target="I">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-3.82826" y="11.373" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge11" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="G" target="J">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="H" target="J">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge13" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="I" target="J">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge14" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="J" target="K">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

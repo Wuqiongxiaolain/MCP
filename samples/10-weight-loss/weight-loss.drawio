@@ -1,0 +1,95 @@
+<mxfile host="graphmcp" agent="graphmcp/1.0" type="device">
+  <diagram name="weight-loss" id="gti8xmdcsbisr8">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="A" value="🎂 过年胖了10斤" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="175.92" y="20" width="158" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="B" value="🏋️ 下决心减肥!" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="211.279" y="144" width="158" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="C" value="📝 制定完美计划" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="131.31" y="268" width="144" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="D" value="💪 第1天:&lt;br&gt;跑步5公里+水煮菜" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="20" y="392" width="298" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="E" value="😋 第3天:&lt;br&gt;路过烧烤摊..." style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="39.7184" y="516" width="284" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="F" value="🍖 吃还是不吃" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="191.47" y="640" width="130" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="G" value="🏆 坚持了一周&lt;br&gt;瘦了2斤!" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="71.0948" y="780" width="256" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="H" value="🍗 破防了...&lt;br&gt;报复性暴食" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="387.095" y="780" width="270" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="I" value="⏰ 一个月后" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="184.251" y="904" width="116" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="J" value="🎉 瘦成闪电!&lt;br&gt;前男友后悔" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="60.9003" y="1044" width="256" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="K" value="⚖️ 回到原点&lt;br&gt;甚至更重" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="376.9" y="1044" width="242" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="A" target="B">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="B" target="C">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="C" target="D">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="D" target="E">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="E" target="F">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge6" value="😤 忍住!" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="F" target="G">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-11.0053" y="-4.78358" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge7" value="🤤 就吃一口" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="F" target="H">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-5.34025" y="10.7462" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="G" target="I">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge9" value="💪 继续坚持" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="I" target="J">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-11.1257" y="-4.49665" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge10" value="😮‍💨 慢慢松懈" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="I" target="K">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-5.50542" y="10.6626" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge11" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="H" target="K">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="K" target="B">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -74,9 +74,13 @@ struct Edge
     int  seqNum  = 0;      // 消息序号
     bool isAsync = false;  // 异步消息（->>）
 
-    // 边标签定位
-    double labelX = 0;  // 标签 X 偏移（相对边中点）
-    double labelY = 0;  // 标签 Y 偏移（相对边中点）
+    // 边路由路径点：布局阶段填充（虚拟节点在各中间层的坐标），导出阶段用于折线路由
+    // 空 vector 表示未设置，导出器自行计算兜底路由
+    std::vector<std::pair<double, double>> waypoints;
+
+    // 边标签在画布上的绝对位置：布局阶段从 waypoints 中选出最佳直段计算，
+    // 导出阶段供 draw.io 等格式定位标签偏移量
+    double labelX = 0, labelY = 0;
 };
 
 // Graph: 统一图模型容器（命名上 g 常用于 Graph 实例）
@@ -220,6 +224,16 @@ struct Graph
                 je.set("isAsync", true);
             if (!e.strokeColor.empty())
                 je.set("strokeColor", e.strokeColor);
+            if (!e.waypoints.empty()) {
+                Json wpArr = Json::arr();
+                for (auto& wp : e.waypoints) {
+                    Json wpObj = Json::obj();
+                    wpObj.set("x", wp.first);
+                    wpObj.set("y", wp.second);
+                    wpArr.push(wpObj);
+                }
+                je.set("waypoints", wpArr);
+            }
             if (e.labelX != 0 || e.labelY != 0) {
                 je.set("labelX", e.labelX);
                 je.set("labelY", e.labelY);
@@ -329,8 +343,14 @@ struct Graph
                     e.seqNum      = (int)je.num("seqNum", 0);
                     e.isAsync     = je.boolean("isAsync", false);
                     e.strokeColor = je.str("strokeColor");
-                    e.labelX      = je.num("labelX");
-                    e.labelY      = je.num("labelY");
+                    if (const Json* wp = je.find("waypoints")) {
+                        if (wp->isArr())
+                            for (auto& wpj : *wp->a)
+                                e.waypoints.push_back(
+                                    {wpj.num("x", 0.0), wpj.num("y", 0.0)});
+                    }
+                    e.labelX = je.num("labelX", 0.0);
+                    e.labelY = je.num("labelY", 0.0);
                     g.edges.push_back(e);
                 }
         }
@@ -461,23 +481,96 @@ inline std::string genId(const std::string& prefix = "g")
     return prefix + s;
 }
 
+// 统计 label 中 <br>/<br/>/\n 造成的行数（至少 1 行）
+inline int countLabelLines(const std::string& label)
+{
+    int lines = 1;
+    for (size_t i = 0; i < label.size();) {
+        if (label.compare(i, 5, "<br/>") == 0 ||
+            label.compare(i, 5, "<BR/>") == 0) {
+            lines++;
+            i += 5;
+        }
+        else if (label.compare(i, 4, "<br>") == 0 ||
+                 label.compare(i, 4, "<BR>") == 0) {
+            lines++;
+            i += 4;
+        }
+        else if (label[i] == '\n') {
+            lines++;
+            i++;
+        }
+        else {
+            i++;
+        }
+    }
+    return lines;
+}
+
 // 根据 label 长度估算默认节点尺寸（近似 UTF-8：按码点数统计）
 // defaultSize: 根据文本长度估算节点尺寸（UTF-8 场景下按码点近似）
 // 关键步骤：估算字符宽度 -> 计算基础宽高 -> 针对形状/ER 属性做修正
 inline void defaultSize(Node& n)
 {
-    size_t cps = 0;
-    for (unsigned char c : n.label)
-        if ((c & 0xC0) != 0x80)
-            cps++;
-    double wide = 0;
-    for (unsigned char c : n.label)
-        if (c >= 0x80) {
-            wide = 1;
-            break;
+    int nLines = countLabelLines(n.label);
+    // 按最长行（以 <br> 拆分后）计算宽度
+    double maxW = 100.0;
+    if (nLines == 1) {
+        size_t cps = 0;
+        for (unsigned char c : n.label)
+            if ((c & 0xC0) != 0x80)
+                cps++;
+        double wide    = false;
+        for (unsigned char c : n.label)
+            if (c >= 0x80) { wide = true; break; }
+        double perChar = wide ? 14.0 : 8.5;
+        maxW            = cps * perChar + 32.0;
+    }
+    else {
+        // 逐行统计，取最长行宽度
+        std::string cur;
+        for (size_t i = 0; i < n.label.size();) {
+            if (n.label.compare(i, 5, "<br/>") == 0 ||
+                n.label.compare(i, 5, "<BR/>") == 0) {
+                goto flushCurLine;
+            }
+            else if (n.label.compare(i, 4, "<br>") == 0 ||
+                     n.label.compare(i, 4, "<BR>") == 0) {
+                goto flushCurLine;
+            }
+            else if (n.label[i] == '\n') {
+                flushCurLine:
+                size_t lcps = 0;
+                for (unsigned char c : cur)
+                    if ((c & 0xC0) != 0x80) lcps++;
+                double lwide    = false;
+                for (unsigned char c : cur)
+                    if (c >= 0x80) { lwide = true; break; }
+                double lperChar = lwide ? 14.0 : 8.5;
+                maxW             = std::max(maxW, lcps * lperChar + 32.0);
+                cur.clear();
+                if (n.label[i] == '\n')
+                    i++;
+                else if (n.label.compare(i, 5, "<br/>") == 0 ||
+                         n.label.compare(i, 5, "<BR/>") == 0)
+                    i += 5;
+                else
+                    i += 4;
+                continue;
+            }
+            cur += n.label[i++];
         }
-    double perChar = wide ? 14.0 : 8.5;
-    n.w            = std::max(100.0, cps * perChar + 32.0);
+        // flush 最后一行
+        size_t lcps = 0;
+        for (unsigned char c : cur)
+            if ((c & 0xC0) != 0x80) lcps++;
+        double lwide    = false;
+        for (unsigned char c : cur)
+            if (c >= 0x80) { lwide = true; break; }
+        double lperChar = lwide ? 14.0 : 8.5;
+        maxW             = std::max(maxW, lcps * lperChar + 32.0);
+    }
+    n.w = maxW;
     n.h = 44.0;
     if (n.shape == "diamond")
         n.h = 60.0;
@@ -493,6 +586,8 @@ inline void defaultSize(Node& n)
     }
     if (!n.attrs.empty())  // ER 实体：为属性行预留高度
         n.h = 30.0 + 22.0 * (double)n.attrs.size();
+    else if (nLines > 1)  // 多行标签：按行数加高
+        n.h += 16.0 * (double)(nLines - 1);
 }
 
 }  // namespace gm

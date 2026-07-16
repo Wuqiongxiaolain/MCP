@@ -1,49 +1,58 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="906" height="756" viewBox="0 0 906 756">
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="788" viewBox="0 0 780 788">
   <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
   <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
-  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="291.777,64 310.63,104 329.483,144" marker-end="url(#arrow)"/>
-  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="271.483,174 258.251,244 266.02,306" marker-end="url(#arrow)"/>
-  <text class="elabel" x="262.136" y="271" text-anchor="middle">🏢 在办公室</text>
-  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="329.483,204 363.751,244 398.02,284" marker-end="url(#arrow)"/>
-  <text class="elabel" x="380.886" y="260" text-anchor="middle">🚗 外出开会</text>
-  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="387.483,174 465.751,244 530.02,306" marker-end="url(#arrow)"/>
-  <text class="elabel" x="497.886" y="271" text-anchor="middle">🏠 今天WFH</text>
-  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="187.02,328 157.01,368 127,408" marker-end="url(#arrow)"/>
-  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="398.02,328 417.305,368 436.59,408" marker-end="url(#arrow)"/>
-  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="436.59,468 394.082,508 402.574,570" marker-end="url(#arrow)"/>
-  <text class="elabel" x="398.328" y="535" text-anchor="middle">&amp;lt; 30分钟</text>
-  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="436.59,468 478.582,508 520.574,548" marker-end="url(#arrow)"/>
-  <text class="elabel" x="499.578" y="524" text-anchor="middle">&amp;gt; 1小时</text>
-  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="529.59,438 594.582,508 638.574,570" marker-end="url(#arrow)"/>
-  <text class="elabel" x="616.578" y="535" text-anchor="middle">不确定</text>
-  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="674.02,306 663.305,368 724.59,408" marker-end="url(#arrow)"/>
-  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="234,430 268.365,548 281.73,694" marker-end="url(#arrow)"/>
-  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="351.574,592 380.652,632 409.73,672" marker-end="url(#arrow)"/>
-  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="462.574,570 465.152,632 409.73,672" marker-end="url(#arrow)"/>
-  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="638.574,570 581.152,632 537.73,694" marker-end="url(#arrow)"/>
-  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="589.59,430 567.16,548 537.73,694" marker-end="url(#arrow)"/>
-  <rect x="233.777" y="20" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
-  <text class="lbl" x="291.777" y="47" text-anchor="middle">🕘 上班打卡</text>
-  <polygon points="329.483,144 387.483,174 329.483,204 271.483,174" fill="#fff7e0" stroke="#c9a227"/>
-  <text class="lbl" x="329.483" y="179" text-anchor="middle">👀 老板在哪</text>
-  <rect x="108.02" y="284" width="158" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
-  <text class="lbl" x="187.02" y="311" text-anchor="middle">🖥️ 认真工作模式</text>
-  <rect x="326.02" y="284" width="144" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
-  <text class="lbl" x="398.02" y="311" text-anchor="middle">😏 摸鱼机会来了</text>
-  <rect x="530.02" y="284" width="144" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
-  <text class="lbl" x="602.02" y="311" text-anchor="middle">🎮 自由模式开启</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="277.558,64 298.501,104 319.444,144" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="319.444,204 250.544,244 181.644,284" marker-end="url(#arrow)"/>
+  <text class="elabel" x="216.094" y="260" text-anchor="middle">🏢 在办公室</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="319.444,204 356.044,244 392.644,284" marker-end="url(#arrow)"/>
+  <text class="elabel" x="374.344" y="260" text-anchor="middle">🚗 外出开会</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="319.444,204 458.044,244 596.644,284" marker-end="url(#arrow)"/>
+  <text class="elabel" x="527.344" y="260" text-anchor="middle">🏠 今天WFH</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="181.644,328 154.322,368 127,408" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="392.644,328 406.107,368 419.57,408" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="419.57,468 378.487,508 337.404,548" marker-end="url(#arrow)"/>
+  <text class="elabel" x="357.945" y="524" text-anchor="middle">&amp;lt; 30分钟</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="419.57,468 462.987,508 506.404,548" marker-end="url(#arrow)"/>
+  <text class="elabel" x="484.695" y="524" text-anchor="middle">&amp;gt; 1小时</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="419.57,468 550.987,508 682.404,548" marker-end="url(#arrow)"/>
+  <text class="elabel" x="616.695" y="524" text-anchor="middle">不确定</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="596.644,328 617.107,368 637.57,408" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="127,452 252.453,548 377.905,688" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="337.404,592 357.654,640 377.905,688" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="506.404,592 442.154,640 377.905,688" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="682.404,608 530.154,648 377.905,688" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="637.57,468 507.738,548 377.905,688" marker-end="url(#arrow)"/>
+  <rect x="219.558" y="20" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="277.558" y="47" text-anchor="middle">🕘 上班打卡</text>
+  <polygon points="319.444,144 377.444,174 319.444,204 261.444,174" fill="#fff7e0" stroke="#c9a227"/>
+  <text class="lbl" x="319.444" y="179" text-anchor="middle">👀 老板在哪</text>
+  <rect x="102.644" y="284" width="158" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="181.644" y="311" text-anchor="middle">🖥️ 认真工作模式</text>
+  <rect x="320.644" y="284" width="144" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="392.644" y="311" text-anchor="middle">😏 摸鱼机会来了</text>
+  <rect x="524.644" y="284" width="144" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="596.644" y="311" text-anchor="middle">🎮 自由模式开启</text>
   <rect x="20" y="408" width="214" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
   <text class="lbl" x="127" y="435" text-anchor="middle">📊 Excel假装分析数据</text>
-  <polygon points="436.59,408 529.59,438 436.59,468 343.59,438" fill="#fff7e0" stroke="#c9a227"/>
-  <text class="lbl" x="436.59" y="443" text-anchor="middle">⏱️ 预计老板多久回来</text>
-  <rect x="300.574" y="548" width="102" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
-  <text class="lbl" x="351.574" y="575" text-anchor="middle">📱 刷手机</text>
-  <rect x="462.574" y="548" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
-  <text class="lbl" x="520.574" y="575" text-anchor="middle">🍿 看一集剧</text>
-  <rect x="638.574" y="548" width="228" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
-  <text class="lbl" x="752.574" y="575" text-anchor="middle">😰 一边摸鱼&lt;br&gt;一边焦虑</text>
-  <rect x="589.59" y="408" width="270" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
-  <text class="lbl" x="724.59" y="435" text-anchor="middle">🛋️ 床上办公&lt;br&gt;aka 睡觉</text>
-  <rect x="281.73" y="672" width="256" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
-  <text class="lbl" x="409.73" y="699" text-anchor="middle">⏰ 下班!&lt;br&gt;又是充实的一天</text>
+  <polygon points="419.57,408 512.57,438 419.57,468 326.57,438" fill="#fff7e0" stroke="#c9a227"/>
+  <text class="lbl" x="419.57" y="443" text-anchor="middle">⏱️ 预计老板多久回来</text>
+  <rect x="286.404" y="548" width="102" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="337.404" y="575" text-anchor="middle">📱 刷手机</text>
+  <rect x="448.404" y="548" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="506.404" y="575" text-anchor="middle">🍿 看一集剧</text>
+  <rect x="624.404" y="548" width="116" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="682.404" y="575">😰 一边摸鱼</tspan>
+    <tspan x="682.404" y="591">一边焦虑</tspan>
+  </text>
+  <rect x="572.57" y="408" width="130" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="637.57" y="435">🛋️ 床上办公</tspan>
+    <tspan x="637.57" y="451">aka 睡觉</tspan>
+  </text>
+  <rect x="312.905" y="688" width="130" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="377.905" y="715">⏰ 下班!</tspan>
+    <tspan x="377.905" y="731">又是充实的一天</tspan>
+  </text>
 </svg>

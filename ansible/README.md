@@ -134,3 +134,17 @@ docker exec jenkins bash -lc "git --version; curl --version | head -1; jq --vers
 | `apt install` | 容器内 `curl` / `jq` / `git`（重建 Jenkins 镜像层会丢，数据卷文件还在） |
 
 不会改 Jenkins 的 `-e` / 端口等**启动参数**；那需要 `docker_container` 重建容器。
+
+## 发布到 nginx 下载站（CI/CD → Ansible）
+
+共享卷：宿主机 `D:/Schoolworks/Coding/DevOps/artifacts` → 容器 `/artifacts`  
+下载站：容器 `download-server`（nginx），浏览器 http://localhost:8081/
+
+流程：
+
+1. Jenkins Package 把 `graphmcp*.tar.gz` 拷到 `/artifacts`
+2. 阶段 `Deploy download-server`：`docker exec semaphore ansible-playbook ... deploy_release.yml`
+3. Playbook 生成 `index.html` 并校验 nginx
+4. 打开 http://localhost:8081/ 下载制品
+
+构建参数：`DO_DEPLOY=true`（默认），`PIPELINE_MODE=ci` 或 `cd`，Mac/Win 保持 false。

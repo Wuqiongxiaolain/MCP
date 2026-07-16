@@ -11,6 +11,7 @@ RUN apt-get update \
       make \
       python3 \
       imagemagick \
+      librsvg2-bin \
       jq \
       git \
       docker.io \

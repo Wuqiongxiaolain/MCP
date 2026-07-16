@@ -15,4 +15,4 @@ docker compose -f docker/jenkins/docker-compose.yml up -d --build
 
 ## 预装内容
 
-`sudo`、`g++`、`make`、`python3`、`imagemagick`、`jq`、`git`、`docker.io` + `docker-cli`（连宿主机 sock；不在容器内跑 dockerd）
+`sudo`、`g++`、`make`、`python3`、`imagemagick`、`librsvg2-bin`（`rsvg-convert`，供 smoke PNG/PDF）、`jq`、`git`、`docker.io` + `docker-cli`

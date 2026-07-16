@@ -99,8 +99,9 @@ pipeline {
             sh '''
               set -euo pipefail
               # 步骤：已有工具则跳过；否则用 root / sudo 装依赖（Jenkins 官方镜像默认无 sudo）
+              # rsvg-convert：SMOKE_REQUIRE_RASTER=1 需要真实 PNG/PDF（ImageMagick 在 Debian 上常禁 SVG）
               missing=0
-              for c in g++ make python3 jq; do
+              for c in g++ make python3 jq rsvg-convert; do
                 command -v "$c" >/dev/null 2>&1 || missing=1
               done
               command -v convert >/dev/null 2>&1 || command -v magick >/dev/null 2>&1 || missing=1
@@ -109,15 +110,15 @@ pipeline {
                 exit 0
               fi
               if ! command -v apt-get >/dev/null 2>&1; then
-                echo "非 apt 环境：请预先安装 g++ make python3 imagemagick jq"
+                echo "非 apt 环境：请预先安装 g++ make python3 imagemagick librsvg2-bin jq"
                 exit 1
               fi
               if [ "$(id -u)" -eq 0 ]; then
                 apt-get update
-                apt-get install -y g++ make python3 imagemagick jq
+                apt-get install -y g++ make python3 imagemagick librsvg2-bin jq
               elif command -v sudo >/dev/null 2>&1; then
                 sudo apt-get update
-                sudo apt-get install -y g++ make python3 imagemagick jq
+                sudo apt-get install -y g++ make python3 imagemagick librsvg2-bin jq
               else
                 echo "无 root/sudo：请在 Agent 预装依赖，或为 jenkins 配置免密 sudo"
                 exit 1
@@ -394,13 +395,24 @@ pipeline {
       options { timeout(time: 10, unit: 'MINUTES') }
       steps {
         withCredentials([string(credentialsId: 'github-token', variable: 'GH_TOKEN')]) {
+          // unstash 是 Pipeline 步骤，不能写在 sh 脚本里
+          unstash 'cd-linux'
+          script {
+            try {
+              unstash 'cd-macos'
+            } catch (ignored) {
+              echo '无 macOS stash，跳过'
+            }
+            try {
+              unstash 'cd-windows'
+            } catch (ignored) {
+              echo '无 Windows stash，跳过'
+            }
+          }
           sh '''
             set -euo pipefail
             mkdir -p release-assets
             # 仅 Linux 必有；macOS/Windows 可能未构建
-            unstash 'cd-linux'
-            unstash 'cd-macos' || true
-            unstash 'cd-windows' || true
             mv -f graphmcp-*-linux-x64.tar.gz release-assets/ 2>/dev/null || true
             mv -f graphmcp-*-macos-x64.tar.gz release-assets/ 2>/dev/null || true
             mv -f graphmcp-*-windows-x64.zip release-assets/ 2>/dev/null || true
@@ -410,18 +422,14 @@ pipeline {
             : > "$NOTE_FILE"
             git tag -l --format='%(contents)' "${GRAPHMCP_TAG_NAME}" > "$NOTE_FILE" || true
             if [ ! -s "$NOTE_FILE" ]; then
-              printf '%s\n' \
-                "graphmcp ${GRAPHMCP_TAG_NAME}" \
-                "" \
-                "（无 annotated tag message。发版请使用 git tag -a 并填写说明。）" \
-                > "$NOTE_FILE"
+              printf '%s\n' "graphmcp ${GRAPHMCP_TAG_NAME}" "" "（无 annotated tag message。发版请使用 git tag -a 并填写说明。）" > "$NOTE_FILE"
             fi
             {
               echo ""
               echo "---"
               echo ""
               echo "制品由 Jenkins CD 自动构建上传。"
-              # 用变量拼 markdown 反引号，避免 bash 命令替换，也避免 Groovy 转义问题
+              # 用变量拼 markdown 反引号，避免命令替换，也避免 Groovy 转义问题
               BT='`'
               echo "- Tag：${BT}${GRAPHMCP_TAG_NAME}${BT}"
               echo "- Build：${BT}${BUILD_NUMBER}${BT}"
@@ -434,22 +442,16 @@ pipeline {
               exit 0
             fi
 
-            shopt -s nullglob
-            assets=(release-assets/*)
-            if [ "${#assets[@]}" -eq 0 ]; then
+            # 原理：用 find 判空，避免 bash 的 shopt/数组（Jenkins sh 多为 dash）
+            if [ -z "$(find release-assets -type f -print -quit)" ]; then
               echo "没有可上传制品"
               exit 1
             fi
 
             if gh release view "${GRAPHMCP_TAG_NAME}" >/dev/null 2>&1; then
-              gh release upload "${GRAPHMCP_TAG_NAME}" "${assets[@]}" --clobber
+              gh release upload "${GRAPHMCP_TAG_NAME}" release-assets/* --clobber
             else
-              gh release create "${GRAPHMCP_TAG_NAME}" \
-                "${assets[@]}" \
-                --title "graphmcp ${GRAPHMCP_TAG_NAME}" \
-                --notes-file "$NOTE_FILE" \
-                --generate-notes \
-                --target "${GIT_COMMIT}"
+              gh release create "${GRAPHMCP_TAG_NAME}" release-assets/* --title "graphmcp ${GRAPHMCP_TAG_NAME}" --notes-file "$NOTE_FILE" --generate-notes --target "${GIT_COMMIT}"
             fi
           '''
         }
@@ -472,21 +474,22 @@ pipeline {
       options { timeout(time: 10, unit: 'MINUTES') }
       steps {
         // 原理：Jenkins 已把 tar 写入 /artifacts；经 docker.sock 调用 Semaphore 内 ansible-playbook 生成首页并校验 nginx
+        // 注意：sh ''' 内禁止 \\( \\) 等 Groovy 非法转义；用两次 find，兼容 dash
         sh '''
           set -euo pipefail
           echo "=== /artifacts 当前制品 ==="
           ls -la /artifacts || true
-          if ! ls /artifacts/graphmcp*.tar.gz /artifacts/graphmcp*.zip >/dev/null 2>&1; then
-            echo "共享卷中尚无制品，跳过 Ansible 发布"
+          found_tar="$(find /artifacts -maxdepth 1 -name 'graphmcp*.tar.gz' -print -quit)"
+          found_zip="$(find /artifacts -maxdepth 1 -name 'graphmcp*.zip' -print -quit)"
+          if [ -z "$found_tar" ] && [ -z "$found_zip" ]; then
+            echo "共享卷中无 graphmcp 制品，无法发布"
             exit 1
           fi
           if ! command -v docker >/dev/null 2>&1; then
             echo "Jenkins 容器内无 docker 客户端，无法触发 Semaphore"
             exit 1
           fi
-          docker exec semaphore ansible-playbook \
-            -i /ansible-projects/MCP-/ansible/inventories/docker.yml \
-            /ansible-projects/MCP-/ansible/playbooks/deploy_release.yml
+          docker exec semaphore ansible-playbook -i /ansible-projects/MCP-/ansible/inventories/docker.yml /ansible-projects/MCP-/ansible/playbooks/deploy_release.yml
           echo "发布完成：请访问 http://localhost:8081/"
         '''
       }

@@ -5,7 +5,7 @@
   hosts: localhost
   gather_facts: false
   vars:
-    # 可被 inventory / Semaphore Environment 覆盖
+    # 可被 inventory / extra vars 覆盖
     jenkins_container_name: jenkins
     jenkins_marker_path: /var/jenkins_home/managed-by-ansible.txt
 
@@ -32,7 +32,7 @@
           - |
             set -euo pipefail
             cat > "{{ jenkins_marker_path }}" <<'EOF'
-            managed-by: semaphore-ansible
+            managed-by: ansible
             purpose: jenkins-container-tools
             EOF
             chown jenkins:jenkins "{{ jenkins_marker_path }}"

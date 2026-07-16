@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1369" height="528" viewBox="0 0 1369 528">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="1185.65,202 921.425,132 643.198,70" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="527.198,70 429.925,140 423.652,202" marker-end="url(#arrow)"/>
+  <text class="elabel" x="426.788" y="167" text-anchor="middle">😢 卖惨流</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="585.198,100 601.925,140 618.652,180" marker-end="url(#arrow)"/>
+  <text class="elabel" x="610.288" y="156" text-anchor="middle">🎁 利诱流</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="643.198,70 777.425,140 813.652,202" marker-end="url(#arrow)"/>
+  <text class="elabel" x="795.538" y="167" text-anchor="middle">😤 社交流</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="274.652,224 306.373,264 338.094,304" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="483.652,202 478.373,264 396.094,334" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="813.652,202 653.873,264 396.094,334" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="280.094,334 257.877,404 177.661,444" marker-end="url(#arrow)"/>
+  <text class="elabel" x="217.769" y="420" text-anchor="middle">✅ 成功</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="396.094,334 426.202,404 514.311,444" marker-end="url(#arrow)"/>
+  <text class="elabel" x="470.256" y="420" text-anchor="middle">❌ 失败</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="635.311,466 885.981,304 1185.65,202" marker-end="url(#arrow)"/>
+  <rect x="1185.65" y="180" width="144" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="1257.65" y="207" text-anchor="middle">🎯 急需50块钱</text>
+  <polygon points="585.198,40 643.198,70 585.198,100 527.198,70" fill="#fff7e0" stroke="#c9a227"/>
+  <text class="lbl" x="585.198" y="75" text-anchor="middle">🤔 选择战术</text>
+  <rect x="125.652" y="180" width="298" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="274.652" y="207" text-anchor="middle">📖 编造故事:&lt;br&gt;猫生病/房租到期</text>
+  <rect x="483.652" y="180" width="270" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="618.652" y="207" text-anchor="middle">💰 承诺回报:&lt;br&gt;下周还60!</text>
+  <rect x="813.652" y="180" width="312" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="969.652" y="207" text-anchor="middle">📱 群发消息:&lt;br&gt;考验友情的时候到了</text>
+  <polygon points="338.094,304 396.094,334 338.094,364 280.094,334" fill="#fff7e0" stroke="#c9a227"/>
+  <text class="lbl" x="338.094" y="339" text-anchor="middle">⌛ 等待回应</text>
+  <rect x="49.6611" y="444" width="256" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="177.661" y="471" text-anchor="middle">🎉 V我50!&lt;br&gt;感谢老板!</text>
+  <rect x="393.311" y="444" width="242" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="514.311" y="471" text-anchor="middle">💀 被拉黑&lt;br&gt;换个目标再来</text>
+</svg>

@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="697" height="1128" viewBox="0 0 697 1128">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="254.92,64 272.599,104 290.279,144" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="290.279,188 246.794,228 203.31,268" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="203.31,312 186.155,352 169,392" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="169,436 175.359,476 181.718,516" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="181.718,560 219.094,600 256.47,640" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="256.47,700 227.782,740 199.095,780" marker-end="url(#arrow)"/>
+  <text class="elabel" x="213.439" y="756" text-anchor="middle">😤 忍住!</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="321.47,670 389.282,740 387.095,802" marker-end="url(#arrow)"/>
+  <text class="elabel" x="388.189" y="767" text-anchor="middle">🤤 就吃一口</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="199.095,824 220.673,864 242.251,904" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="242.251,964 215.575,1004 188.9,1044" marker-end="url(#arrow)"/>
+  <text class="elabel" x="202.238" y="1020" text-anchor="middle">💪 继续坚持</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="300.251,934 370.075,1004 376.9,1066" marker-end="url(#arrow)"/>
+  <text class="elabel" x="373.488" y="1031" text-anchor="middle">😮‍💨 慢慢松懈</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="522.095,824 509.998,904 497.9,1044" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#b0714b" stroke-width="1.5" stroke-linejoin="round" points="618.9,1066 394.089,1066 394.089,166 369.279,166" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <rect x="175.92" y="20" width="158" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="254.92" y="47" text-anchor="middle">🎂 过年胖了10斤</text>
+  <rect x="211.279" y="144" width="158" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="290.279" y="171" text-anchor="middle">🏋️ 下决心减肥!</text>
+  <rect x="131.31" y="268" width="144" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="203.31" y="295" text-anchor="middle">📝 制定完美计划</text>
+  <rect x="20" y="392" width="298" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="169" y="419" text-anchor="middle">💪 第1天:&lt;br&gt;跑步5公里+水煮菜</text>
+  <rect x="39.7184" y="516" width="284" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="181.718" y="543" text-anchor="middle">😋 第3天:&lt;br&gt;路过烧烤摊...</text>
+  <polygon points="256.47,640 321.47,670 256.47,700 191.47,670" fill="#fff7e0" stroke="#c9a227"/>
+  <text class="lbl" x="256.47" y="675" text-anchor="middle">🍖 吃还是不吃</text>
+  <rect x="71.0948" y="780" width="256" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="199.095" y="807" text-anchor="middle">🏆 坚持了一周&lt;br&gt;瘦了2斤!</text>
+  <rect x="387.095" y="780" width="270" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="522.095" y="807" text-anchor="middle">🍗 破防了...&lt;br&gt;报复性暴食</text>
+  <polygon points="242.251,904 300.251,934 242.251,964 184.251,934" fill="#fff7e0" stroke="#c9a227"/>
+  <text class="lbl" x="242.251" y="939" text-anchor="middle">⏰ 一个月后</text>
+  <rect x="60.9003" y="1044" width="256" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="188.9" y="1071" text-anchor="middle">🎉 瘦成闪电!&lt;br&gt;前男友后悔</text>
+  <rect x="376.9" y="1044" width="242" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="497.9" y="1071" text-anchor="middle">⚖️ 回到原点&lt;br&gt;甚至更重</text>
+</svg>

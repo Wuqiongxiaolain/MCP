@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="701" height="864" viewBox="0 0 701 864">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="529.066,182 470.456,112 439.847,50" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="267.847,50 276.956,120 265.066,182" marker-end="url(#arrow)"/>
+  <text class="elabel" x="271.011" y="147" text-anchor="middle">躺平路线</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="353.847,80 375.456,120 397.066,160" marker-end="url(#arrow)"/>
+  <text class="elabel" x="386.261" y="136" text-anchor="middle">内卷路线</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="200.066,204 160.097,244 120.128,284" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="120.128,328 109.564,368 99,408" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="99,452 114.857,492 130.714,532" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="130.714,576 177.587,616 224.459,656" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="397.066,204 366.191,244 335.316,284" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="335.316,328 336.543,368 337.769,408" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="337.769,452 369.585,492 401.4,532" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="473.4,554 467.43,616 533.459,656" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="224.459,700 308.71,740 392.961,780" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#b0714b" stroke-width="1.5" stroke-linejoin="round" points="520.961,802 490.014,802 490.014,182 645.066,182" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <rect x="529.066" y="160" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="587.066" y="187" text-anchor="middle">🎉 周末到!</text>
+  <polygon points="353.847,20 439.847,50 353.847,80 267.847,50" fill="#fff7e0" stroke="#c9a227"/>
+  <text class="lbl" x="353.847" y="55" text-anchor="middle">🛏️ 周六早晨的选择</text>
+  <rect x="135.066" y="160" width="130" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="200.066" y="187" text-anchor="middle">😴 睡到自然醒</text>
+  <rect x="325.066" y="160" width="144" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="397.066" y="187" text-anchor="middle">⏰ 7点起床学习</text>
+  <rect x="55.1279" y="284" width="130" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="120.128" y="311" text-anchor="middle">🍜 外卖+追剧</text>
+  <rect x="20" y="408" width="158" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="99" y="435" text-anchor="middle">🛋️ 沙发变成形状</text>
+  <rect x="44.714" y="532" width="172" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="130.714" y="559" text-anchor="middle">📱 刷手机到凌晨3点</text>
+  <rect x="103.459" y="656" width="242" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="224.459" y="683" text-anchor="middle">😵 周一:&lt;br&gt;我是谁我在哪</text>
+  <rect x="249.316" y="284" width="172" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="335.316" y="311" text-anchor="middle">📚 网课/读书/健身</text>
+  <rect x="251.769" y="408" width="172" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="337.769" y="435" text-anchor="middle">💪 感觉人生充满意义</text>
+  <rect x="329.4" y="532" width="144" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="401.4" y="559" text-anchor="middle">😊 周一精神饱满</text>
+  <rect x="405.459" y="656" width="256" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="533.459" y="683" text-anchor="middle">🏆 升职加薪&lt;br&gt;走向人生巅峰</text>
+  <rect x="264.961" y="780" width="256" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="392.961" y="807" text-anchor="middle">💭 下个周末&lt;br&gt;一定不这样了</text>
+</svg>

@@ -1,0 +1,114 @@
+<mxfile host="graphmcp" agent="graphmcp/1.0" type="device">
+  <diagram name="pretend-ai" id="gti8xmdcy4plbx">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="A" value="🤖 想假装很懂AI" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="321.238" y="20" width="158" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="B" value="👥 聊天对象" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="365.054" y="144" width="116" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="C" value="🎤 疯狂输出术语" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="202.387" y="284" width="144" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="D" value="🤫 谨慎发言" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="406.387" y="284" width="116" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="E" value="😎 展示项目经验" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="595.254" y="284" width="144" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="C1" value="💬 Large Language Model" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="20" y="408" width="340" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="C2" value="💬 Transformer架构" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="44.9661" y="532" width="242" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="C3" value="💬 涌现能力Emergence" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="55.3497" y="656" width="242" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="F" value="🤯 对方已被绕晕&lt;br&gt;你成功装到了" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="43.4019" y="780" width="284" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="D1" value="💬 最近在看一篇paper..." style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="420" y="408" width="256" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="D2" value="💬 嗯对 就是那个思路" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="375.186" y="532" width="186" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="G" value="🙏 安全过关" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="385.649" y="656" width="116" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="E1" value="💬 我用LangChain&lt;br&gt;搭了个RAG pipeline" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="736" y="408" width="480" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="E2" value="💬 Fine-tune了Llama" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="690.848" y="532" width="270" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="H" value="🤝 拿到Offer!" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="686.175" y="656" width="172" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="A" target="B">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge2" value="不懂的人" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="B" target="C">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-7.96736" y="-8.97336" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge3" value="同行" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="B" target="D">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-11.4517" y="3.58586" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge4" value="面试官" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="B" target="E">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-5.70621" y="10.5565" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="C" target="C1">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="C1" target="C2">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge7" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="C2" target="C3">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="C3" target="F">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge9" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="D" target="D1">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="D1" target="D2">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge11" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="D2" target="G">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="E" target="E1">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge13" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="E1" target="E2">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge14" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="E2" target="H">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

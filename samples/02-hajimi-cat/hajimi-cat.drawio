@@ -1,0 +1,85 @@
+<mxfile host="graphmcp" agent="graphmcp/1.0" type="device">
+  <diagram name="hajimi-cat" id="gti8xmcs05hq0n">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="A" value="🐱 哈吉米出生" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="193.898" y="20" width="130" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="B" value="🏠 被好心人收养" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="188.252" y="144" width="144" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="C" value="📸 主人开始拍照发网上" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="174.183" y="268" width="186" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="D" value="🌐 网友反应" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="229.629" y="392" width="116" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="E" value="🔥 一夜爆红" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="162.713" y="532" width="116" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="F" value="📉 继续当普通猫" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="338.713" y="532" width="144" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="G" value="🛍️ 接代言/带货" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="100.612" y="656" width="158" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="H" value="💼 成立哈吉米工作室" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="74.226" y="780" width="172" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="I" value="🏆 猫生巅峰:&lt;br&gt;年入千万喵粮" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="20" y="904" width="270" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="J" value="😴 每天睡18小时" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="339.397" y="656" width="158" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="K" value="😸 其实这才是&lt;br&gt;真正的猫生赢家" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="306.226" y="780" width="284" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="A" target="B">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="B" target="C">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="C" target="D">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge4" value="😍 可爱暴击" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="D" target="E">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-10.7033" y="-5.42589" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge5" value="😐 平平无奇" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="D" target="F">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-8.7765" y="8.1837" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="E" target="G">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge7" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="G" target="H">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="H" target="I">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge9" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="F" target="J">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="J" target="K">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

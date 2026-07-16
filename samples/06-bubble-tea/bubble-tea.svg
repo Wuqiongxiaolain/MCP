@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1016" height="900" viewBox="0 0 1016 900">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="240.678,62 244.585,124 255.493,194" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="255.493,194 254.733,264 202.972,304" marker-end="url(#arrow)"/>
+  <text class="elabel" x="228.852" y="280" text-anchor="middle">高端</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="357.493,194 412.733,264 390.972,326" marker-end="url(#arrow)"/>
+  <text class="elabel" x="401.852" y="291" text-anchor="middle">平价</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="357.493,194 574.233,264 706.972,326" marker-end="url(#arrow)"/>
+  <text class="elabel" x="640.602" y="291" text-anchor="middle">随机</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="202.972,348 285.425,388 309.878,458" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="518.972,348 443.425,388 425.878,458" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="706.972,326 604.925,388 425.878,458" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="309.878,458 282.95,528 198.022,568" marker-end="url(#arrow)"/>
+  <text class="elabel" x="240.486" y="544" text-anchor="middle">全糖</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="425.878,458 430.45,528 493.022,568" marker-end="url(#arrow)"/>
+  <text class="elabel" x="461.736" y="544" text-anchor="middle">半糖</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="425.878,458 563.95,528 674.022,590" marker-end="url(#arrow)"/>
+  <text class="elabel" x="618.986" y="555" text-anchor="middle">无糖</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="198.022,612 241.322,652 284.621,692" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="372.022,590 388.822,652 384.621,714" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="674.022,590 522.322,652 384.621,714" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="284.621,736 228.126,776 171.631,816" marker-end="url(#arrow)"/>
+  <rect x="124.678" y="40" width="116" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="182.678" y="67" text-anchor="middle">🧋 想喝奶茶</text>
+  <polygon points="306.493,164 357.493,194 306.493,224 255.493,194" fill="#fff7e0" stroke="#c9a227"/>
+  <text class="lbl" x="306.493" y="199" text-anchor="middle">🏪 选品牌</text>
+  <rect x="74.9722" y="304" width="256" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="202.972" y="331" text-anchor="middle">💰 喜茶/奈雪&lt;br&gt;30块一杯</text>
+  <rect x="390.972" y="304" width="256" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="518.972" y="331" text-anchor="middle">😊 蜜雪冰城&lt;br&gt;你爱我我爱你</text>
+  <rect x="706.972" y="304" width="270" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="841.972" y="331" text-anchor="middle">🎲 外卖软件&lt;br&gt;哪家优惠点哪家</text>
+  <polygon points="367.878,428 425.878,458 367.878,488 309.878,458" fill="#fff7e0" stroke="#c9a227"/>
+  <text class="lbl" x="367.878" y="463" text-anchor="middle">🍬 糖度选择</text>
+  <rect x="84.0224" y="568" width="228" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="198.022" y="595" text-anchor="middle">😈 快乐加倍&lt;br&gt;热量翻倍</text>
+  <rect x="372.022" y="568" width="242" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="493.022" y="595" text-anchor="middle">😐 自欺欺人&lt;br&gt;还是会长胖</text>
+  <rect x="674.022" y="568" width="172" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="760.022" y="595" text-anchor="middle">🤔 为什么不直接喝茶</text>
+  <rect x="184.621" y="692" width="200" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="284.621" y="719" text-anchor="middle">😋 吨吨吨~&lt;br&gt;嗝~</text>
+  <rect x="29.6314" y="816" width="284" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="171.631" y="843" text-anchor="middle">😱 一看热量表:&lt;br&gt;今天白健身了</text>
+</svg>

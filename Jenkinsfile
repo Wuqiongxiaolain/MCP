@@ -48,7 +48,7 @@ pipeline {
     booleanParam(
       name: 'DO_DEPLOY',
       defaultValue: true,
-      description: '构建成功后发布制品到 nginx 下载站（经 Ansible/Semaphore）'
+      description: '构建成功后发布制品到 nginx 下载站（经 Ansible）'
     )
   }
 
@@ -473,7 +473,7 @@ pipeline {
       agent { label 'linux' }
       options { timeout(time: 10, unit: 'MINUTES') }
       steps {
-        // 原理：Jenkins 已把 tar 写入 /artifacts；经 docker.sock 调用 Semaphore 内 ansible-playbook 生成首页并校验 nginx
+        // 原理：Jenkins 已把 tar 写入 /artifacts；经 docker.sock 在 ansible-runner 容器内执行 playbook
         // 注意：sh ''' 内禁止 \\( \\) 等 Groovy 非法转义；用两次 find，兼容 dash
         sh '''
           set -euo pipefail
@@ -486,10 +486,10 @@ pipeline {
             exit 1
           fi
           if ! command -v docker >/dev/null 2>&1; then
-            echo "Jenkins 容器内无 docker 客户端，无法触发 Semaphore"
+            echo "Jenkins 容器内无 docker 客户端，无法触发 Ansible 发布"
             exit 1
           fi
-          docker exec semaphore ansible-playbook -i /ansible-projects/MCP-/ansible/inventories/docker.yml /ansible-projects/MCP-/ansible/playbooks/deploy_release.yml
+          docker exec ansible-runner ansible-playbook -i /ansible-projects/MCP-/ansible/inventories/docker.yml /ansible-projects/MCP-/ansible/playbooks/deploy_release.yml
           echo "发布完成：请访问 http://localhost:8081/"
         '''
       }

@@ -1,6 +1,6 @@
 # 🎯 graphmcp：一份图（和表），任意格式进出
 
-> latest update: v0.2.0, 2026-07-14  
+> latest update: v0.2.5-beta, 2026-07-16  
 > 能力口径以 [`openapi.yaml`](api_reference/openapi.yaml)（由 `toolList()` 生成）与当前源码为准。
 
 不管你手上是 Mermaid、Markdown、CSV、XML、Excalidraw 还是 draw.io，丢给 graphmcp，它都能读懂；不管你要 SVG、PNG、PDF、drawio 还是 Excalidraw，它都能吐给你。中间那道「先转 A 再转 B」的手工活，从此不用你自己干。**Graph 模型与 Table 模型同为一等公民**：各自独立存取版本，再通过桥接工具协作（不是把业务宽表硬套成边表 CSV，也不是把表塞进图里凑合）。
@@ -58,7 +58,7 @@
 
 `create from-mermaid` / `graph_create` 已覆盖深解析（含但不限于）：
 
-`flowchart` · `mindmap` · `erDiagram` · `classDiagram` · `stateDiagram` · `sequenceDiagram` · `pie` · `requirementDiagram` · `gitGraph` · `kanban` · `journey` · `timeline` · `quadrantChart` · `xychart-beta` · `architecture-beta` · `packet-beta` …
+`flowchart` · `mindmap` · `erDiagram` · `classDiagram` · `stateDiagram` · `sequenceDiagram` · `pie` · `requirementDiagram` · `gantt` · `sankey` · `gitGraph` · `kanban` · `journey` · `timeline` · `quadrantChart` · `xychart-beta` · `block-beta` · `architecture-beta` · `packet-beta`
 
 图级结构化扩展可通过 MCP **`graph_property`** 读写。未知类型会明确报错或走透传策略（见样例库硬失败 / 软失败约定）。
 
@@ -72,7 +72,7 @@ graphmcp export to-svg --id <graph-id> -o output.svg
 graphmcp serve                      # 作为 MCP 服务器接入 AI 客户端
 ```
 
-第一条建图，第二条导出，第三条把它接进 Claude Code / Claude Desktop / Cursor。完整参数见 [CLI &amp; MCP 指令参考](CLI_MCP_REFERENCE.md)；机器可读契约见 [OpenAPI](api_reference/openapi.yaml)。
+第一条建图，第二条导出，第三条把它接进 Claude Code / Claude Desktop / Cursor。完整参数见 [CLI &amp; MCP 指令参考](CLI_MCP_REFERENCE.md)；机器可读契约见 [OpenAPI](api_reference/openapi.yaml)；下载与配置见 [Quick Start](QUICK_START.md)。
 
 ---
 
@@ -119,6 +119,10 @@ Excalidraw 笔迹、图片、字体可原样往返：`elements` / `files` 保留
 - **编辑**：`graph_update` / `graph_insert`（OpenAPI 中均暴露颜色参数）
 
 示例：[`flowchart_colors.mmd`](../examples/example_input/flowchart_colors.mmd)。
+
+### 🧅 多图层 + 多页，draw.io 往返不丢
+
+`parseDrawio` / `toDrawio` 完整保留**图层（layers）**与**多页（pages）**结构。在 Draw.io 中按图层组织、分页管理的复杂架构图，导入 graphmcp 后再导出，结构不丢。节点/边支持 `layer` 归属，导出时按页分组、按图层控制可见性。
 
 ---
 
@@ -206,9 +210,11 @@ make docs-api    # 或 graphmcp dump-tools --format openapi -o docs/api_referenc
 |----|------|
 | 语言 / 产物 | C++17，单可执行文件，零第三方依赖（JSON/XML/Base64 内置） |
 | 入口 | CLI 15 命令族 + `serve`；Windows 可静态链接运行时，利于 MCP 裁剪 PATH |
+| 版本演进 | v0.1.0 → v0.2.0 → v0.2.2 → v0.2.3-beta → v0.2.4-beta → v0.2.5-beta（5 次迭代） |
 | 契约 | OpenAPI 3.0 由 `dump-tools` 生成，CI 防漂移；升版本用 Actions `Bump version` 写回（不自动打 tag） |
-| 性能基线 | CI `bench-ci` 仅比对；按需 Actions `Update bench baseline` 写回 |
-| CD | 推送 `v*` tag 触发多平台 Release；或 CD `workflow_dispatch` 试运行 |
+| 性能 | 微基准套件 18 指标；CI `bench-ci` 仅比对，按需 Actions `Update bench baseline` 写回 |
+| CD | 推送 `v*` tag 触发多平台 Release（Windows/Linux/macOS）；或 CD `workflow_dispatch` 试运行 |
+| DevOps | GitHub Actions（主链）+ 本地 Jenkins（Docker + Ansible Runner → nginx 下载站） |
 
 <img src="images/build.svg" alt="零依赖构建与测试" width="100%">
 

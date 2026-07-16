@@ -1,9 +1,9 @@
 # graphmcp 应用运作逻辑详解
 
-> latest update: v0.2.0, 2026-07-14
+> latest update: v0.2.5-beta, 2026-07-16
 
 > 应用运作逻辑说明（版本以根目录 VERSION 为准）  
-> 下文已对照当前源码核对（`model.hpp` / `table_model.hpp` / `storage.hpp` / `table_storage.hpp` / `table_bridge.hpp` / `mcp.hpp` / `main.cpp`）。
+> 下文已对照当前源码核对（`model.hpp` / `table_model.hpp` / `storage.hpp` / `table_storage.hpp` / `table_bridge.hpp` / `table_xml.hpp` / `csv_util.hpp` / `mcp.hpp` / `mcp_table_tools.hpp` / `main.cpp` / `version_manager.hpp` / `version_types.hpp` / `exporters.hpp` / `parsers.hpp` / `layout.hpp`）。
 
 ---
 
@@ -13,24 +13,26 @@ graphmcp 是一个 **C++17 单可执行文件**，零第三方依赖。核心设
 
 > **两套并列的一等模型（Graph ↔ Table），各自完成「多格式归一 → 校验/编辑 → 持久化 → 多格式导出」；再通过有损桥接协作，而不是把表塞进图、或把业务宽表硬套成边表。**
 
+Graph 模型支持**多图层（layers）**与**多页（pages）**，draw.io 往返保留图层/页面结构。
+
 ```
 ┌──────────┐    ┌──────────────┐    ┌──────────────────────────────────────┐
-│  用户     │───▶│  AI 客户端    │───▶│          graphmcp MCP / CLI           │
-│ (自然语言) │◀───│ (Claude等)   │◀───│  JSON-RPC 2.0 / 15 个命令族          │
+│   用户    │───▶│  AI 客户端   │───▶│          graphmcp MCP / CLI          │
+│ (自然语言)│◀───│ (Claude等)   │◀───│  JSON-RPC 2.0 / 15 个命令族          │
 └──────────┘    └──────────────┘    └───────────────┬──────────────────────┘
                                                     │
                     ┌───────────────────────────────┴───────────────────────────────┐
                     ▼                                                               ▼
          ┌─────────────────────┐                                       ┌─────────────────────┐
-         │  Graph 一等模型      │◀──── table_bridge（有损投影）──────▶│  Table 一等模型      │
-         │  model.hpp          │   table_from_graph / graph_from_table │  table_model.hpp     │
-         │  解析→校验→布局→导出 │   rules / check / fix / align …       │  CSV/XML↔表→JSON     │
+         │  Graph 一等模型      │◀──── table_bridge（有损投影）──────    │  Table 一等模型     │
+         │  model.hpp          │   table_from_graph / graph_from_table │  table_model.hpp    │
+         │  解析→校验→布局→导出 │   rules / check / fix / align …       │  CSV/XML↔表→JSON    │
          └──────────┬──────────┘                                       └──────────┬──────────┘
                     ▼                                                               ▼
          ┌─────────────────────┐                                       ┌─────────────────────┐
          │  gs::Store          │                                       │  gts::TableStore    │
          │  graph-store/<id>/  │                                       │  …/tables/<id>/     │
-         │  + Draft/Stage      │                                       │  版本快照（无 Draft） │
+         │  + Draft/Stage      │                                       │  版本快照（无 Draft）│
          └─────────────────────┘                                       └─────────────────────┘
 ```
 
@@ -79,12 +81,12 @@ graphmcp 是一个 **C++17 单可执行文件**，零第三方依赖。核心设
 | 分组 | 工具 |
 |------|------|
 | 图生命周期 | `graph_create`、`graph_convert`、`graph_export`、`graph_open`、`graph_import`、`graph_validate`、`graph_list`、`graph_delete`、`graph_layout` |
-| 图查看 | `graph_show`、`graph_history`、`graph_diff`、`graph_status`、`graph_property` |
+| 图查看 / 属性 | `graph_show`、`graph_history`、`graph_diff`、`graph_status`、`graph_property` |
 | Draft 编辑 | `graph_update`、`graph_insert`、`graph_delete_element` |
 | 图版本 | `graph_draft`、`graph_stage`、`graph_commit`、`graph_rollback`、`graph_checkout` |
 | 游标 | `graph_cursor_open`、`graph_cursor_get`、`graph_cursor_move`、`graph_cursor_close` |
-| 表生命周期 / 版本 | `table_create`、`table_import`、`table_export`、`table_list`、`table_show`、`table_update`、`table_delete`、`table_history`、`table_rollback`、`table_diff` |
-| 图↔表与表协作 | `table_from_graph`、`graph_from_table`、`table_align`、`table_check`、`table_rules_from_graph`、`table_fix_enums`、`table_derive`、`table_transform_column`、`table_sample_rows`、`table_propose_rows` |
+| 表 CRUD 与版本 | `table_create`、`table_import`、`table_export`、`table_list`、`table_show`、`table_update`、`table_delete`、`table_history`、`table_rollback`、`table_diff` |
+| 图↔表桥接与协作 | `table_from_graph`、`graph_from_table`、`table_align`、`table_check`、`table_rules_from_graph`、`table_fix_enums`、`table_derive`、`table_transform_column`、`table_sample_rows`、`table_propose_rows` |
 
 注意：`graph_rollback` 走 `Store::rollback`——把旧快照**再 save 成新版本**（版本号递增），与 `graph_checkout`（只改 `HEAD`）不同，见 §十。表侧仅有 `table_rollback`（同样是 load 旧版再 save），**没有** Table 的 Draft/Stage/checkout。
 
@@ -104,15 +106,16 @@ graph-store/                      ← 根目录（由 GRAPHMCP_STORE 指定）
 │   └── <tableId>/
 │       ├── HEAD                  ← 当前版本号
 │       ├── latest.json           ← 最近一次 TableStore::save 的完整 Table JSON
-│       └── versions/vN.json      ← 不可变快照
+│       └── versions/vN.json      ← 不可变快照（writeFileAtomic 原子写入）
 └── <图ID>/                       ← 每张图一个子目录（gs::Store）
-    ├── HEAD
-    ├── latest.json
-    ├── draft.json                ← 图独有：未提交修改
+    ├── HEAD                      ← 当前版本号（save / commit / checkout 均更新）
+    ├── latest.json               ← Store::save 时重写；checkout 不改它
+    ├── draft.json                ← 图独有：未提交修改（操作序列）
     ├── stage.json                ← 图独有：已暂存待提交
     ├── open.drawio / open.svg…   ← edit / graph_open 临时文件
     ├── cursors/                  ← 游标状态（若使用）
-    └── versions/vN.json
+    │   └── <cid>.json            ← 持久化游标（跨进程不丢）
+    └── versions/vN.json          ← 不可变快照
 ```
 
 ### 3.2 图文件职责
@@ -167,32 +170,33 @@ CSV / 表XML / model  ──▶  Table  ──▶  CSV / 表XML / model JSON
 
 | 输入格式 | 解析函数 | 关键解析能力 |
 |---------|---------|-------------|
-| **Mermaid** | `parseMermaid()` | 深解析多类型（flowchart/mindmap/er/class/state/sequence/pie/…）；扩展数据进 `Graph.properties`；不支持的可留 `rawMermaid` |
+| **Mermaid** | `parseMermaid()` → 19 种子类型 | 深解析：`flowchart`、`mindmap`、`erDiagram`、`classDiagram`、`stateDiagram`、`sequenceDiagram`、`requirementDiagram`、`gantt`、`pie`、`sankey`、`kanban`、`gitGraph`、`journey`、`timeline`、`quadrantChart`、`xychart`、`block`、`packet`、`architecture`；扩展数据进 `Graph.properties`；不支持的类型可走 `rawMermaid` 透传 |
 | **Markdown** | `parseMarkdownOutline()` | 标题/列表层级 → mindmap 树 |
 | **CSV** | `parseCSV()` | **边表 / 层级表** → Graph（与业务宽表进 Table 不同路径） |
 | **XML** | `parseXML()` | 迷你 XML，根须为 `<graph>` |
-| **Excalidraw** | `parseExcalidraw()` | elements → 逻辑节点/边，并保留原始元素 |
-| **Drawio** | `parseDrawio()` | mxCell → Graph |
-| **统一模型** | `parseModel()` / `detectFormat` | Graph JSON |
+| **Excalidraw** | `parseExcalidraw()` | elements → 逻辑节点/边，并保留原始元素与 `files` 附件 |
+| **Drawio** | `parseDrawio()` | mxCell → Graph（含图层 layers） |
+| **统一模型** | `parseModel()` / `detectFormat` | Graph JSON；`auto` 自动探测格式 |
 
 ### 4.3 图输出 → 导出器
 
 | 输出格式 | 关键能力 |
 |---------|---------|
-| **Drawio** | 子节点相对坐标、mxCell、颜色字段 |
+| **Drawio** | 子节点相对坐标、mxCell、颜色字段；**多图层（layers）与多页（pages）往返** |
 | **Mermaid** | 形状转义、subgraph；flowchart 可写 `classDef`/`linkStyle` 等颜色指令 |
 | **Excalidraw** | 原始 elements 优先（无损往返）、变换、freedraw |
-| **SVG** | 边裁剪到节点边界等 |
-| **PNG / PDF** | 先 SVG，再走外部转换器链（§4.5） |
-| **URL** | Mermaid Base64 → mermaid.live |
-| **model** | Graph JSON |
+| **SVG** | 边裁剪到节点边界等；Excalidraw 精确路径 + 离线字体内嵌 |
+| **PNG / PDF** | 先 SVG，再走外部转换器链（§4.5）；也支持 Mermaid 直接经 headless 浏览器渲染 |
+| **URL** | Mermaid Base64 → mermaid.live 编辑链接 |
+| **Browser Page** | `toMermaidBrowserPage()`：内嵌 Mermaid.js 的完整 HTML 页面 |
+| **model** | Graph JSON（含 layers / pages / properties） |
 
 ### 4.4 表输入 / 输出
 
 ```
-CSV ──fromCsv──┐
+                  CSV ──fromCsv──┐
 表 XML ─fromXml（table_xml.hpp）─┼──▶ gt::Table ──JSON──▶ TableStore
-model JSON─fromJson┘
+              model JSON─fromJson┘
 ```
 
 | 方向 | 实现 | 说明 |
@@ -224,11 +228,15 @@ model JSON─fromJson┘
 
 | 方向 | 工具 | 行为摘要 |
 |------|------|----------|
-| 图 → 表 | `table_from_graph` | `mode`: `skeleton` \| `edgelist` \| `hierarchylist` \| `nodelist`（有损） |
-| 表 → 图 | `graph_from_table` | 自动识别边表/层级表，或显式列映射 |
-| 规则 | `table_rules_from_graph` | 导图结构 → 校验规则表 |
-| 校验/修复 | `table_check` → `table_fix_enums` | 基于规则 suggestion 修枚举 |
-| 其它 | `table_align` / `derive` / `transform_column` / `sample_rows` / `propose_rows` | 跨表对齐、派生、列变换、占位行/提案行 |
+| 图 → 表 | `table_from_graph` | `mode`: `skeleton` \| `edgelist` \| `hierarchylist` \| `nodelist`（有损）；skeleton 优先用「子节点全为叶子」的父节点作列、子节点文案作枚举 hint |
+| 表 → 图 | `graph_from_table` | 自动识别边表（`from`/`to`/`source`/`target` 列）或层级表（`id`/`parent`），或显式列映射 |
+| 规则 | `table_rules_from_graph` | 导图结构（同 skeleton 启发式） → 校验规则表 |
+| 校验/修复 | `table_check` → `table_fix_enums` | 基于规则 `AllowedSpec` 校验单元格；`fix_enums` 按 suggestion 自动修，无建议则记入 `skipped` |
+| 对齐 | `table_align` | 按主键对齐两张表，补缺失行 |
+| 派生 | `table_derive` | 从源表派生新表（如 `animation_checklist`） |
+| 列变换 | `table_transform_column` | 列值 slug 化（去除非 ASCII，空格转下划线） |
+| 占位行 | `table_sample_rows` | 根据规则/hint 行填充占位行 |
+| 提案行 | `table_propose_rows` | JSON 结构体批量追加行，含枚举合法性校验 |
 
 ### 4.6 PNG/PDF 渲染回退链（仅图导出）
 
@@ -251,18 +259,23 @@ Graph {
   id, name, type          // flowchart|architecture|er|orgchart|mindmap|whiteboard…
   rawMermaid              // 未深解析类型的透传原文（可选）
   properties              // 类型专用结构化 JSON（pie/sequence…；可经 graph_property 读写）
-  nodes[]                 // id, label, shape, parent, style,
-                          // fillColor, strokeColor, attrs[], x,y,w,h
-  edges[]                 // id, from, to, label, style,
-                          // arrow / headStart / headEnd, strokeColor,
-                          // seqNum, isAsync（序列图/gitGraph）
+  layers[]                // Layer { id, name, visible, locked } — 多图层
+  pages[]                 // Graph[] — 多页（首页为 Graph 自身）
+  nodes[]                 // Node { id, label, shape, parent, layer, style,
+                          //   fillColor, strokeColor, attrs[], x,y,w,h }
+  edges[]                 // Edge { id, from, to, label, style,
+                          //   arrow, headStart, headEnd, strokeColor,
+                          //   labelX, labelY（边标签偏移定位）,
+                          //   seqNum, isAsync（序列图/gitGraph） }
   elements[]              // Excalidraw 原始元素
-  files                   // Excalidraw 附件
+  files                   // Excalidraw 附件（image 等）
   laidOut
 }
 ```
 
 颜色为空串表示使用导出默认值。Mermaid 导入可消费 `classDef`/`style`/`linkStyle`；导出 flowchart 时可再写出颜色指令。
+
+`headStart` / `headEnd` 为细粒度箭头控制（`none`/`arrow`/`diamond`/`circle`/`cross` 等），与旧 `arrow` 字段双向兼容。`layer` 字段关联节点到 Layer。`labelX` / `labelY` 允许边标签精确偏移。
 
 ### 5.2 Table 数据结构（`table_model.hpp`）
 
@@ -281,11 +294,14 @@ Table {
 
 | type | shape 取值（典型） | 用途 |
 |------|-------------------|------|
-| flowchart | rect, diamond, round, … | 流程 |
-| architecture | rect, cylinder, cloud, … | 架构 |
+| flowchart | rect, diamond, round, ellipse, stadium, hexagon, process, parallelogram, delay, manualInput, display, trapezoid, triangle, step, note, cube, message… | 流程 |
+| architecture | rect, cylinder, cloud, document, cube, … | 架构 |
 | er | rect + `attrs` 行 | 实体表 |
-| orgchart / mindmap | rect, round | 组织 / 脑图 |
+| orgchart / mindmap | rect, round, ellipse | 组织 / 脑图 |
 | whiteboard | 自由绘制相关 shape + elements | 白板 |
+| uml | umlActor | 序列图/类图参与者 |
+
+`shape` 为空时导出器按图类型自动选择默认形状。
 
 ### 5.4 层级与 ER（Graph）
 
@@ -309,26 +325,28 @@ Table {
 ### 6.1 图：类 Git（Draft / Stage / Commit）
 
 ```
-                    graph update/insert/delete
+                 graph update/insert/delete
     [HEAD]  ──────────────────────────────────▶  [Draft]
-                                                    │
-                                             version stage
+                                                    │   version stage
+                                                    │  (stageAll / stageSelected)
                                                     ▼
                                                [Stage]
-                                                    │
-                                            version commit
+                                                    │  version commit 
+                                                    │  (或 commitAll)
                                                     ▼
                                                [新 versions/vN + latest + HEAD]
 ```
 
 | Git 操作 | graphmcp 操作 | 说明 |
 |----------|-------------|------|
-| 改文件 | `graph update/insert/delete` | 累积在 `draft.json` |
-| `git add` | `version stage` | 暂存 |
-| `git commit` | `version commit` | 不可变快照 |
-| `git log` / `diff` / `status` | `version log` / `diff` / `status` | |
+| 改文件 | `graph update/insert/delete` + `graph_property` | 累积在 `draft.json`；支持节点/边 CRUD 和 `PROPERTY_SET/INSERT/DELETE` |
+| `git add` | `version stage` | 暂存；支持全量暂存（`stageAll`）或按索引选择（`stageSelected`） |
+| `git commit` | `version commit`（或 `commitAll` 跳过暂存） | 不可变快照；写入顺序 draft→stage→HEAD 防崩溃丢数据 |
+| `git log` / `diff` / `status` | `version log` / `diff` / `status` | `diff` 为字段级对比 |
 | `git checkout` | `version checkout` | **只移动 HEAD**（见 §十） |
 | （无直接对应） | `rollback` / `graph_rollback` | 旧快照另存为**新**版本 |
+
+Draft 基于操作序列（非快照）：存储 `OpType` 11 种操作（含 `META_UPDATE`、`PROPERTY_*`），`Commit::rebuild` 统一物化。Commit 同时写 patch + 完整快照，兼顾效率与可追溯。
 
 ### 6.2 表：简化版本（仅快照）
 
@@ -367,7 +385,7 @@ Table {
 | 图↔表桥接 | `table_bridge.hpp` | 投影、对齐、规则、fix、derive… |
 | CSV 工具 | `csv_util.hpp` | 字段转义 / 分行 |
 | MCP | `mcp.hpp` + `mcp_table_tools.hpp` | JSON-RPC、46 工具 |
-| CLI | `main.cpp` | **15** 个命令族：`create`/`convert`/`export`/`edit`/`import`/`layout`/`validate`/`store`/`table`/`version`/`graph`/`cursor`/`draft`/`serve`/`dump-tools`；旧版扁平命令走 `handleLegacyCommand` |
+| CLI | `main.cpp` | **15** 个命令族：`create`/`convert`/`export`/`edit`/`import`/`layout`/`validate`/`store`/`table`/`version`/`graph`/`cursor`/`draft`/`serve`/`dump-tools`|
 
 ### 7.3 关键设计决策（与代码一致）
 
@@ -405,14 +423,16 @@ Table {
 
 | 边界 | 代码依据 |
 |------|----------|
-| Mermaid 支持已扩展 | `parseMermaid*` 深解析；其余可 `rawMermaid` 或报错；结构化扩展进 `properties` |
+| Mermaid 支持 19 种子类型 | `parseMermaid*` 深解析（含 sankey/kanban/gitGraph/journey/timeline/quadrantChart/xychart/block/packet/architecture）；其余可 `rawMermaid` 或报错；结构化扩展进 `properties` |
 | ER 基数不建模为箭头类型 | `addEdge(..., "none")`，标签保留 |
-| 布局 | Kahn + 环兜底；group 包围盒；`tree-h` / `tree-v` / `grid` / `auto`；state 允许 `[*]` |
-| PNG/PDF | 依赖本机转换器或浏览器；无则 SVG 回退 |
+| 布局 | Kahn + 环兜底；group 包围盒；`tree-h` / `tree-v` / `grid` / `auto`（`layered` 别名）；state 允许 `[*]`；`rawMermaid` 图标记已布局不处理 |
+| PNG/PDF | 依赖本机转换器或浏览器（inkscape→rsvg-convert→magick→Chrome/Edge headless）；无则 SVG 回退；Mermaid 可直接经 headless 浏览器渲染 |
+| 多图层/多页 | draw.io 往返保留；其他导出格式可能有损（如 Mermaid 不支持图层） |
 | 图↔表桥接有损 | `table_bridge.hpp`；不保证往返幂等 |
-| 表无 Draft/Stage | `table_storage.hpp` 简化版本 |
+| 表无 Draft/Stage | `table_storage.hpp` 简化版本；仅快照式版本 |
 | 不做 Excel `.xlsx` 全量读写 | 以 CSV / 表 XML / JSON 为交换面 |
 | `import` 命令族 | `main.cpp` 已分发；`--help` 族列表可能未列全，以代码为准 |
+| 表存储 crash 安全 | `TableStore::save` 使用 `writeFileAtomic`；图侧 `Store::save` 无原子保证 |
 
 ---
 
@@ -434,15 +454,31 @@ Table {
 
 | 命令 | 说明 |
 |------|------|
-| `make test` | `tests/test_main.cpp` |
-| `make test-version` / `make test-cursor` | 版本 / 游标单测 |
+| `make test` | `tests/test_main.cpp`（图模型单元测试） |
+| `make test-version` | `tests/test_version.cpp`（版本管理单测） |
+| `make test-cursor` | `tests/test_cursor.cpp`（游标单测） |
 | `make test-all` | 上述三者 |
+| `make bench` | `tests/bench_main.cpp`（性能基准测试，输出结果） |
+| `make bench-ci` | 运行 bench 并比对 `tests/bench_baseline.json` 基线（CI 用） |
+| `make bench-baseline` | 更新性能基线文件（仅 main 分支使用） |
 | `make smoke` | `tests/smoke_test.sh`（含 `[fixture-regression]`），写根目录 `SMOKE_REPORT.md` |
 | `make mcp-smoke` | `tests/mcp_smoke.sh` |
 | `make table-smoke` | `tests/table_smoke.sh`（表与图↔表；**默认 CI 未纳入**，本地/按需跑） |
 | `make export-testout` | `scripts/export-example-testout.sh` → `examples/example_testout/` |
+| `make export-table-examples` | `scripts/export-table-examples.sh` → `examples/example_output/`（表导出示例） |
+| `make export-table-collab-examples` | `scripts/export-table-collab-examples.sh`（图↔表协作示例：rules/fix/derive/slug/sample/propose） |
 | `make docs-api` | `dump-tools` → `docs/api_reference/openapi.yaml` |
 
-`.github/workflows/ci.yml` 默认：`make docs-api`（与 OpenAPI  diff 校验）、`make test-all`、`make smoke`、`make mcp-smoke`，并上传冒烟报告等制品。
+`.github/workflows/ci.yml` 默认：`make docs-api`（与 OpenAPI diff 校验）、`make test-all`、`make bench-ci`（仅比对不写回）、`make smoke`、`make mcp-smoke`，并上传冒烟报告等制品。
 
-（旧文档中的 `export-example-testout.ps1` **仓库中不存在**，已不收录。）
+### 11.2 CI/CD 与 DevOps（v0.2.4+ 新增）
+
+| 组件 | 文件 | 说明 |
+|------|------|------|
+| Jenkins Pipeline | `Jenkinsfile` | 本地 Jenkins 构建 + 测试 + Ansible 发布 |
+| Ansible | `ansible/` | `deploy_release.yml`（发布制品到 nginx 下载站）、`configure_jenkins_tools.yml` |
+| Docker | `docker/jenkins/`、`docker/ansible/` | Jenkins 镜像（固化 CI 运行时依赖）、Ansible Runner 镜像 |
+| GitHub Actions | `.github/workflows/bump-version.yml` | 手动触发写回 VERSION + OpenAPI（不自动打 tag） |
+| GitHub Actions | `.github/workflows/update-bench-baseline.yml` | 手动触发刷新性能基线 |
+| GitHub Actions | `.github/workflows/deploy.yml` | 推送 `v*` tag 触发多平台 Release；或手动 `workflow_dispatch` 试运行 |
+

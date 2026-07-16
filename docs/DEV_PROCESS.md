@@ -1,6 +1,6 @@
 # graphmcp 开发过程
 
-> latest update: v0.2.0, 2026-07-14
+> latest update: v0.2.5-beta, 2026-07-16
 
 > 本文档依据仓库提交记录事后整理，按日期还原实际演进，**不是**开发当日的实时日记。  
 > 已并入原 `WORKLOG.md` / `CHANGELOG.md` / `DEV_LOG.md`。  
@@ -22,7 +22,9 @@
 | 07-10 | 23 | P6 收尾：编辑器字段兜底、文档分层；**暂禁** macOS CD；新需求开始涌现 |
 | **07-11** | **~4+** | **P7**：macOS 头文件 + 恢复 CD 矩阵（`c6e8009`）；edit/import 改进；Mermaid 全类型支持起步 |
 | **07-13** | **~44** | **P8–P10 高峰**：OpenAPI/`dump-tools`；Table 全链路；Mermaid 深解析与表 XML |
-| **07-14** | **~26** | 表协同增强合入；颜色全链路；状态图 `[*]` 校验；样例/冒烟对齐 |
+| **07-14** | **~45** | **P9–P10 收口**：颜色全链路/BOM/`[*]` 校验；Benchmark CI 套件；CI 策略重构（基线仅比对、workflow_dispatch）；v0.2.2 / v0.2.3-beta；drawio 多图层/多页起步 |
+| **07-15** | **~30** | **P11**：MCP 性能重构（存储一致性/写放大/跨平台回归）；drawio 兼容合入（形状/图层/页/边标签）；Jenkins 本地 DevOps 链（Docker/Ansible）；v0.2.4-beta |
+| **07-16** | **~8** | **P12**：Ansible Runner 替代 Semaphore；Docker 固化；Jenkins→Ansible→nginx 发布链；v0.2.5-beta |
 
 主要作者（按提交量）：`wldxiaobai`、`wyQuQ`、`kliang`、`yifengsun`（另有少量合并账号与 `copilot-swe-agent`）。
 
@@ -248,24 +250,130 @@
 
 ---
 
-## 2026-07-14 — 协同增强、颜色链路与回归收口（P9 / P10 收口）
+## 2026-07-14 — 颜色全链路、Benchmark CI 与 CI 策略重构（P9/P10 收口 + P11 启动）
 
-| 代表提交 / PR | 说明 |
-|---------------|------|
-| PR #70 / `7cb51f8` 等 | 图&表协同增强（rules/check/fix/derive/transform/sample/propose） |
-| PR #64 | Mermaid 全类型支持合入 main |
-| `7117b8c` 及后续 | 颜色全链路：`fillColor`/`strokeColor`、`classDef`/`linkStyle`、Draft/游标接通 |
-| `79a19f6` | `validate` 认可状态图起始/终止标记 `[*]`，修复 create 误拒绝 |
-| `ee8b5bb` 等 | 样例导出与冒烟 fixture 对齐颜色/Mermaid 输出 |
+当日提交量极大（约 45 条），可划分为早晚两个半场：
+
+### 上半场：颜色全链路与 BOM 修复（PR #71 一带）
+
+| 代表提交 | 说明 |
+|----------|------|
+| `547302f` / `6ac9420` / `dcbafc4` | 颜色全链路：`fillColor`/`strokeColor` 模型字段、`classDef`/`linkStyle` 解析、Mermaid 导出颜色指令顺序校正 |
+| `52e59b0` | `feat(cursor): 接通节点与边的颜色 Draft 读写` |
+| `ec25ca3` | `fix(parsers): 扩展 linkStyle 语法并剥离 UTF-8 BOM` |
+| `79a19f6` | `fix(layout): 校验认可状态图起始/终止标记 [*]` |
+| `ee8b5bb` | `test(examples): 同步颜色与 Mermaid 样例导出快照` |
+
+### 下半场：Benchmark CI 套件与策略重构
+
+| 代表提交 | 说明 |
+|----------|------|
+| `ea8f62c` | `feat: add micro-benchmark suite and CI performance regression detection` |
+| `db41a2b` | `feat(bench): add Table model micro-benchmarks (7 categories, 18 metrics)` |
+| `d9784d2` | `ci: 取消 main 自动回写性能基线，改为仅比对` |
+| `6548e5e` | `feat(ci): 新增按需刷新性能基线的 workflow_dispatch` |
+| `2f5fdce` | `feat(ci): 新增按需写回 VERSION 与 OpenAPI 的 workflow_dispatch` |
+| `91a9fa3` | `ci:更改了CI触发策略`（feat/\*\* / fix/\*\* 纳入 push 触发） |
+| `bed238f` | `chore(release): 将 VERSION 与 OpenAPI 升至 v0.2.2` |
+
+### drawio 兼容扩展起步（v0.2.3-beta）
+
+| 代表提交 | 说明 |
+|----------|------|
+| `1c47ad2` | `feat(drawio): 扩展形状支持、多图层、多页及边标签定位` |
+| `0fc03ce` | `chore(release): bump version to v0.2.3-beta` |
+| `12e545a` | `ci(cd): Release 正文改用 tag message 并保留自动 Full Changelog` |
 
 ### 变更摘要
 
 | 类别 | 内容 |
 |------|------|
-| **新增** | 颜色一等字段与多格式往返；协同增强工具集 |
-| **修复** | 颜色与 Mermaid 扩展字段合并冲突；stateDiagram `[*]` 校验；linkStyle/BOM |
-| **测试** | smoke 覆盖新类型/颜色；fixture whiteboard mermaid 含 classDef/linkStyle |
-| **现状口径** | MCP **46** 工具；CLI **15** 命令族；macOS CD / 表 / Mermaid 扩展均已交付 |
+| **新增** | 颜色一等字段（`fillColor`/`strokeColor`）+ 多格式往返；Cursor 颜色 Draft 读写；`linkStyle` 解析增强 / UTF-8 BOM 剥离；微基准测试套件（含 Table 7 类 18 指标）；`workflow_dispatch` 按需写回基线与 VERSION/OpenAPI；drawio 多图层/多页/形状扩展 |
+| **变更** | CI 基线策略：main 自动写回 → 仅比对 + 手动 dispatch；CD Release 正文改用 tag message |
+| **修复** | linkStyle 解析健壮性；颜色指令顺序导致 Mermaid 导出异常；状态图 `[*]` 校验误拒绝；BOM 导致解析失败 |
+| **测试** | 颜色解析往返/Draft 更新/冒烟覆盖新类型与 linkStyle；Bench CI 性能回归检测；fixture 对齐 |
+
+---
+
+## 2026-07-15 — MCP 性能重构、drawio 合入与 Jenkins DevOps（P11 高峰）
+
+当日约 30 条提交，三条主线并行：
+
+### 线 A：MCP 性能全面重构（PR #79，由 `wldxiaobai` 主导）
+
+这是一次 **MCP 服务器四维改造**：存储一致性、热路径压缩、超时/错误语义、跨平台性能回归验证。
+
+| 代表提交 | 说明 |
+|----------|------|
+| `4415685` | `perf(mcp): 提升存储一致性并压缩热路径开销` |
+| `d8fe6b7` | `perf(mcp): 以指针化 latest 削减写放大` |
+| `c2508fe` | `fix(mcp): 补齐审查中的存储与超时正确性缺口` |
+| `be4a804` | `feat(mcp): 强化 tools/list 契约并新增 graph_apply` |
+| `a7b9943` | `fix(mcp): 补齐 commit 崩溃恢复与 apply 错误语义` |
+| `d6d105a` | `fix(mcp): Job Assign 失败时正确降级终止策略` |
+| `85d0888` | `test(mcp): 增加跨平台性能回归验证` |
+| `34a54fb` / `4845de9` | `test(mcp): 扩展性能 smoke 覆盖审查回归点` + `扩展四维改造验收 smoke` |
+| `7fde9ba` | `docs(mcp): 记录 Agent 性能与 UX 分析` |
+| `9af25d5` | `chore(mcp): 可选 Skill 包装入 Release` |
+| `17f832d` / `518d858` | 内存稳定性基准：从相对阈值改为绝对阈值 |
+
+### 线 B：drawio 兼容合入与修复（PR #80）
+
+| 代表提交 | 说明 |
+|----------|------|
+| `0694ab5` | `merge: 合并 main (v0.2.3-beta) — fillColor/strokeColor/箭头扩展/BOM 处理` |
+| `5edfed9` | `fix: 修复审查发现的 4 个问题` |
+
+### 线 C：Jenkins 本地 DevOps 链（PR #84）
+
+| 代表提交 | 说明 |
+|----------|------|
+| `690f99e` | `chore(ci): 添加本地 Jenkins Pipeline 定义` |
+| `479abc4` | `feat(docker): 自定义 Jenkins 镜像固化 CI 运行时依赖` |
+| `4da65ee` | `fix(docker): 预装 librsvg2-bin 以通过 smoke 栅格导出` |
+| `504540a` | `feat(ansible): 添加 Semaphore 管理 Jenkins 容器工具的示例` |
+| `f35fd07` | `feat(ci): Jenkins 构建后经 Ansible 发布制品到 nginx 下载站` |
+| `14de6b4` | `fix(ci): 本地 Jenkins Bench 仅告警不阻断 CI` |
+| 多轮 Groovy 转义/解析修复 | `1e05c81`、`b3fa921`、`56d7535` |
+
+### v0.2.4-beta 发布
+
+`ec5ddf5` `chore(release): bump version to v0.2.4-beta` + 基线更新。
+
+### 变更摘要
+
+| 类别 | 内容 |
+|------|------|
+| **新增** | MCP 四维性能改造（存储一致性、写放大削减、超时语义、跨平台回归）；`graph_apply` 工具；Jenkins Pipeline + Docker 镜像（Jenkins/Ansible）；nginx 下载站发布链；MCP Agent 性能/UX 分析文档 |
+| **变更** | 内存基准从相对阈值切换为绝对阈值；CI 触发策略扩展 featur/fix 分支 |
+| **修复** | drawio 审查 4 问题；commit 崩溃恢复语义；Job Assign 降级；Groovy 转义与 sh 字符串解析；Docker 预装 librsvg2-bin |
+| **测试** | 四维改造验收 smoke；跨平台性能回归覆盖；内存稳定性固定图验证 |
+| **工程** | 本地 Jenkins DevOps 链（Docker→Jenkins→Ansible→nginx）；`__pycache__` 入 `.gitignore` |
+
+---
+
+## 2026-07-16 — Ansible Runner 替代与发布链收口（P12）
+
+约 8 条提交，聚焦 DevOps 工具链切换与最终交付：
+
+| 代表提交 | 说明 |
+|----------|------|
+| `c873ee9` | `feat(docker): 添加 ansible-runner 运行容器` |
+| `3629268` | `refactor(ci): Jenkins 发布改由 ansible-runner 执行` |
+| `4cafa0c` | `fix(ansible): 下载站首页改用 UTF-8 英文避免乱码` |
+| `d95215f` | `docs(ansible): 补充 nginx 下载站发布说明` |
+| `639869c` | `chore(release): bump version to v0.2.5-beta` |
+
+### 变更摘要
+
+| 类别 | 内容 |
+|------|------|
+| **新增** | ansible-runner Docker 容器，替代 Semaphore 执行 Ansible 发布 |
+| **变更** | CD 发布链：Jenkins → ansible-runner（原 Semaphore）→ nginx 下载站 |
+| **修复** | nginx 下载站首页 UTF-8 英文避免乱码 |
+| **文档** | nginx 下载站发布说明 |
+
+**过程特征**：DevOps 工具链趋于稳定——Semaphore UI → ansible-runner 命令行容器；发布完全自动化。
 
 ---
 
@@ -282,16 +390,19 @@
 | 版本 | 简单 versions 快照 | Draft → Stage → Commit + HEAD 同步 |
 | macOS CD | — | **暂禁** |
 
-### 扩展期后（截至 2026-07-14，当前）
+### 扩展期后（截至 2026-07-16，当前）
 
 | 指标 | 当前值 |
 |------|--------|
 | MCP 工具 | **46**（图 + 表 + property；以 `toolList()`/OpenAPI 为准） |
 | CLI 命令族 | **15**（含 `table` / `dump-tools` / `import`） |
-| Mermaid | 多类型深解析 + 颜色全链路；坏样例硬/软失败语义明确 |
-| 通用表 | TableStore + CSV/表 XML + 图↔表协同增强 |
-| CD | **含 macOS** 构建矩阵（自 `c6e8009` 起恢复） |
-| 契约 | OpenAPI 自动生成 + CI 漂移校验 |
+| Mermaid | 19 种深解析 + 颜色全链路（`classDef`/`linkStyle`/BOM）；坏样例硬/软失败语义明确 |
+| 通用表 | TableStore + CSV/表 XML + 图↔表协同增强（rules/check/fix/derive/transform/sample/propose） |
+| Drawio | 多图层/多页/形状扩展/边标签定位 |
+| 性能 | 微基准套件（18 指标）+ MCP 热路径优化（写放大/存储一致性/超时语义）+ CI 性能回归检测 |
+| CI/CD | GitHub Actions（构建/单测/冒烟/bench/OpenAPI 校验）+ 本地 Jenkins DevOps + Ansible 发布到 nginx |
+| CD | **含 macOS** 构建矩阵（已恢复） |
+| 契约 | OpenAPI 自动生成 + CI 漂移校验；`workflow_dispatch` 按需写回 VERSION/基线 |
 
 ---
 
@@ -306,8 +417,10 @@
 | URL | mermaid.live `#base64:`（免 deflate） |
 | MCP | stdio + JSON-RPC 2.0；**代码即文档**（`toolList` → OpenAPI） |
 | 白板导出 | 精确 SVG 栅格化；不追求 rough.js 手绘风对齐 |
-| CI 主链 | GitHub Actions（Jenkins/Ansible 已移除）；CD 含 macOS |
-| 版本工作流 | Draft → Stage → Commit（仿 Git） |
+| CI 主链 | GitHub Actions + 本地 Jenkins DevOps（Ansible 发布）；CD 含 macOS |
+| 版本工作流 | Draft → Stage → Commit（仿 Git）；操作序列式（非快照式） |
+| 性能 | 微基准 + CI 仅比对基线（不自动写回）；热路径指针化削减写放大 |
+| 发布 | Tag 触发多平台 Release + Jenkins → Ansible Runner → nginx |
 
 ---
 
@@ -316,24 +429,28 @@
 ### 扩展期已关闭（勿再当作待办）
 
 1. **macOS CD**：`c6e8009` 已补头文件并恢复 Runner  
-2. **Mermaid 类型扩展**：class/state/sequence/pie 等深解析已落地（可持续打磨质量）  
+2. **Mermaid 类型扩展**：19 种子类型深解析已落地（可持续打磨质量）  
 3. **通用表格支持**：Table + MCP/CLI + 协同增强已落地  
+4. **颜色全链路**：`fillColor`/`strokeColor` 一等字段 + 多格式往返已落地  
+5. **性能回归检测**：Benchmark CI 套件 + 基线比对已落地  
+6. **本地 DevOps**：Jenkins + Docker + Ansible Runner 发布链已落地  
 
 ### 尚未交付 / 需继续跟进
 
-1. **`exporters.hpp` 体量过大**（导出 + 编辑器发现 + 浏览器启动叠在同一头文件）  
+1. **`exporters.hpp` 体量过大**（导出 + 编辑器发现 + 浏览器启动叠在同一头文件，~3300 行）  
 2. **编辑器路径**：Linux/macOS 发现逻辑在 CI 覆盖仍不足  
 3. **可选画布实时预览**（SVG + 本地 HTML 轮询 `latest.json`）  
 4. **draw.io 能力补齐**（更完整互操作 / draw.io URL 等；零依赖约束下缓步推进）  
 5. **导出图观感过粗**（布局/渲染/样式一致化打磨）  
-6. **潜在性能问题 + 性能测试管线**（大图/大表评估与可回归基准）  
-7. **可选 SQLite 后端**（大图检索）  
-8. **分层布局** median 启发式减交叉  
+6. **大图/大表性能**（超大规模图的存储与检索；当前已有微基准但缺少系统性大负载测试）  
+7. **可选 SQLite 后端**（大图检索替代文件系统）  
+8. **分层布局** median 启发式减交叉（Sugiyama 增强）  
+9. **`graph_apply` 工具稳定化**（07-15 引入，语义与错误处理需持续打磨）  
 
 ---
 
 ## 说明
 
 - 日期与主题以 **author date** 的 `git log` 为准；同一功能可能跨日、跨分支，本文按「首次明显落地日 / 合入日」归类。  
-- 「变更摘要」保留原 WORKLOG 的新增/变更/修复分类；07-09/07-10 由提交补记；**07-11～07-14 按 `c6e8009` 以来提交与合入 PR 补记**。  
+- 「变更摘要」保留原 WORKLOG 的新增/变更/修复分类；07-09/07-10 由提交补记；**07-11～07-16 按 `c6e8009` 以来提交与合入 PR 补记**。  
 - 若需对外发版条目，可在 Tag 时另写简短 Release notes。  

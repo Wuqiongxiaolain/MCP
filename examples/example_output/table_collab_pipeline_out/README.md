@@ -2,6 +2,8 @@
 
 复现：`bash scripts/export-table-collab-examples.sh`
 
+导出 CSV 默认为 UTF-8 BOM + CRLF（Excel 可双击）；表 XML 仍为 graphmcp 方言，勿用 Excel 打开。
+
 | 文件 | 对应工具 |
 |------|----------|
 | `01_rules.csv` | `table_rules_from_graph` / `table rules-from-graph` |

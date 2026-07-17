@@ -1,7 +1,7 @@
 openapi: "3.0.3"
 info:
   title: graphmcp MCP API
-  version: v0.2.6-beta
+  version: v0.2.7-beta
   description: graphmcp MCP tools/call 契约（非 HTTP REST）。实际传输：JSON-RPC 2.0 over stdio（graphmcp serve）。本文档由 graphmcp dump-tools 从 toolList() 自动生成。
 servers:
   - url: "mcp://graphmcp"
@@ -857,7 +857,7 @@ paths:
     post:
       operationId: table_export
       summary: table_export
-      description: "Export a stored table to CSV, JSON model, or table XML."
+      description: Export a stored table. Default csv is Excel-friendly (UTF-8 BOM+CRLF). Use model/xml for machine exchange; table XML is not SpreadsheetML.
       requestBody:
         required: true
         content:
@@ -870,13 +870,16 @@ paths:
                   description: table id
                 to:
                   type: string
-                  description: csv|model|xml (default csv)
+                  description: csv|model|xml (default csv). csv is Excel-friendly UTF-8 BOM+CRLF; xml is graphmcp dialect (not for Excel)
                 path:
                   type: string
                   description: optional output file path
                 version:
                   type: number
                   description: version to export (default latest)
+                no_bom:
+                  type: boolean
+                  description: "if true, csv uses raw UTF-8 LF without BOM (default false)"
               required:
                 - id
       responses:

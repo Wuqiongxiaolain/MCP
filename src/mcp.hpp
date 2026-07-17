@@ -670,14 +670,21 @@ inline Json toolList()
     {
         Json p = Json::obj();
         p.set("id", prop("string", "table id"));
-        p.set("to", prop("string", "csv|model|xml (default csv)"));
+        p.set("to",
+              prop("string",
+                   "csv|model|xml (default csv). csv is Excel-friendly UTF-8 "
+                   "BOM+CRLF; xml is graphmcp dialect (not for Excel)"));
         p.set("path", prop("string", "optional output file path"));
         p.set("version", prop("number", "version to export (default latest)"));
+        p.set("no_bom",
+              prop("boolean",
+                   "if true, csv uses raw UTF-8 LF without BOM (default false)"));
         Json req = Json::arr();
         req.push(Json("id"));
         tools.push(toolDef("table_export",
-                           "Export a stored table to CSV, JSON model, or table "
-                           "XML.",
+                           "Export a stored table. Default csv is Excel-friendly "
+                           "(UTF-8 BOM+CRLF). Use model/xml for machine exchange; "
+                           "table XML is not SpreadsheetML.",
                            p, req));
     }
     {

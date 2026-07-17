@@ -1835,9 +1835,19 @@ static void testTableModel()
     t.setCell(1, 3, "9");
     CHECK(t.cell(1, 3) == "9");
     std::string csv = t.toCsv();
-    gt::Table   t2  = gt::Table::fromCsv(csv);
+    // 默认 Excel 友好：UTF-8 BOM + CRLF
+    CHECK(csv.size() >= 3 && (unsigned char)csv[0] == 0xEF &&
+          (unsigned char)csv[1] == 0xBB && (unsigned char)csv[2] == 0xBF);
+    CHECK(csv.find("\r\n") != std::string::npos);
+    gt::Table t2 = gt::Table::fromCsv(csv);
     CHECK(t2.rows.size() == 2);
     CHECK(t2.cell(0, 2) == "x,y");
+    // Raw：无 BOM、仅 LF（MCP preview / 管道）
+    std::string raw = t.toCsvRaw();
+    CHECK(!(raw.size() >= 3 && (unsigned char)raw[0] == 0xEF));
+    CHECK(raw.find("\r\n") == std::string::npos);
+    gt::Table tRaw = gt::Table::fromCsv(raw);
+    CHECK(tRaw.rows.size() == 2);
     Json      j  = t.toJson();
     gt::Table t3 = gt::Table::fromJson(j);
     CHECK(t3.columns.size() == 4);
@@ -1846,6 +1856,10 @@ static void testTableModel()
     gt::Table bom = gt::Table::fromCsv("\xEF\xBB\xBF编号,名称\n1,爬虫\n");
     CHECK(bom.colIndex("编号") == 0);
     CHECK(bom.cell(0, 1) == "爬虫");
+    // 无 BOM 旧文件仍可导入
+    gt::Table legacy = gt::Table::fromCsv("编号,名称\n1,爬虫\n");
+    CHECK(legacy.colIndex("编号") == 0);
+    CHECK(legacy.cell(0, 1) == "爬虫");
 }
 
 static void testTableStoreAndBridge()

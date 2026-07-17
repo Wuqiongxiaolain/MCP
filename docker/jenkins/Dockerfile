@@ -20,4 +20,10 @@ RUN apt-get update \
  && chmod 440 /etc/sudoers.d/jenkins \
  && rm -rf /var/lib/apt/lists/*
 
-USER jenkins
+# 启动时按 docker.sock GID 对齐组权限，重建容器无需手工授权
+COPY entrypoint-docker-sock.sh /usr/local/bin/entrypoint-docker-sock.sh
+RUN chmod 755 /usr/local/bin/entrypoint-docker-sock.sh
+
+# 必须以 root 进入 entrypoint，内部再降权为 jenkins
+USER root
+ENTRYPOINT ["/usr/local/bin/entrypoint-docker-sock.sh"]

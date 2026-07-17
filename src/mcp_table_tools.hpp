@@ -143,9 +143,11 @@ inline Json tableExport(gts::TableStore& tables, const Json& a)
     if (!tables.load(a.str("id"), t, (int)a.num("version", 0), &err))
         return textContent(err, true);
     std::string to = a.str("to", "csv");
+    // csv 默认 Excel 友好（BOM+CRLF）；no_bom=true 时用原始 LF
+    bool excelCsv = !a.boolean("no_bom", false);
     std::string text;
     try {
-        text = gtx::exportTableText(t, to);
+        text = gtx::exportTableText(t, to, excelCsv);
     }
     catch (const gt::TableError& e) {
         return textContent(e.what(), true);
@@ -154,7 +156,11 @@ inline Json tableExport(gts::TableStore& tables, const Json& a)
     if (!path.empty()) {
         if (!ge::writeFile(path, text))
             return textContent("failed to write " + path, true);
-        return textContent("wrote " + path);
+        std::string msg = "wrote " + path;
+        if (gm::toLower(to) == "xml")
+            msg += " (note: table XML is a graphmcp dialect, not for "
+                   "Excel/browser; use to=csv for Excel)";
+        return textContent(msg);
     }
     if (text.size() > ge::inlineExportMaxBytes())
         return textContent(
@@ -478,7 +484,7 @@ tableFromGraphTool(gs::Store& store, gts::TableStore& tables, const Json& a)
         out.set("hint",
                 "csv_preview truncated; use table_export for full content");
     }
-    out.set("csv_preview", preview.toCsv());
+    out.set("csv_preview", preview.toCsvRaw());
     return textContent(out.dump());
 }
 
@@ -592,7 +598,7 @@ inline Json tableCheckTool(gts::TableStore& tables, const Json& a)
             out,
             "GRAPHMCP_TABLE_CHECK_LEGACY_HINT enabled; default ignore_hint_row "
             "forced to false");
-    out.set("report_csv", report.toCsv());
+    out.set("report_csv", report.toCsvRaw());
     if (a.boolean("save", false)) {
         int v = tables.save(report, "check report for " + target.id, &err);
         if (v < 0)
@@ -622,7 +628,7 @@ inline Json tableRulesFromGraphTool(gs::Store&       store,
     out.set("status", "ok");
     out.set("columns", (double)t.columns.size());
     out.set("rows", (double)t.rows.size());
-    out.set("csv_preview", t.toCsv());
+    out.set("csv_preview", t.toCsvRaw());
     if (a.boolean("save", true)) {
         int v = tables.save(t, "rules from graph " + g.id, &err);
         if (v < 0)
@@ -698,7 +704,7 @@ inline Json tableFixEnumsTool(gts::TableStore& tables, const Json& a)
         out.set("skipped_report_id", fix.skipped.id);
         out.set("skipped_version", (double)v);
     }
-    out.set("skipped_csv", fix.skipped.toCsv());
+    out.set("skipped_csv", fix.skipped.toCsvRaw());
     return textContent(out.dump());
 }
 
@@ -719,7 +725,7 @@ inline Json tableDeriveTool(gts::TableStore& tables, const Json& a)
     out.set("mode", a.str("mode", "animation_checklist"));
     out.set("columns", (double)t.columns.size());
     out.set("rows", (double)t.rows.size());
-    out.set("csv_preview", t.toCsv());
+    out.set("csv_preview", t.toCsvRaw());
     if (a.boolean("save", true)) {
         int v = tables.save(t, "derive from " + src.id, &err);
         if (v < 0)

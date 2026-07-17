@@ -1,5 +1,5 @@
 // table_model.hpp - 通用 CSV 记录表（与 Graph 并列的一等对象）
-// 权威交换格式为 CSV；仓库内以 JSON（columns + rows）持久化。
+// 人侧默认交换面为 Excel 友好 CSV（UTF-8 BOM + CRLF）；仓库内以 JSON 持久化。
 #pragma once
 #include "csv_util.hpp"
 #include "model.hpp"
@@ -21,6 +21,14 @@ struct TableError : std::runtime_error
 
 using gcsv::escapeCsvField;
 using gcsv::splitCsvLine;
+
+// CsvWriteOpts: CSV 写出选项
+// 默认 Excel 友好（UTF-8 BOM + CRLF），便于中文 Excel 双击打开
+struct CsvWriteOpts
+{
+    bool bom  = true;  // 写入 UTF-8 BOM（EF BB BF）
+    bool crlf = true;  // 行尾使用 CRLF；false 时用 LF
+};
 
 // Table: 通用记录矩阵（列名 + 矩形行）
 struct Table
@@ -141,16 +149,20 @@ struct Table
                 addColumn(n);
     }
 
-    // toCsv: 导出 CSV 文本（含表头）
-    std::string toCsv() const
+    // toCsv: 导出 CSV 文本（含表头）；默认 Excel 友好（BOM + CRLF）
+    // 参数 opts：bom/crlf 写出选项（声明与实现均在本文件）
+    std::string toCsv(CsvWriteOpts opts = {}) const
     {
+        std::string nl  = opts.crlf ? "\r\n" : "\n";
         std::string out;
+        if (opts.bom)
+            out += "\xEF\xBB\xBF";
         for (size_t i = 0; i < columns.size(); i++) {
             if (i)
                 out += ',';
             out += escapeCsvField(columns[i]);
         }
-        out += '\n';
+        out += nl;
         for (auto& r : rows) {
             for (size_t i = 0; i < columns.size(); i++) {
                 if (i)
@@ -158,9 +170,15 @@ struct Table
                 std::string v = i < r.size() ? r[i] : "";
                 out += escapeCsvField(v);
             }
-            out += '\n';
+            out += nl;
         }
         return out;
+    }
+
+    // toCsvRaw: 无 BOM + LF，供 MCP 内联 preview / 纯管道
+    std::string toCsvRaw() const
+    {
+        return toCsv(CsvWriteOpts{false, false});
     }
 
     // fromCsv: 从 CSV 文本构建表（首行为表头）

@@ -133,6 +133,18 @@ std::string getGraphId(const Args& a)
     return "";
 }
 
+// csvOptsFromArgs: 表 CSV 写出选项（默认 Excel 友好；--no-bom / --lf 可关闭）
+// for_stdout：写到 cout 时必须 crlf=false，避免 Windows 文本模式把 \r\n 再转成 \r\r\n
+gt::CsvWriteOpts csvOptsFromArgs(const Args& a, bool for_stdout = false)
+{
+    gt::CsvWriteOpts o;
+    if (a.has("no-bom"))
+        o.bom = false;
+    if (a.has("lf") || for_stdout)
+        o.crlf = false;
+    return o;
+}
+
 // resolveVersionNested: 解析 version draft/stage 的 action 与 graph id
 // 支持 version draft show my-graph（positionals=[show,my-graph]）
 static bool resolveVersionNested(const Args&        a,
@@ -936,11 +948,21 @@ int cmdTable(Args& a, gs::Store& store)
         std::string to = a.get("to", "csv");
         std::string text;
         try {
-            text = gtx::exportTableText(t, to);
+            if (gm::toLower(to) == "csv" || to.empty())
+                // 写文件用 BOM+CRLF；写 stdout 用 BOM+LF（由 Windows 文本模式补 \r）
+                text = t.toCsv(csvOptsFromArgs(a, !a.has("output")));
+            else
+                text = gtx::exportTableText(t, to, true);
         }
         catch (const gt::TableError& e) {
             std::cerr << "error: " << e.what() << "\n";
             return 1;
+        }
+        if (gm::toLower(to) == "xml") {
+            std::cerr
+                << "note: table XML is a graphmcp dialect (not SpreadsheetML); "
+                   "open with graphmcp, not Excel/browser. For Excel use "
+                   "--to csv.\n";
         }
         if (a.has("output")) {
             if (!ge::writeFile(a.get("output"), text)) {
@@ -1134,7 +1156,7 @@ int cmdTable(Args& a, gs::Store& store)
             return 5;
         }
         std::cout << "table " << t.id << " v" << v << "\n";
-        std::cout << t.toCsv();
+        std::cout << t.toCsv(csvOptsFromArgs(a, true));
         return 0;
     }
 
@@ -1243,7 +1265,7 @@ int cmdTable(Args& a, gs::Store& store)
         }
         gt::Table report =
             gtb::tableCheck(target, allowed, rp, ignore_hint_row);
-        std::cout << report.toCsv();
+        std::cout << report.toCsv(csvOptsFromArgs(a, true));
         if (a.has("save")) {
             std::string saveErr;
             int         v = tables.save(report, "check report", &saveErr);
@@ -1285,7 +1307,7 @@ int cmdTable(Args& a, gs::Store& store)
             return 5;
         }
         std::cout << "table " << t.id << " v" << v << "\n";
-        std::cout << t.toCsv();
+        std::cout << t.toCsv(csvOptsFromArgs(a, true));
         return 0;
     }
 
@@ -1363,7 +1385,7 @@ int cmdTable(Args& a, gs::Store& store)
                     std::cout << "skipped_report " << fix.skipped.id << " v"
                               << sv << "\n";
             }
-            std::cout << fix.skipped.toCsv();
+            std::cout << fix.skipped.toCsv(csvOptsFromArgs(a, true));
         }
         return 0;
     }
@@ -1396,7 +1418,7 @@ int cmdTable(Args& a, gs::Store& store)
                 return 5;
             }
             std::cout << "table " << t.id << " v" << v << "\n";
-            std::cout << t.toCsv();
+            std::cout << t.toCsv(csvOptsFromArgs(a, true));
         }
         catch (const gt::TableError& e) {
             std::cerr << "error: " << e.what() << "\n";

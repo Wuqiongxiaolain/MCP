@@ -328,13 +328,15 @@ inline Table parseTableContent(const std::string&        content,
 }
 
 // exportTableText: 按 to 导出；未知 to 报错（不静默回退 csv）
-inline std::string exportTableText(const Table& t, const std::string& to)
+// 参数 excelCsv：to=csv 时是否使用 Excel 友好写出（BOM+CRLF）；false 为原始 LF
+inline std::string exportTableText(const Table& t, const std::string& to,
+                                   bool excelCsv = true)
 {
     std::string fmt = gm::toLower(to);
     if (fmt.empty())
         fmt = "csv";
     if (fmt == "csv")
-        return t.toCsv();
+        return excelCsv ? t.toCsv() : t.toCsvRaw();
     if (fmt == "model" || fmt == "json")
         return t.toJson().dump();
     if (fmt == "xml")

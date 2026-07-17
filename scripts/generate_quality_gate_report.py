@@ -92,28 +92,36 @@ def run_cppcheck() -> tuple[int, str]:
     cmd = [
         exe,
         "--enable=warning,style,performance,portability",
-        "--error-exitcode=1",
         "--inline-suppr",
         "-q",
+        # 不使用 --error-exitcode：style/warning 会非零退出，与「仅 error 阻断」冲突
         "--template={file}:{line}: {severity}: {message}",
         str(ROOT / "src"),
     ]
     proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     out = (proc.stdout or "") + (proc.stderr or "")
     CPPCHECK_LOG.write_text(out if out.strip() else "(no findings)\n", encoding="utf-8")
-    CPPCHECK_EXIT.write_text(f"{proc.returncode}\n", encoding="utf-8")
-    return proc.returncode, out
+    # 以解析到的 severity 为准写 exit 文件：有 error → 1，否则 0（工具自身崩溃仍保留原码）
+    parsed_exit = 1 if re.search(r":\s*error:", out, re.I) else 0
+    if proc.returncode not in (0, 1) and not out.strip():
+        parsed_exit = proc.returncode
+    CPPCHECK_EXIT.write_text(f"{parsed_exit}\n", encoding="utf-8")
+    return parsed_exit, out
 
 
 def parse_cppcheck(log: str, exit_code: int) -> dict:
     errors = len(re.findall(r":\s*error:", log, re.I))
     warnings = len(re.findall(r":\s*warning:", log, re.I))
-    # 无模板匹配时，非零退出且有内容也算失败
+    styles = len(re.findall(r":\s*style:", log, re.I))
     if exit_code == 127:
         status = "SKIPPED"
-    elif exit_code != 0 or errors > 0:
+    elif errors > 0:
         status = "FAIL"
+    elif warnings > 0:
+        # warning 纳入考察：报告 WARN，不阻断 CI
+        status = "WARN"
     else:
+        # style / performance / portability 只记报告
         status = "PASS"
     summary = log.strip() if log.strip() else "(no findings)"
     if len(summary) > 4000:
@@ -123,21 +131,23 @@ def parse_cppcheck(log: str, exit_code: int) -> dict:
         "exit": exit_code,
         "errors": errors,
         "warnings": warnings,
+        "styles": styles,
         "summary": summary,
     }
 
 
 def overall(cpp: dict, sonar: dict) -> str:
-    if cpp["status"] == "FAIL":
+    if cpp["status"] == "FAIL" or sonar["status"] == "FAIL":
         return "FAIL"
-    if sonar["status"] == "FAIL":
-        return "FAIL"
-    if cpp["status"] == "PASS" and sonar["status"] in ("PASS", "SKIPPED"):
-        if sonar["status"] == "SKIPPED":
-            return "PARTIAL"  # cppcheck 过，Sonar 跳过
-        return "PASS"
     if cpp["status"] == "SKIPPED":
         return "FAIL"  # 必过项缺失工具视为未满足（CI 应安装）
+    # warning 优先于「纯 PASS + Sonar 跳过」的 PARTIAL，便于首屏看见
+    if cpp["status"] == "WARN" or sonar["status"] == "WARN":
+        return "WARN"
+    if cpp["status"] == "PASS" and sonar["status"] == "PASS":
+        return "PASS"
+    if cpp["status"] == "PASS" and sonar["status"] == "SKIPPED":
+        return "PARTIAL"  # cppcheck 过，Sonar 跳过
     return "PARTIAL"
 
 
@@ -172,8 +182,8 @@ def write_report(cpp: dict, sonar: dict, meta: dict) -> None:
 
 | 门禁 | 状态 | 说明 |
 |------|:----:|------|
-| **总体** | **{ov}** | PASS / FAIL / PARTIAL |
-| cppcheck（必过） | **{cpp['status']}** | error 级或 exit≠0 → FAIL |
+| **总体** | **{ov}** | PASS / WARN / FAIL / PARTIAL |
+| cppcheck（必过） | **{cpp['status']}** | error→FAIL；warning→WARN（不阻断）；style 只记报告 |
 | SonarQube / SonarCloud（可选） | **{sonar['status']}** | PASS / FAIL / SKIPPED |
 
 > 未配置 Sonar 时必须为 **SKIPPED**，不得记为 PASS。完整签核见 [ACCEPTANCE_DOD.md](ACCEPTANCE_DOD.md)。
@@ -182,10 +192,11 @@ def write_report(cpp: dict, sonar: dict, meta: dict) -> None:
 
 | 项 | 值 |
 |----|----|
-| 命令 | `cppcheck --enable=warning,style,performance,portability --error-exitcode=1 --inline-suppr -q src` |
-| exit | {cpp['exit']} |
+| 命令 | `cppcheck --enable=warning,style,performance,portability --inline-suppr -q src` |
+| exit（门禁用，仅 error 记 1） | {cpp['exit']} |
 | error 数 | {cpp['errors']} |
 | warning 数 | {cpp['warnings']} |
+| style 数 | {cpp.get('styles', 0)} |
 
 ### 关键问题摘要
 
@@ -206,9 +217,10 @@ def write_report(cpp: dict, sonar: dict, meta: dict) -> None:
 
 ## 阻断规则
 
-1. cppcheck **FAIL** → 阻断。
-2. Sonar 已启用且 **FAIL** → 阻断。
-3. Sonar **SKIPPED** → 不阻断，DoD 须明示。
+1. cppcheck **error**（FAIL）→ 阻断。
+2. cppcheck **warning**（WARN）→ **不阻断**，须在报告中审阅。
+3. Sonar 已启用且 **FAIL** → 阻断。
+4. Sonar **SKIPPED** → 不阻断，DoD 须明示。
 """
     OUT_MD.write_text(md, encoding="utf-8", newline="\n")
     import json
@@ -250,7 +262,11 @@ def main() -> int:
     write_report(cpp, sonar, meta)
     print(f"Wrote {OUT_MD.relative_to(ROOT)}")
     print(f"overall={overall(cpp, sonar)} cppcheck={cpp['status']} sonar={sonar['status']}")
-    # 组装步骤：cppcheck FAIL 时返回 1，便于 CI 阻断
+    if cpp["status"] == "WARN" and os.environ.get("GITHUB_ACTIONS"):
+        print(
+            f"::warning::cppcheck 发现 {cpp['warnings']} 条 warning（质量门 WARN，不阻断 CI）"
+        )
+    # 仅 FAIL / 工具缺失阻断；WARN 返回 0
     if cpp["status"] == "FAIL":
         return 1
     if sonar["status"] == "FAIL":

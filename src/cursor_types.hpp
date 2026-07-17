@@ -153,39 +153,53 @@ class NodeCursor {
     }
 
     // ── 通用 set ──
-    NodeCursor& set(const std::string& fieldName, const std::string& val)
+    // set: 写入节点字段；未知字段时不记草稿并返回 false
+    bool set(const std::string& fieldName, const std::string& val)
     {
         Node* n = get();
         if (!n)
-            return *this;
+            return false;
         std::string oldVal = getNodeField(*n, fieldName);
-        setNodeField(*n, fieldName, val);
+        if (!setNodeField(*n, fieldName, val))
+            return false;
         if (draft_)
             recordChange(fieldName, oldVal, val);
-        return *this;
+        return true;
     }
 
     // ── 便捷修改方法 ──
     NodeCursor& updateLabel(const std::string& label)
-    { return set("label", label); }
+    {
+        set("label", label);
+        return *this;
+    }
     NodeCursor& updateShape(const std::string& shape)
-    { return set("shape", shape); }
+    {
+        set("shape", shape);
+        return *this;
+    }
     NodeCursor& updateStyle(const std::string& style)
-    { return set("style", style); }
+    {
+        set("style", style);
+        return *this;
+    }
     NodeCursor& setParent(const std::string& parentId)
-    { return set("parent", parentId); }
+    {
+        set("parent", parentId);
+        return *this;
+    }
 
     NodeCursor& updatePosition(double x, double y)
     {
         Node* n = get();
         if (!n)
             return *this;
-        std::string ox = std::to_string(n->x), oy = std::to_string(n->y);
+        std::string ox = formatCoord(n->x), oy = formatCoord(n->y);
         n->x = x;
         n->y = y;
         if (draft_) {
-            recordChange("x", ox, std::to_string(x));
-            recordChange("y", oy, std::to_string(y));
+            recordChange("x", ox, formatCoord(x));
+            recordChange("y", oy, formatCoord(y));
         }
         return *this;
     }
@@ -194,12 +208,12 @@ class NodeCursor {
         Node* n = get();
         if (!n)
             return *this;
-        std::string ow = std::to_string(n->w), oh = std::to_string(n->h);
+        std::string ow = formatCoord(n->w), oh = formatCoord(n->h);
         n->w = w;
         n->h = h;
         if (draft_) {
-            recordChange("w", ow, std::to_string(w));
-            recordChange("h", oh, std::to_string(h));
+            recordChange("w", ow, formatCoord(w));
+            recordChange("h", oh, formatCoord(h));
         }
         return *this;
     }
@@ -476,18 +490,20 @@ class SelectionCursor {
     EdgeCursor asEdgeCursor(int index = 0)
     { return EdgeCursor(graph_, draft_, selector_, index); }
 
-    // 批量设置：对选中集合的每个元素设置同一字段值
-    SelectionCursor& setAll(const std::string& field, const std::string& value)
+    // 批量设置：对选中集合的每个元素设置同一字段值；任一失败则返回 false
+    bool setAll(const std::string& field, const std::string& value)
     {
         for (auto& nid : nodeIds_) {
             NodeCursor nc(graph_, draft_, nid);
-            nc.set(field, value);
+            if (!nc.set(field, value))
+                return false;
         }
         for (auto& eid : edgeIds_) {
             EdgeCursor ec(graph_, draft_, eid);
-            ec.set(field, value);
+            if (!ec.set(field, value))
+                return false;
         }
-        return *this;
+        return true;
     }
 
     // 批量删除

@@ -1964,7 +1964,10 @@ int cmdGraph(Args& a, gs::Store& store)
                     continue;
                 std::string key = sv.substr(0, eq);
                 std::string val = sv.substr(eq + 1);
-                nc.set(key, val);
+                if (!nc.set(key, val)) {
+                    std::cerr << "failed to set node field: " << key << "\n";
+                    return 1;
+                }
             }
             std::cout << "updated node " << a.get("node") << "\n";
         }
@@ -1978,7 +1981,12 @@ int cmdGraph(Args& a, gs::Store& store)
                 size_t eq = sv.find('=');
                 if (eq == std::string::npos)
                     continue;
-                ec.set(sv.substr(0, eq), sv.substr(eq + 1));
+                std::string key = sv.substr(0, eq);
+                std::string val = sv.substr(eq + 1);
+                if (!ec.set(key, val)) {
+                    std::cerr << "failed to set edge field: " << key << "\n";
+                    return 1;
+                }
             }
             std::cout << "updated edge " << a.get("edge") << "\n";
         }
@@ -1993,7 +2001,11 @@ int cmdGraph(Args& a, gs::Store& store)
                 size_t eq = sv.find('=');
                 if (eq == std::string::npos)
                     continue;
-                sc.setAll(sv.substr(0, eq), sv.substr(eq + 1));
+                if (!sc.setAll(sv.substr(0, eq), sv.substr(eq + 1))) {
+                    std::cerr << "failed to set field on selector: "
+                              << sv.substr(0, eq) << "\n";
+                    return 1;
+                }
             }
             std::cout << "updated " << sc.count()
                       << " element(s) matching: " << a.get("selector") << "\n";

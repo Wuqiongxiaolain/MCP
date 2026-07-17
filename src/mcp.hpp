@@ -125,11 +125,9 @@ inline Json toolList()
         req.push(Json("to"));
         tools.push(toolDef("graph_convert",
                            "One-shot conversion between diagram formats "
-                           "without saving to the store. Prefer "
-                           "graph_apply / graph_update / graph_set_edge_route "
-                           "to change a stored graph; convert↔model "
-                           "round-trips are a last resort when those tools "
-                           "cannot express the change.",
+                           "without saving. For stored-graph edits prefer "
+                           "graph_apply / graph_update / geometry tools "
+                           "(model round-trip is last resort).",
                            p, req));
     }
 
@@ -148,16 +146,11 @@ inline Json toolList()
         req.push(Json("id"));
         req.push(Json("to"));
         tools.push(toolDef("graph_export",
-                           "Export a stored graph to a file or inline content "
-                           "(drawio/mermaid/svg/png/pdf/url/model). Primary use: "
-                           "publish or inspect. Prefer graph_show for ids and "
-                           "graph_update / graph_set_edge_route / "
-                           "graph_nudge_node / graph_apply for edits. "
-                           "Exporting to=model, hand-editing JSON, then "
-                           "graph_import/graph_create is a last resort only when "
-                           "atomic tools cannot express the change. "
-                           "png/pdf use an external converter when available, "
-                           "otherwise an SVG fallback is written.",
+                           "Export a stored graph (publish/inspect). Prefer "
+                           "graph_show for ids and atomic edit tools for "
+                           "changes; model export→hand-edit→import is last "
+                           "resort. png/pdf use external converter when "
+                           "available, else SVG fallback.",
                            p, req));
     }
 
@@ -203,13 +196,9 @@ inline Json toolList()
         req.push(Json("id"));
         tools.push(toolDef(
             "graph_import",
-            "Re-import an externally edited diagram after graph_open (GUI "
-            "round-trip): reads open.<ext> (or provided content), parses, "
-            "validates, and saves as a new version. NOT for first-time import "
-            "(use graph_create). For Agent edits prefer "
-            "graph_set_edge_route / graph_nudge_node / graph_update / "
-            "graph_apply; pasting hand-edited model JSON is a last resort "
-            "only when those tools cannot express the change.",
+            "Re-import after graph_open (GUI round-trip). Not for first-time "
+            "import (use graph_create). Agent edits: prefer geometry tools / "
+            "graph_update / graph_apply; hand-edited model JSON is last resort.",
             p, req));
     }
 
@@ -322,12 +311,8 @@ inline Json toolList()
         req.push(Json("id"));
         tools.push(toolDef(
             "graph_show",
-            "Show graph summary with node/edge id lists, or details for one "
-            "node/edge/path. Prefer this to discover element ids before "
-            "atomic edits (graph_update / graph_set_edge_route / "
-            "graph_nudge_node / graph_apply). Dumping via "
-            "graph_export to=model is optional for deep inspection but a last "
-            "resort for ordinary lookups (large payloads).",
+            "Show summary or one node/edge/path. Prefer for discovering ids "
+            "before atomic edits; avoid export to=model for ordinary lookups.",
             p, req));
     }
 
@@ -381,16 +366,10 @@ inline Json toolList()
         req.push(Json("set"));
         tools.push(toolDef(
             "graph_update",
-            "PREFERRED atomic edit for node/edge fields in the draft (prefer "
-            "over graph_cursor_* and over whole-graph model rewrite). Provide "
-            "node, edge, or selector plus set as 'field=value' (array "
-            "allowed). Nodes: label/shape/parent/style/fillColor/strokeColor/"
-            "x/y/w/h. Edges: from/to/label/style/arrow/strokeColor/headStart/"
-            "headEnd/labelX/labelY/waypoints (JSON array). For polyline-only "
-            "changes prefer graph_set_edge_route; for relative move prefer "
-            "graph_nudge_node. Then graph_commit all=true, or graph_apply. "
-            "Export to=model → hand-edit → import remains possible as a last "
-            "resort when fields/tools cannot express the change.",
+            "Atomic draft edit of node/edge fields via node|edge|selector + "
+            "set field=value. Edges support waypoints/heads/labelX/Y. Prefer "
+            "graph_set_edge_route for polylines, graph_nudge_node for relative "
+            "moves; then graph_commit all=true or graph_apply.",
             p, req));
     }
 
@@ -413,12 +392,8 @@ inline Json toolList()
         req.push(Json("waypoints"));
         tools.push(toolDef(
             "graph_set_edge_route",
-            "PREFERRED tool to set or replace one edge's polyline waypoints "
-            "in the draft. Prefer this over graph_export to=model + hand "
-            "edit + graph_import (that path is a last resort only when atomic "
-            "tools cannot express the change). Pass waypoints as [{x,y},...] "
-            "(or [] to clear). Optionally recomputes labelX/labelY. Commit "
-            "with graph_commit all=true or batch via graph_apply update ops.",
+            "Set or replace one edge's polyline waypoints in the draft "
+            "(optional label recompute). Commit with graph_commit all=true.",
             p, req));
     }
 
@@ -427,14 +402,17 @@ inline Json toolList()
         Json p = Json::obj();
         p.set("id", prop("string", "graph id"));
         p.set("edge", prop("string", "target edge id"));
+        p.set("recompute_label",
+              prop("boolean",
+                   "recompute labelX/labelY after clear when edge has label "
+                   "(default true)"));
         Json req = Json::arr();
         req.push(Json("id"));
         req.push(Json("edge"));
         tools.push(toolDef(
             "graph_clear_edge_route",
-            "Clear one edge's waypoints in the draft so exporters use default "
-            "routing. Prefer this over rewriting whole-graph model JSON. "
-            "Commit with graph_commit all=true.",
+            "Clear one edge's waypoints (default routing). Optionally "
+            "recomputes label position. Commit with graph_commit all=true.",
             p, req));
     }
 
@@ -445,15 +423,18 @@ inline Json toolList()
         p.set("node", prop("string", "target node id"));
         p.set("dx", prop("number", "delta x to add to node.x"));
         p.set("dy", prop("number", "delta y to add to node.y"));
+        p.set("recompute_connected_labels",
+              prop("boolean",
+                   "recompute labelX/Y on edges connected to this node "
+                   "(default false). Does not move absolute waypoints."));
         Json req = Json::arr();
         req.push(Json("id"));
         req.push(Json("node"));
         tools.push(toolDef(
             "graph_nudge_node",
-            "PREFERRED fine layout tweak: add relative dx/dy to one node's "
-            "position in the draft. Prefer this over absolute x/y when "
-            "nudging, and over whole-graph model rewrite (last resort). "
-            "Commit with graph_commit all=true.",
+            "Add relative dx/dy to one node. Does not move edge waypoints "
+            "(absolute); optional recompute_connected_labels for edge "
+            "labels. Commit with graph_commit all=true.",
             p, req));
     }
 
@@ -471,9 +452,8 @@ inline Json toolList()
         req.push(Json("edge"));
         tools.push(toolDef(
             "graph_set_edge_heads",
-            "Set one edge's headStart/headEnd decorations in the draft "
-            "(syncs legacy arrow). Prefer this over rewriting model JSON "
-            "(last resort). Commit with graph_commit all=true.",
+            "Set headStart/headEnd (syncs coarse legacy arrow; open/cross "
+            "preserved on arrow round-trip). Commit with graph_commit all=true.",
             p, req));
     }
 
@@ -672,15 +652,9 @@ inline Json toolList()
         req.push(Json("ops"));
         tools.push(toolDef(
             "graph_apply",
-            "PREFERRED Agent path for multi-edit + commit in one call. "
-            "Applies ops[] (update|insert|delete; same fields as "
-            "graph_update/insert/delete_element, including edge waypoints/"
-            "heads) then commits with all=true when commit=true (default). "
-            "Prefer this for ordinary diagram changes; "
-            "graph_export to=model → edit JSON → graph_import is a last "
-            "resort only when ops cannot express the change. "
-            "Do not use graph_cursor_* or empty graph_stage. Optional "
-            "export_to after commit.",
+            "Batch-edit then commit (preferred multi-edit path). ops[] use "
+            "update|insert|delete fields including waypoints/heads. Model "
+            "rewrite is last resort. Optional export_to after commit.",
             p, req));
     }
 
@@ -2347,8 +2321,8 @@ class ToolRunner {
             double nx = e->labelX, ny = e->labelY;
             e->labelX = ox;
             e->labelY = oy;
-            ec.set("labelX", std::to_string(nx));
-            ec.set("labelY", std::to_string(ny));
+            ec.set("labelX", gv::formatCoord(nx));
+            ec.set("labelY", gv::formatCoord(ny));
         };
 
         int updated = 0;
@@ -2356,8 +2330,11 @@ class ToolRunner {
             gv::NodeCursor nc(g, &draft, a.str("node"));
             if (!nc.valid())
                 return textContent("node not found: " + a.str("node"), true);
-            for (auto& p : pairs)
-                nc.set(p.first, p.second);
+            for (auto& p : pairs) {
+                if (!nc.set(p.first, p.second))
+                    return textContent("failed to set node field: " + p.first,
+                                       true);
+            }
             updated = 1;
         }
         else if (!a.str("edge").empty()) {
@@ -2379,8 +2356,12 @@ class ToolRunner {
             if (updated == 0)
                 return textContent(
                     "no elements matched selector: " + a.str("selector"), true);
-            for (auto& p : pairs)
-                sc.setAll(p.first, p.second);
+            for (auto& p : pairs) {
+                if (!sc.setAll(p.first, p.second))
+                    return textContent("failed to set field on selector: " +
+                                           p.first,
+                                       true);
+            }
             if (hasWaypoints && !hasLabelXY) {
                 for (auto& eid : sc.edgeIds()) {
                     gv::EdgeCursor ec(g, &draft, eid);
@@ -2467,8 +2448,8 @@ class ToolRunner {
                 double nx = e->labelX, ny = e->labelY;
                 e->labelX = ox;
                 e->labelY = oy;
-                ec.set("labelX", std::to_string(nx));
-                ec.set("labelY", std::to_string(ny));
+                ec.set("labelX", gv::formatCoord(nx));
+                ec.set("labelY", gv::formatCoord(ny));
             }
         }
 
@@ -2481,7 +2462,7 @@ class ToolRunner {
         return textContent(out.dump());
     }
 
-    // clearEdgeRoute: 清空折点
+    // clearEdgeRoute: 清空折点，默认重算标签位置
     Json clearEdgeRoute(const Json& a)
     {
         std::string id = a.str("id"), edgeId = a.str("edge");
@@ -2497,6 +2478,19 @@ class ToolRunner {
             return textContent("edge not found: " + edgeId, true);
         if (!ec.set("waypoints", "[]"))
             return textContent("failed to clear waypoints", true);
+        bool recompute = a.boolean("recompute_label", true);
+        if (recompute) {
+            Edge* e = ec.get();
+            if (e && !e->label.empty()) {
+                double ox = e->labelX, oy = e->labelY;
+                gl::recomputeEdgeLabelPos(g, *e);
+                double nx = e->labelX, ny = e->labelY;
+                e->labelX = ox;
+                e->labelY = oy;
+                ec.set("labelX", gv::formatCoord(nx));
+                ec.set("labelY", gv::formatCoord(ny));
+            }
+        }
         vm_.saveDraft(id, draft);
         Json out = Json::obj();
         out.set("status", "route cleared");
@@ -2505,7 +2499,7 @@ class ToolRunner {
         return textContent(out.dump());
     }
 
-    // nudgeNode: 相对平移节点
+    // nudgeNode: 相对平移节点；折点为世界坐标不随移，可选重算相连边标签
     Json nudgeNode(const Json& a)
     {
         std::string id = a.str("id"), nodeId = a.str("node");
@@ -2528,14 +2522,42 @@ class ToolRunner {
         Node* n = nc.get();
         if (!n)
             return textContent("node not found: " + nodeId, true);
-        nc.set("x", std::to_string(n->x + dx));
-        nc.set("y", std::to_string(n->y + dy));
+        if (!nc.set("x", gv::formatCoord(n->x + dx)) ||
+            !nc.set("y", gv::formatCoord(n->y + dy)))
+            return textContent("failed to nudge node coordinates", true);
+
+        bool recomputeLabels = a.boolean("recompute_connected_labels", false);
+        int  labelsUpdated   = 0;
+        if (recomputeLabels) {
+            for (auto& e : g.edges) {
+                if (e.from != nodeId && e.to != nodeId)
+                    continue;
+                if (e.label.empty())
+                    continue;
+                gv::EdgeCursor ec(g, &draft, e.id);
+                if (!ec.valid())
+                    continue;
+                Edge* pe = ec.get();
+                if (!pe)
+                    continue;
+                double ox = pe->labelX, oy = pe->labelY;
+                gl::recomputeEdgeLabelPos(g, *pe);
+                double nx = pe->labelX, ny = pe->labelY;
+                pe->labelX = ox;
+                pe->labelY = oy;
+                if (ec.set("labelX", gv::formatCoord(nx)) &&
+                    ec.set("labelY", gv::formatCoord(ny)))
+                    ++labelsUpdated;
+            }
+        }
+
         vm_.saveDraft(id, draft);
         Json out = Json::obj();
         out.set("status", "nudged");
         out.set("node", nodeId);
         out.set("x", n->x);
         out.set("y", n->y);
+        out.set("labelsRecomputed", (double)labelsUpdated);
         out.set("draftOperations", (double)draft.operationCount());
         return textContent(out.dump());
     }

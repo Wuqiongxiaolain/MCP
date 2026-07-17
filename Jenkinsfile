@@ -230,6 +230,23 @@ pipeline {
           }
         }
 
+        stage('Quality gate report') {
+          steps {
+            sh '''
+              set -euo pipefail
+              mkdir -p docs/ci_results
+              if [ ! -f docs/ci_results/sonar_status.env ]; then
+                printf '%s\n' \
+                  'SONAR_STATUS=SKIPPED' \
+                  'SONAR_SKIP_REASON=Jenkins 管线不含 SonarQube；以 cppcheck 为必过质量门' \
+                  > docs/ci_results/sonar_status.env
+              fi
+              # cppcheck 缺失时脚本返回非 0；仍 archive 报告
+              python3 scripts/generate_quality_gate_report.py || true
+            '''
+          }
+        }
+
         stage('Package') {
           steps {
             sh '''
@@ -250,7 +267,15 @@ pipeline {
         always {
           // 即使前面 stage 失败也尝试组装一次（幂等）
           sh 'python3 scripts/generate_docs_test_report.py --from-ci || true'
+          sh '''
+            mkdir -p docs/ci_results
+            if [ ! -f docs/ci_results/sonar_status.env ]; then
+              printf '%s\n' 'SONAR_STATUS=SKIPPED' 'SONAR_SKIP_REASON=Jenkins 管线不含 SonarQube' > docs/ci_results/sonar_status.env
+            fi
+            python3 scripts/generate_quality_gate_report.py || true
+          '''
           archiveArtifacts artifacts: 'docs/TEST_REPORT.md,docs/TEST_REPORT.json,docs/SMOKE_REPORT.md,docs/images/test-report-summary.svg', allowEmptyArchive: true
+          archiveArtifacts artifacts: 'docs/QUALITY_GATE_REPORT.md,docs/QUALITY_GATE_REPORT.json', allowEmptyArchive: true
           archiveArtifacts artifacts: 'docs/ci_results/**', allowEmptyArchive: true
           archiveArtifacts artifacts: 'bin/bench_result.json', allowEmptyArchive: true, fingerprint: true
           archiveArtifacts artifacts: 'mcp-smoke.log', allowEmptyArchive: true
@@ -548,7 +573,21 @@ pipeline {
           fi
           docker exec ansible-runner ansible-playbook -i /ansible-projects/MCP-/ansible/inventories/docker.yml /ansible-projects/MCP-/ansible/playbooks/deploy_release.yml
           echo "发布完成：请访问 http://localhost:8081/"
+          python3 scripts/generate_deploy_release_report.py \
+            --assets-dir /artifacts \
+            --tag "${GRAPHMCP_TAG_NAME:-build-${BUILD_NUMBER}}" \
+            --trigger "jenkins" \
+            --dry-run "${CD_DRY_RUN:-n/a}" \
+            --gh-release "n/a-or-gh" \
+            --nginx-deploy "ok" \
+            --health-test "see-ci-stages" \
+            --bin bin/graphmcp || true
         '''
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'docs/DEPLOY_RELEASE_REPORT.md,docs/DEPLOY_RELEASE_REPORT.json', allowEmptyArchive: true
+        }
       }
     }
   }

@@ -790,7 +790,7 @@ paths:
     post:
       operationId: table_create
       summary: table_create
-      description: Create a first-class data table from CSV / table XML / model JSON (separate from graph edge-list CSV or graph XML import).
+      description: Create a first-class data table from CSV / SpreadsheetML XML / legacy table-xml / model JSON (not graph edge-list CSV or graph XML).
       requestBody:
         required: true
         content:
@@ -800,10 +800,10 @@ paths:
               properties:
                 content:
                   type: string
-                  description: "table source: CSV, table XML (<table>), or model JSON"
+                  description: "table source: CSV, SpreadsheetML/legacy table XML, or model JSON"
                 format:
                   type: string
-                  description: csv|xml|model (default csv; not auto)
+                  description: csv|xml|table-xml|model (default csv; xml auto-detects SpreadsheetML or legacy <table>)
                 name:
                   type: string
                   description: table display name
@@ -825,7 +825,7 @@ paths:
     post:
       operationId: table_import
       summary: table_import
-      description: Import CSV / table XML / model JSON into a new or existing table id.
+      description: Import CSV / SpreadsheetML or legacy table XML / model JSON into a new or existing table id.
       requestBody:
         required: true
         content:
@@ -838,10 +838,10 @@ paths:
                   description: existing table id to overwrite (optional)
                 content:
                   type: string
-                  description: "table source: CSV, table XML (<table>), or model JSON"
+                  description: "table source: CSV, SpreadsheetML/legacy table XML, or model JSON"
                 format:
                   type: string
-                  description: csv|xml|model (default csv)
+                  description: csv|xml|table-xml|model (default csv; xml auto-detects)
                 name:
                   type: string
                   description: table name
@@ -857,7 +857,7 @@ paths:
     post:
       operationId: table_export
       summary: table_export
-      description: Export a stored table. Default csv is Excel-friendly (UTF-8 BOM+CRLF). Use model/xml for machine exchange; table XML is not SpreadsheetML.
+      description: Export a stored table. Default csv is Excel-friendly (UTF-8 BOM+CRLF). xml=SpreadsheetML 2003; table-xml=legacy dialect; model=JSON.
       requestBody:
         required: true
         content:
@@ -870,7 +870,7 @@ paths:
                   description: table id
                 to:
                   type: string
-                  description: csv|model|xml (default csv). csv is Excel-friendly UTF-8 BOM+CRLF; xml is graphmcp dialect (not for Excel)
+                  description: csv|model|xml|table-xml (default csv). csv is Excel-friendly UTF-8 BOM+CRLF; xml is SpreadsheetML 2003; table-xml is legacy named-field dialect
                 path:
                   type: string
                   description: optional output file path

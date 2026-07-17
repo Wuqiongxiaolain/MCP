@@ -368,7 +368,7 @@
 - `table_propose_rows` 可选 `rules_id` 枚举校验（非空单元格校验；非法整批拒绝）。
 - `table_check` 支持 `ignore_hint_row`；当 `table.hasHintRow=true` 时默认忽略首行说明。`GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1`（或 `true`）可将缺省改为不跳过 hint 行。
 - **表 CSV 导出**：默认 UTF-8 BOM + CRLF（Excel 友好）；CLI `--no-bom` / `--lf` 或 MCP `no_bom=true` 改为原始格式。MCP 内联 `csv_preview` 始终为无 BOM 的 Raw。
-- **表 XML**：`format=xml` 导入根为 `<table>` 的模式 A 方言（命名字段行，见 USER_GUIDE）；`to=xml` 导出。与 `create from-xml`（图 `<graph>`）无关。表 XML **不是** SpreadsheetML，勿用 Excel/浏览器打开。
+- **表 XML**：`to=xml` / `format=xml` 默认 **SpreadsheetML 2003**（Excel 可打开）；`format=xml` 读入时自动识别 SpreadsheetML 或旧根 `<table>` 命名字段行。显式旧格式：`table-xml` / `graphmcp-table-xml`。与 `create from-xml`（图 `<graph>`）无关。人侧日常仍优先 CSV。
 - **维护约定（抽离触发）**：当前表 XML 实现为多新增少修改（`table_xml.hpp`），与 `fromCsv` 装表样板可能少量重复且依赖 `gp::detail::parseXmlDoc`。出现以下**任一**情况时应单独开重构 PR（抽出 `xml_util` + `buildTable`），勿继续叠债：① CSV 与表 XML 在 normalize/缺列/meta 等行为漂移；② 再增加第三种表交换格式；③ 表侧需脱离 `parsers.hpp`。详见 `APPLICATION_LOGIC.md`。
 
 ---

@@ -604,9 +604,10 @@ graphmcp table from-table --file examples/example_input/skill_relations.csv
 |------|------|------|
 | **csv**（默认导出） | 人侧协作 / Excel | UTF-8 **带 BOM** + **CRLF**，中文 Excel 可双击打开；`--no-bom` / `--lf` 可改为原始管道格式 |
 | **model**（JSON） | 机器权威快照 | 与 Store 一致的结构化表示 |
-| **xml**（模式 A） | 仅 graphmcp / 机器交换 | **不是** SpreadsheetML；勿用 Excel 或浏览器打开；给人看请用 csv |
+| **xml** | 需要「仍是 XML」且可进 Excel 时 | **SpreadsheetML 2003** 单文件（Excel「XML 表格」）；`format=xml` 亦兼容旧 `<table>` 方言 |
+| **table-xml** | 仅兼容旧文件 | 历史「命名字段行」方言；新交换请用 csv / xml / model |
 
-人侧打开表：优先 `table export --to csv -o xxx.csv` 后双击；若环境仍异常，再用 Excel「数据 → 自文本/CSV」并选 UTF-8。本项目不以 `.xlsx` 为权威格式。
+人侧打开表：优先 `table export --to csv -o xxx.csv` 后双击；需要 XML 时用 `--to xml`（SpreadsheetML）。本项目不以 `.xlsx` 为权威格式。
 
 通用表命令补充约定：
 
@@ -656,34 +657,17 @@ graphmcp table sample-rows <id> --count 1 --rules-id <rules-id>
 graphmcp table propose-rows <id> --rows '[{"编号":"9","名称":"测试","层级":"小怪"}]' --rules-id <rules-id>
 ```
 
-### 通用表 XML（模式 A，非图 XML）
+### 通用表 XML（SpreadsheetML，非图 XML）
 
-业务宽表也可用表 XML 导入（根必须是 `<table>`，**不是**图描述用的 `<graph>`）。**表 XML 是 graphmcp 方言，不能当 Excel/浏览器文档**；需要给人看或进 Excel 时请 `export --to csv`。
+业务宽表可用表 XML 导入/导出。默认语义是 **SpreadsheetML 2003**（根 `<Workbook>`，Excel 可打开），**不是**图描述用的 `<graph>`。日常人侧仍优先 CSV；机器权威用 `model` JSON。
 
 ```sh
 graphmcp table create --file examples/example_input/enemy_sample.xml --format xml --name enemies
-graphmcp table export <table-id> --to xml -o enemies.xml   # 机器交换
-graphmcp table export <table-id> --to csv -o enemies.csv   # Excel / 人侧
+graphmcp table export <table-id> --to xml -o enemies.xml   # SpreadsheetML
+graphmcp table export <table-id> --to csv -o enemies.csv   # Excel / 人侧首选
 ```
 
-方言要点：根属性可带 `id`/`name`/`hasHintRow`；`<columns>/<col>` 定列；`<row>` 用**子元素名或属性名**作列名填值；允许一层嵌套拍扁为 `父.子`（`toXml` 按父标签聚合写出）；同名时子元素覆盖属性。列名须可安全用作 XML 标签（禁止空白与 `<>/&"'=`；项目允许中文与 `?`，与严格 W3C XML 名规则不完全一致），否则导入/导出拒绝；重复列名会去重并 warning。未知 `format`/`to` 会报错（不静默回退）。
-
-```xml
-<table name="enemies" hasHintRow="false">
-  <columns>
-    <col>编号</col>
-    <col>名称</col>
-    <col>层级</col>
-  </columns>
-  <rows>
-    <row>
-      <编号>1</编号>
-      <名称>爬虫</名称>
-      <层级>小怪</层级>
-    </row>
-  </rows>
-</table>
-```
+`format=xml` 自动识别：SpreadsheetML 或旧版命名字段行（根 `<table>`）。显式旧格式用 `format=table-xml` / `--to table-xml`。样例 `enemy_sample.table-xml.xml` 为旧方言参考。未知 `format`/`to` 会报错（不静默回退）。
 
 维护说明：表 XML 与 CSV 并行解析后进入同一 `Table`；实现上有意少改 `fromCsv`。若两侧装表行为漂移、再增第三种表格式、或需表侧脱离图解析头，应单独做 `xml_util`/`buildTable` 抽离重构（见 `APPLICATION_LOGIC.md`）。
 

@@ -150,22 +150,6 @@ pipeline {
           }
         }
 
-        stage('Bench') {
-          steps {
-            // 原理：本地 Docker/Jenkins CPU 抖动易造成微秒级假回归；只告警不阻断后续 Smoke/Package
-            sh '''
-              set +e
-              make bench-ci CXXFLAGS="${CXXFLAGS}"
-              rc=$?
-              set -e
-              if [ "$rc" -ne 0 ]; then
-                echo "WARNING: bench-ci 退出码=${rc}（本地 Jenkins 仅告警，不使 CI 失败）"
-              fi
-              exit 0
-            '''
-          }
-        }
-
         stage('Smoke') {
           environment {
             SMOKE_REQUIRE_RASTER = '1'
@@ -174,6 +158,16 @@ pipeline {
           steps {
             sh 'make smoke'
             sh 'make mcp-smoke'
+          }
+        }
+
+        stage('Bench') {
+          environment {
+            CI = 'true'
+          }
+          steps {
+            // 失败告警并重试，最多 3 次；连续 3 次失败才阻断（scripts/bench_ci_retry.sh）
+            sh 'make bench-ci CXXFLAGS="${CXXFLAGS}"'
           }
         }
 

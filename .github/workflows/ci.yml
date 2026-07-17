@@ -36,24 +36,6 @@ jobs:
       - name: 单元测试
         run: make test-all
 
-      - name: 性能基准测试
-        id: bench
-        run: |
-          # 编译并运行基准测试
-          make bench-ci CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
-        env:
-          CI: "true"
-
-      - name: 上传基准测试结果
-        if: always() && steps.bench.outcome != 'skipped'
-        uses: actions/upload-artifact@v4
-        with:
-          name: bench-results-${{ github.run_number }}
-          path: |
-            bin/bench_result.json
-          retention-days: 30
-          if-no-files-found: ignore
-
       - name: CLI 冒烟（新版命令族）
         env:
           SMOKE_REQUIRE_RASTER: "1"
@@ -75,6 +57,24 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
+      - name: 性能基准测试
+        id: bench
+        run: |
+          # 失败告警并重试，最多 3 次；连续 3 次失败才阻断（见 scripts/bench_ci_retry.sh）
+          make bench-ci CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
+        env:
+          CI: "true"
+
+      - name: 上传基准测试结果
+        if: always() && steps.bench.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results-${{ github.run_number }}
+          path: |
+            bin/bench_result.json
+          retention-days: 30
+          if-no-files-found: ignore
+
       - name: 上传测试报告
         if: always()
         uses: actions/upload-artifact@v4
@@ -87,7 +87,7 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
-      # 性能基线：日常仅 bench-ci 比对；按需 Actions「Update bench baseline」写回（须确认会多 1 个 commit）。
+      # 性能基线：日常仅 bench-ci 比对（可重试）；按需 Actions「Update bench baseline」写回。
 
       - name: 打包制品
         run: |

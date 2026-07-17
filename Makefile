@@ -23,7 +23,7 @@ HDRS := src/json.hpp src/model.hpp src/parsers.hpp src/layout.hpp \
         src/table_storage.hpp src/table_xml.hpp \
         src/version_types.hpp src/cursor_types.hpp src/version_manager.hpp
 
-.PHONY: all test test-all test-version test-cursor bench bench-ci bench-baseline smoke mcp-smoke table-smoke perf-smoke clean export-testout export-table-examples export-table-collab-examples docs-api docs-test-report docs-test-report-local
+.PHONY: all test test-all test-version test-cursor bench bench-ci bench-baseline smoke mcp-smoke table-smoke perf-smoke clean export-testout export-table-examples export-table-collab-examples docs-api docs-test-report docs-test-report-local docs-quality-gate docs-deploy-report
 
 all: $(BIN)/graphmcp$(EXE) $(BIN)/graphmcp_tests$(EXE) \
      $(BIN)/graphmcp_version_tests$(EXE) $(BIN)/graphmcp_cursor_tests$(EXE)
@@ -110,6 +110,17 @@ docs-test-report:
 docs-test-report-local: $(BIN)/graphmcp$(EXE) $(BIN)/graphmcp_tests$(EXE) $(BIN)/graphmcp_version_tests$(EXE) $(BIN)/graphmcp_cursor_tests$(EXE) $(BIN)/graphmcp_bench$(EXE)
 	python scripts/generate_docs_test_report.py --rerun --bin $(BIN)/graphmcp$(EXE)
 
+# 质量门报告：cppcheck + Sonar 状态（见 docs/ci_results/sonar_status.env）
+docs-quality-gate:
+	python scripts/generate_quality_gate_report.py
+
+# 发布/部署报告骨架（本地：指定制品目录）
+docs-deploy-report:
+	python scripts/generate_deploy_release_report.py --assets-dir . --bin $(BIN)/graphmcp$(EXE)
+
 clean:
 	-rm -rf $(BIN) test-store-tmp test-vm-store test-reset-store smoke-test-store-*
-	-rm -rf docs/ci_results docs/TEST_REPORT.md docs/TEST_REPORT.json docs/SMOKE_REPORT.md docs/images/test-report-summary.svg
+	-rm -rf docs/ci_results docs/TEST_REPORT.md docs/TEST_REPORT.json docs/SMOKE_REPORT.md
+	-rm -rf docs/QUALITY_GATE_REPORT.md docs/QUALITY_GATE_REPORT.json
+	-rm -rf docs/DEPLOY_RELEASE_REPORT.md docs/DEPLOY_RELEASE_REPORT.json
+	-rm -rf docs/images/test-report-summary.svg

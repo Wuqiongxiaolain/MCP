@@ -4,7 +4,8 @@
 
 > 命令行与 MCP 工具速查（版本以根目录 VERSION 为准）  
 > 操作教程与场景说明见 [USER_GUIDE.md](USER_GUIDE.md)。  
-> 机器可读契约见 [api_reference/openapi.yaml](api_reference/openapi.yaml)，由 `make docs-api` 从 `toolList()` 自动生成，**勿手改**。
+> **契约真源**：`src/mcp.hpp` 中 `toolList()`（及表工具注册）。  
+> **OpenAPI**：[api_reference/openapi.yaml](api_reference/openapi.yaml) 仅为 `make docs-api` / `dump-tools` 的**生成物**，供 Swagger 阅读与 CI 漂移检测，**勿手改**。工具增删改或必填字段变化属 Breaking change，须记入 [CHANGELOG](../CHANGELOG.md) / 发布说明。
 
 ---
 

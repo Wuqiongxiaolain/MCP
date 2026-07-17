@@ -124,7 +124,7 @@
 
 ### 4.1 时间线与里程碑
 
-开发里程碑（图 id=`dev-milestones`；制图版本见 [`diagrams/doc-figures`](diagrams/doc-figures)）：
+开发里程碑（图 id=`dev-milestones`；制图版本见 [`diagrams/README.md`](diagrams/README.md)）：
 
 ![开发里程碑时间线](images/dev-milestones.svg)
 

@@ -1,6 +1,6 @@
 # docs/diagrams — 文档制图版本库
 
-本目录存放文档插图的 **graphmcp 图版本**（可复现导出）；对应 SVG 在 [`../images/`](../images/)。
+本目录存放文档插图的 **graphmcp 图版本**（可复现导出）；对应 SVG 在 [`../images/`](../images/)。入口导航见仓库根 [README.md](../../README.md)。
 
 | 子目录 / 图 | 用途 | 导出 SVG |
 |-------------|------|----------|

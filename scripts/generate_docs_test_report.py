@@ -439,6 +439,21 @@ def overall_status(suites: List[SuiteResult]) -> str:
     return "PASS"
 
 
+def go_nogo(overall: str) -> str:
+    """测试套件维度的签核结论；完整 DoD 见 docs/ACCEPTANCE_DOD.md。"""
+    if overall == "FAIL":
+        return "NO-GO"
+    if overall == "WARN":
+        return "GO（有 WARN，须说明）"
+    if overall == "SKIP":
+        return "NO-GO"
+    return "GO"
+
+
+def failed_suite_names(suites: List[SuiteResult]) -> List[str]:
+    return [s.name for s in suites if s.status == "FAIL"]
+
+
 CI_RESULTS = ROOT / "docs" / "ci_results"
 
 
@@ -872,6 +887,15 @@ def write_markdown(
     overall: str,
     svg_rel: Optional[str],
 ) -> None:
+    verdict = go_nogo(overall)
+    failed = failed_suite_names(suites)
+    runner = (
+        os.environ.get("GITHUB_RUN_ID")
+        or os.environ.get("BUILD_NUMBER")
+        or os.environ.get("RUNNER_NAME")
+        or meta.get("runner")
+        or "local"
+    )
     lines: List[str] = []
     lines += [
         "# graphmcp 测试报告",
@@ -879,9 +903,48 @@ def write_markdown(
         f"> generated: {meta['time']}  |  branch: `{meta['branch']}`  |  commit: `{meta['commit']}`"
         + (f"  |  mode: `{meta['mode']}`" if meta.get("mode") else ""),
         "",
-        f"**总体结论：{overall}**",
+        "## 验收摘要（首屏）",
+        "",
+        f"| 项 | 值 |",
+        f"|----|----|",
+        f"| VERSION | `{meta.get('version', '')}` |",
+        f"| commit | `{meta['commit']}` |",
+        f"| branch | `{meta['branch']}` |",
+        f"| runner / build | `{runner}` |",
+        f"| 套件总体 | **{overall}** |",
+        f"| **GO / NO-GO** | **{verdict}** |",
+        "",
+        "> GO/NO-GO 仅覆盖本报告测试套件。质量门、OpenAPI、文档一致性见 "
+        "[ACCEPTANCE_DOD.md](ACCEPTANCE_DOD.md)。",
+        "",
+        "> **职责**：本文件为 CI 验收汇总；样例逐格式明细见 "
+        "`examples/example_testout/TEST_REPORT.md`（导出回归子集）。",
         "",
     ]
+    if failed:
+        lines += [
+            "### 失败套件（须优先处理）",
+            "",
+        ]
+        for name in failed:
+            s = next(x for x in suites if x.name == name)
+            lines.append(f"- **{name}**：{sanitize_report_text(s.note)}")
+            if s.log_excerpt:
+                excerpt = s.log_excerpt.strip().splitlines()[:12]
+                lines += ["", "```", "\n".join(excerpt), "```", ""]
+            else:
+                lines.append("")
+    # 首屏套件状态条
+    lines += [
+        "### 套件状态一览",
+        "",
+        "| 套件 | 状态 |",
+        "|------|------|",
+    ]
+    for s in suites:
+        lines.append(f"| {s.name} | **{s.status}** |")
+    lines.append("")
+
     if svg_rel:
         lines += [
             f"汇总图（graphmcp 导出，图 id=`test-report-summary`）：",
@@ -979,7 +1042,9 @@ def write_markdown(
         "- 本报告：`docs/TEST_REPORT.md` / `docs/TEST_REPORT.json`（gitignore，见 CI Artifact）",
         "- CLI 冒烟：`docs/SMOKE_REPORT.md`",
         "- 性能结果：`bin/bench_result.json`（相对 `tests/bench_baseline.json`）",
-        "- 样例导出：`examples/example_testout/TEST_REPORT.md`",
+        "- 样例导出明细：`examples/example_testout/TEST_REPORT.md`（非本文件替代品）",
+        "- 质量门：`docs/QUALITY_GATE_REPORT.md`",
+        "- 验收清单：`docs/ACCEPTANCE_DOD.md`",
         "- 捕获日志：`docs/ci_results/`",
         "",
     ]
@@ -1008,6 +1073,8 @@ def write_report_outputs(
     payload = {
         "meta": meta,
         "overall": overall,
+        "go_nogo": go_nogo(overall),
+        "failed_suites": failed_suite_names(suites),
         "suites": [asdict(s) for s in suites],
         "summary_svg": svg_rel,
     }
@@ -1021,6 +1088,7 @@ def write_report_outputs(
     if svg_rel:
         print(f"Wrote docs/{svg_rel}")
     print(f"Overall: {overall}")
+    print(f"GO/NO-GO: {go_nogo(overall)}")
     return 0 if overall != "FAIL" else 1
 
 

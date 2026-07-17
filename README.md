@@ -28,11 +28,41 @@
 | 文档 | 说明 |
 |------|------|
 | [CLI & MCP 指令参考](docs/CLI_MCP_REFERENCE.md) | 15 个命令族与 **51** 个 MCP 工具完整参数速查（以 `toolList()`/OpenAPI 为准） |
-| [OpenAPI 契约](docs/api_reference/openapi.yaml) | 由 `make docs-api` 从 `toolList()` 生成，可供 Swagger 打开 |
-| [测试报告](https://github.com/Wuqiongxiaolain/MCP/actions) | 由 CI 汇总后上传 Artifact（`docs-test-report-*`）；本机不提交 |
+| [OpenAPI 契约](docs/api_reference/openapi.yaml) | 由 `make docs-api` 从 `toolList()` 生成，可供 Swagger 打开；**真源为 `toolList()`，勿手改 YAML** |
+| [测试报告（CI Artifact）](https://github.com/Wuqiongxiaolain/MCP/actions) | CI 汇总 Artifact（`docs-test-report-*`，含 GO/NO-GO）；与 `examples/example_testout/TEST_REPORT`（导出明细）职责不同；`docs/TEST_REPORT.md` **不入库** |
+| [变更日志](CHANGELOG.md) | 按版本摘要；发版时维护 |
 | [项目思维导图](docs/MINDMAP.md) | 能力与 DevOps 全景（Mermaid / 大纲） |
+| [文档插图版本库](docs/diagrams/README.md) | graphmcp 可复现制图目录；SVG 在 `docs/images/` |
+
+### DevOps 验收与运维
+
+| 文档 | 说明 |
+|------|------|
+| [验收清单 DoD](docs/ACCEPTANCE_DOD.md) | 合入/发版签核勾选表与 GO/NO-GO |
+| [运维 Runbook](docs/RUNBOOK.md) | Jenkins / Ansible / nginx 启停、发版、排查、回滚 |
+| [质量门报告模板](docs/templates/QUALITY_GATE_REPORT.md) | cppcheck 必过；Sonar 可选（SKIPPED 须明示） |
+| [发布/部署报告模板](docs/templates/DEPLOY_RELEASE_REPORT.md) | 版本、制品哈希、健康检查、回滚 |
+| [性能报告模板](docs/templates/PERF_REPORT.md) | bench 18 指标 vs 基线 |
+| [代码审查归档](docs/reviews/README.md) | 重大改造审查结论入库约定 |
+
+### 技术选型分析
+
+| 文档 | 说明 |
+|------|------|
+| [Web 前后端分离 vs 单可执行文件](docs/ANALYSIS_WEB_VS_SINGLE_EXE.md) | 部署与交互形态对比；说明为何采用单 exe + CLI/MCP |
+| [vcpkg vs 零第三方依赖](docs/ANALYSIS_VCPKG_VS_ZERO_DEP.md) | 包管理与自研实现对比；说明为何坚持零链接依赖 |
+| [JSON 持久化 vs SQLite](docs/ANALYSIS_JSON_VS_SQLITE.md) | 存储引擎对比；说明为何采用文件系统 JSON 快照 |
+
+### 课程原始需求（MiniTasks）
+
+| 文档 | 说明 |
+|------|------|
+| [课题需求 brief](docs/MiniTasks/basic.md) | 课程下达的图形 MCP 工具功能与工程约束原文 |
+| [C++ 脚手架参考](docs/MiniTasks/toolpacks.md) | 课程附带的 vcpkg / clang-format / cppcheck 脚手架说明（历史参考；本项目实际为零依赖） |
 
 示例输入见 [`examples/example_input/`](examples/example_input/)，导出基准见 [`examples/README.md`](examples/README.md)。MCP 配置模板：[`mcp-config.example.json`](mcp-config.example.json)。Skill 定义：[`skills/graphmcp/SKILL.md`](skills/graphmcp/SKILL.md)。
+
+> **文档树约定**：上表为以本 README 为根的导航入口；`docs/` 下 Markdown 均应能从本页（或经一跳子页）到达。可用 `python scripts/check_docs_links.py` 校验可达性与断链。
 
 ---
 
@@ -62,6 +92,8 @@ make docs-api
 | `make docs-api` | `dump-tools` → OpenAPI YAML |
 | `make docs-test-report` | 从 `docs/ci_results/` **组装**报告（不重跑；CI 用） |
 | `make docs-test-report-local` | 本地完整重跑后生成报告（调试用） |
+| `make docs-quality-gate` | cppcheck + Sonar 状态 → 质量门报告 |
+| `make docs-deploy-report` | 本地组装发布/部署报告骨架 |
 
 ### 版本 / 基线 / 发布（GitHub Actions + Jenkins）
 

@@ -141,9 +141,61 @@ jobs:
           path: graphmcp-${{ github.ref_name }}-${{ matrix.platform }}.zip
           retention-days: 30
 
+  deploy-report:
+    name: 组装发布/部署报告
+    needs: build-package
+    if: ${{ !github.event.deleted }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: 下载全部平台制品
+        uses: actions/download-artifact@v4
+        with:
+          pattern: graphmcp-${{ github.ref_name }}-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: 生成报告
+        run: |
+          set -euo pipefail
+          DRY_VAL="false"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY_VAL="true"
+          fi
+          GH_REL="pending"
+          REL_URL="https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          if [ "$DRY_VAL" = "true" ]; then
+            GH_REL="skipped-dry-run"
+            REL_URL="n/a"
+          fi
+          python3 scripts/generate_deploy_release_report.py \
+            --assets-dir release-assets \
+            --tag "${{ github.ref_name }}" \
+            --trigger "${{ github.event_name }}" \
+            --dry-run "${DRY_VAL}" \
+            --gh-release "${GH_REL}" \
+            --release-url "${REL_URL}" \
+            --health-test "matrix-make-test" \
+            --breaking "see-changelog" \
+            --breaking-notes "见 CHANGELOG.md 与 annotated tag message"
+
+      - name: 上传部署报告 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-release-report-${{ github.ref_name }}
+          path: |
+            docs/DEPLOY_RELEASE_REPORT.md
+            docs/DEPLOY_RELEASE_REPORT.json
+          retention-days: 90
+
   release:
     name: 发布 GitHub Release
-    needs: build-package
+    needs: [build-package, deploy-report]
     if: ${{ !github.event.deleted && (github.event_name != 'workflow_dispatch' || inputs.dry_run != true) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -185,6 +237,7 @@ jobs:
             echo "- Tag：\`${{ github.ref_name }}\`"
             echo "- Commit：\`${{ github.sha }}\`"
             echo "- 平台：Linux / Windows / macOS"
+            echo "- 部署报告：本 Release 附件 \`DEPLOY_RELEASE_REPORT.md\`"
             echo ""
             echo "下方为 GitHub 自动生成的变更摘要与 Full Changelog 对比链接。"
           } >> "$NOTE_FILE"
@@ -195,6 +248,12 @@ jobs:
           pattern: graphmcp-${{ github.ref_name }}-*
           path: release-assets
           merge-multiple: true
+
+      - name: 附带部署报告
+        uses: actions/download-artifact@v4
+        with:
+          name: deploy-release-report-${{ github.ref_name }}
+          path: release-assets
 
       - name: 发布到 GitHub Releases
         uses: softprops/action-gh-release@v2

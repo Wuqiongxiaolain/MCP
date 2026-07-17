@@ -15,7 +15,7 @@ graphmcp 是一个 **C++17 单可执行文件**，零第三方依赖。核心设
 
 Graph 模型支持**多图层（layers）**与**多页（pages）**，draw.io 往返保留图层/页面结构。
 
-整体架构（由 graphmcp 导出；制图版本见 [`diagrams/doc-figures`](diagrams/doc-figures)，图 id=`arch-overview`）：
+整体架构（由 graphmcp 导出；制图版本见 [`diagrams/README.md`](diagrams/README.md)，图 id=`arch-overview`）：
 
 ![整体架构总览](images/arch-overview.svg)
 

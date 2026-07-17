@@ -23,7 +23,7 @@ jobs:
       - name: 安装构建依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++ make python3 imagemagick jq
+          sudo apt-get install -y g++ make python3 imagemagick jq cppcheck
 
       - name: 编译
         run: make all CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
@@ -74,6 +74,18 @@ jobs:
         if: always()
         run: python3 scripts/generate_docs_test_report.py --from-ci
 
+      - name: 质量门报告（cppcheck；Sonar 默认可 SKIPPED）
+        if: always()
+        run: |
+          mkdir -p docs/ci_results
+          if [ ! -f docs/ci_results/sonar_status.env ]; then
+            printf '%s\n' \
+              'SONAR_STATUS=SKIPPED' \
+              'SONAR_SKIP_REASON=本 job 未运行 Sonar；见 sonarqube job 或未启用 SONAR_ENABLED' \
+              > docs/ci_results/sonar_status.env
+          fi
+          python3 scripts/generate_quality_gate_report.py
+
       - name: 写入 Job Summary
         if: always()
         run: |
@@ -81,6 +93,11 @@ jobs:
             cat docs/TEST_REPORT.md >> "$GITHUB_STEP_SUMMARY"
           else
             echo "docs/TEST_REPORT.md missing" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f docs/QUALITY_GATE_REPORT.md ]; then
+            echo "---" >> "$GITHUB_STEP_SUMMARY"
+            cat docs/QUALITY_GATE_REPORT.md >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: 上传汇总测试报告
@@ -91,6 +108,8 @@ jobs:
           path: |
             docs/TEST_REPORT.md
             docs/TEST_REPORT.json
+            docs/QUALITY_GATE_REPORT.md
+            docs/QUALITY_GATE_REPORT.json
             docs/SMOKE_REPORT.md
             docs/images/test-report-summary.svg
             docs/ci_results/
@@ -134,27 +153,32 @@ jobs:
       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
     steps:
-      - name: 检查 Sonar 配置
-        id: sonar_precheck
-        run: |
-          if [ -z "${SONAR_TOKEN:-}" ] || [ -z "${SONAR_HOST_URL:-}" ]; then
-            echo "::warning::SONAR_ENABLED 已开启，但缺少 SONAR_TOKEN 或 SONAR_HOST_URL，已跳过 SonarQube 分析"
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: 检出代码
-        if: steps.sonar_precheck.outputs.should_run == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: 检查 Sonar 配置
+        id: sonar_precheck
+        run: |
+          mkdir -p docs/ci_results
+          if [ -z "${SONAR_TOKEN:-}" ] || [ -z "${SONAR_HOST_URL:-}" ]; then
+            echo "::warning::SONAR_ENABLED 已开启，但缺少 SONAR_TOKEN 或 SONAR_HOST_URL，已跳过 SonarQube 分析"
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            printf '%s\n' \
+              'SONAR_STATUS=SKIPPED' \
+              "SONAR_HOST_URL=${SONAR_HOST_URL:-}" \
+              'SONAR_SKIP_REASON=缺少 SONAR_TOKEN 或 SONAR_HOST_URL' \
+              > docs/ci_results/sonar_status.env
+          else
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: 安装依赖
         if: steps.sonar_precheck.outputs.should_run == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl g++ make unzip
+          sudo apt-get install -y curl g++ make unzip cppcheck python3
 
       - name: 下载 SonarCFamily build-wrapper
         if: steps.sonar_precheck.outputs.should_run == 'true'
@@ -174,9 +198,52 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@v5
 
       - name: 质量门禁
+        id: sonar_qg
         if: steps.sonar_precheck.outputs.should_run == 'true'
         uses: SonarSource/sonarqube-quality-gate-action@v1
         timeout-minutes: 10
+
+      - name: 写入 Sonar 状态并刷新质量门报告
+        if: always()
+        run: |
+          mkdir -p docs/ci_results
+          sudo apt-get update -qq && sudo apt-get install -y -qq cppcheck python3 || true
+          if [ "${{ steps.sonar_precheck.outputs.should_run }}" = "true" ]; then
+            qg="${{ steps.sonar_qg.outputs.quality-gate-status }}"
+            if [ -z "$qg" ]; then
+              qg="UNKNOWN"
+            fi
+            status="PASS"
+            case "$qg" in
+              PASSED|OK|passed) status="PASS" ;;
+              *) status="FAIL" ;;
+            esac
+            # 若质量门步骤失败，强制 FAIL
+            if [ "${{ steps.sonar_qg.outcome }}" = "failure" ]; then
+              status="FAIL"
+            fi
+            printf '%s\n' \
+              "SONAR_STATUS=${status}" \
+              "SONAR_HOST_URL=${SONAR_HOST_URL}" \
+              "SONAR_QG=${qg}" \
+              "SONAR_DASHBOARD_URL=${SONAR_HOST_URL}/dashboard?id=graphmcp" \
+              > docs/ci_results/sonar_status.env
+          fi
+          python3 scripts/generate_quality_gate_report.py || true
+
+      - name: 上传质量门报告（含 Sonar 状态）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-quality-gate-${{ github.run_number }}
+          path: |
+            docs/QUALITY_GATE_REPORT.md
+            docs/QUALITY_GATE_REPORT.json
+            docs/ci_results/sonar_status.env
+            docs/ci_results/cppcheck.log
+            docs/ci_results/cppcheck.exit
+          retention-days: 30
+          if-no-files-found: ignore
 
   mirror-to-gitlab:
     name: 同步 main 到 GitLab 备份仓

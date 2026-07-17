@@ -960,9 +960,9 @@ int cmdTable(Args& a, gs::Store& store)
         }
         if (gm::toLower(to) == "xml") {
             std::cerr
-                << "note: table XML is a graphmcp dialect (not SpreadsheetML); "
-                   "open with graphmcp, not Excel/browser. For Excel use "
-                   "--to csv.\n";
+                << "note: table XML is SpreadsheetML 2003 (Excel-openable). "
+                   "Legacy named-field dialect: --to table-xml. Prefer "
+                   "--to csv for day-to-day Excel use.\n";
         }
         if (a.has("output")) {
             if (!ge::writeFile(a.get("output"), text)) {

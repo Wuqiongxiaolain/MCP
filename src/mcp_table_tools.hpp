@@ -158,8 +158,8 @@ inline Json tableExport(gts::TableStore& tables, const Json& a)
             return textContent("failed to write " + path, true);
         std::string msg = "wrote " + path;
         if (gm::toLower(to) == "xml")
-            msg += " (note: table XML is a graphmcp dialect, not for "
-                   "Excel/browser; use to=csv for Excel)";
+            msg += " (note: xml=SpreadsheetML 2003; use to=csv for day-to-day "
+                   "Excel, to=table-xml for legacy dialect)";
         return textContent(msg);
     }
     if (text.size() > ge::inlineExportMaxBytes())

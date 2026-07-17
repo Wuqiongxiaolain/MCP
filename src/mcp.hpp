@@ -629,9 +629,12 @@ inline Json toolList()
         Json p = Json::obj();
         p.set("content",
               prop("string",
-                   "table source: CSV, table XML (<table>), or model JSON"));
+                   "table source: CSV, SpreadsheetML/legacy table XML, or "
+                   "model JSON"));
         p.set("format",
-              prop("string", "csv|xml|model (default csv; not auto)"));
+              prop("string",
+                   "csv|xml|table-xml|model (default csv; xml auto-detects "
+                   "SpreadsheetML or legacy <table>)"));
         p.set("name", prop("string", "table display name"));
         p.set("id", prop("string", "optional table id"));
         p.set(
@@ -645,8 +648,9 @@ inline Json toolList()
         req.push(Json("content"));
         tools.push(toolDef(
             "table_create",
-            "Create a first-class data table from CSV / table XML / model JSON "
-            "(separate from graph edge-list CSV or graph XML import).",
+            "Create a first-class data table from CSV / SpreadsheetML XML / "
+            "legacy table-xml / model JSON (not graph edge-list CSV or graph "
+            "XML).",
             p, req));
     }
     {
@@ -655,16 +659,19 @@ inline Json toolList()
               prop("string", "existing table id to overwrite (optional)"));
         p.set("content",
               prop("string",
-                   "table source: CSV, table XML (<table>), or model JSON"));
-        p.set("format", prop("string", "csv|xml|model (default csv)"));
+                   "table source: CSV, SpreadsheetML/legacy table XML, or "
+                   "model JSON"));
+        p.set("format",
+              prop("string",
+                   "csv|xml|table-xml|model (default csv; xml auto-detects)"));
         p.set("name", prop("string", "table name"));
         p.set("note", prop("string", "version note"));
         Json req = Json::arr();
         req.push(Json("content"));
         tools.push(toolDef(
             "table_import",
-            "Import CSV / table XML / model JSON into a new or existing table "
-            "id.",
+            "Import CSV / SpreadsheetML or legacy table XML / model JSON into "
+            "a new or existing table id.",
             p, req));
     }
     {
@@ -672,8 +679,9 @@ inline Json toolList()
         p.set("id", prop("string", "table id"));
         p.set("to",
               prop("string",
-                   "csv|model|xml (default csv). csv is Excel-friendly UTF-8 "
-                   "BOM+CRLF; xml is graphmcp dialect (not for Excel)"));
+                   "csv|model|xml|table-xml (default csv). csv is Excel-friendly "
+                   "UTF-8 BOM+CRLF; xml is SpreadsheetML 2003; table-xml is "
+                   "legacy named-field dialect"));
         p.set("path", prop("string", "optional output file path"));
         p.set("version", prop("number", "version to export (default latest)"));
         p.set("no_bom",
@@ -683,8 +691,8 @@ inline Json toolList()
         req.push(Json("id"));
         tools.push(toolDef("table_export",
                            "Export a stored table. Default csv is Excel-friendly "
-                           "(UTF-8 BOM+CRLF). Use model/xml for machine exchange; "
-                           "table XML is not SpreadsheetML.",
+                           "(UTF-8 BOM+CRLF). xml=SpreadsheetML 2003; "
+                           "table-xml=legacy dialect; model=JSON.",
                            p, req));
     }
     {

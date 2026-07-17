@@ -2440,7 +2440,29 @@ static void testTableMcpTools()
 
 static void testTableXml()
 {
-    // 模式 A：显式列 + 命名子元素
+    // SpreadsheetML 默认写出 / 往返
+    {
+        gt::Table sml;
+        sml.id         = "t1";
+        sml.name       = "demo";
+        sml.hasHintRow = true;
+        sml.columns    = {"编号", "名称", "层级"};
+        sml.rows       = {{"1", "爬虫", "小怪"}, {"2", "游荡者", ""}};
+        std::string xml = gtx::toXml(sml);
+        CHECK(xml.find("Workbook") != std::string::npos);
+        CHECK(xml.find("mso-application") != std::string::npos);
+        CHECK(xml.find("<table") == std::string::npos);
+        gt::Table back = gtx::fromXml(xml);
+        CHECK(back.id == "t1");
+        CHECK(back.name == "demo");
+        CHECK(back.hasHintRow);
+        CHECK(back.columns.size() == 3);
+        CHECK(back.rows.size() == 2);
+        CHECK(back.cell(0, 1) == "爬虫");
+        CHECK(back.cell(1, 2) == "");
+    }
+
+    // 旧方言兼容读入（命名字段行）
     gt::Table t = gtx::fromXml(
         "<table id=\"t1\" name=\"demo\" hasHintRow=\"false\">"
         "<columns><col>编号</col><col>名称</col><col>层级</col></columns>"
@@ -2469,17 +2491,24 @@ static void testTableXml()
     CHECK(nest.cell(0, 2) == "y");
     CHECK(nest.cell(0, 3) == "elem");
 
-    // toXml 按父标签聚合
-    std::string agg = gtx::toXml(nest);
+    // 旧方言写出按父标签聚合；默认 toXml 为 SpreadsheetML
+    std::string agg = gtx::toLegacyTableXml(nest);
     CHECK(agg.find("<动画>") != std::string::npos);
     CHECK(agg.find("<生成>x</生成>") != std::string::npos);
     CHECK(agg.find("<受击>y</受击>") != std::string::npos);
-    // 同一父只出现一次开标签（粗检：第二个 <动画> 应不存在于聚合后）
     {
         size_t first = agg.find("<动画>");
         CHECK(first != std::string::npos);
         size_t second = agg.find("<动画>", first + 1);
         CHECK(second == std::string::npos);
+    }
+    {
+        std::string sml = gtx::toXml(nest);
+        CHECK(sml.find("Workbook") != std::string::npos);
+        CHECK(sml.find("动画.生成") != std::string::npos);
+        gt::Table back = gtx::fromXml(sml);
+        CHECK(back.cell(0, 1) == "x");
+        CHECK(back.cell(0, 3) == "elem");
     }
 
     // 无 columns 时属性按出现序（非字典序）：z 应在 a 前
@@ -2506,7 +2535,7 @@ static void testTableXml()
             CHECK(warns[0].find("duplicate") != std::string::npos);
     }
 
-    // 不安全列名拒绝
+    // 不安全列名拒绝（旧方言）
     {
         bool bad = false;
         try {
@@ -2555,7 +2584,7 @@ static void testTableXml()
         CHECK(bad);
     }
 
-    // XML ↔ JSON ↔ XML 往返
+    // SpreadsheetML ↔ JSON ↔ SpreadsheetML 往返
     Json      j  = nest.toJson();
     gt::Table j2 = gt::Table::fromJson(j);
     CHECK(j2.cell(0, 1) == "x");
@@ -2567,22 +2596,26 @@ static void testTableXml()
     CHECK(back.cell(0, 2) == "y");
     CHECK(back.cell(0, 3) == "elem");
 
-    // 叶子列与嵌套父名冲突
+    // 叶子列与嵌套父名冲突：仅旧方言写出拒绝；SpreadsheetML 允许
     {
         gt::Table conflict;
         conflict.columns = {"动画", "动画.生成"};
         conflict.rows    = {{"leaf", "x"}};
         bool bad         = false;
         try {
-            gtx::toXml(conflict);
+            gtx::toLegacyTableXml(conflict);
         }
         catch (const gt::TableError&) {
             bad = true;
         }
         CHECK(bad);
+        std::string sml = gtx::toXml(conflict);
+        gt::Table   ok  = gtx::fromXml(sml);
+        CHECK(ok.cell(0, 0) == "leaf");
+        CHECK(ok.cell(0, 1) == "x");
     }
 
-    // 更深嵌套应报错
+    // 更深嵌套应报错（旧方言）
     bool threw = false;
     try {
         gtx::fromXml("<table><row><a><b><c>z</c></b></a></row></table>");
@@ -2592,14 +2625,18 @@ static void testTableXml()
     }
     CHECK(threw);
 
-    // 与 enemy_sample.csv 内容对齐
+    // format=table-xml 仅旧方言；与 enemy_sample.csv 对齐
     std::string enemy_csv = readExampleInput("enemy_sample.csv");
     std::string enemy_xml = readExampleInput("enemy_sample.xml");
+    std::string enemy_legacy =
+        readExampleInput("enemy_sample.table-xml.xml");
     CHECK(!enemy_csv.empty());
     CHECK(!enemy_xml.empty());
+    CHECK(!enemy_legacy.empty());
     if (!enemy_csv.empty() && !enemy_xml.empty()) {
         gt::Table fromCsv = gt::Table::fromCsv(enemy_csv);
         gt::Table fromXml = gtx::fromXml(enemy_xml);
+        CHECK(enemy_xml.find("Workbook") != std::string::npos);
         CHECK(fromCsv.columns.size() == fromXml.columns.size());
         CHECK(fromCsv.rows.size() == fromXml.rows.size());
         for (size_t c = 0; c < fromCsv.columns.size(); c++)
@@ -2607,6 +2644,14 @@ static void testTableXml()
         for (size_t r = 0; r < fromCsv.rows.size(); r++)
             for (size_t c = 0; c < fromCsv.columns.size(); c++)
                 CHECK(fromCsv.cell(r, c) == fromXml.cell(r, c));
+        CHECK(fromXml.id == "ex-enemy-sample");
+    }
+    if (!enemy_legacy.empty() && !enemy_csv.empty()) {
+        gt::Table fromLegacy =
+            gtx::parseTableContent(enemy_legacy, "table-xml");
+        gt::Table fromCsv = gt::Table::fromCsv(enemy_csv);
+        CHECK(fromLegacy.columns.size() == fromCsv.columns.size());
+        CHECK(fromLegacy.rows.size() == fromCsv.rows.size());
     }
 
     // parseTableContent + MCP format=xml
@@ -2636,8 +2681,16 @@ static void testTableXml()
         Json er = runner.call("table_export", ex);
         CHECK(!er.boolean("isError", false));
         std::string xml_out = er.find("content")->a->at(0).str("text");
-        CHECK(xml_out.find("<table") != std::string::npos);
-        CHECK(xml_out.find("<a>") != std::string::npos);
+        CHECK(xml_out.find("Workbook") != std::string::npos);
+        CHECK(xml_out.find(">a</Data>") != std::string::npos ||
+              xml_out.find(">a</") != std::string::npos);
+
+        ex.set("to", "table-xml");
+        Json el = runner.call("table_export", ex);
+        CHECK(!el.boolean("isError", false));
+        std::string legacy_out = el.find("content")->a->at(0).str("text");
+        CHECK(legacy_out.find("<table") != std::string::npos);
+        CHECK(legacy_out.find("<a>") != std::string::npos);
 
         ex.set("to", "model");
         Json em = runner.call("table_export", ex);

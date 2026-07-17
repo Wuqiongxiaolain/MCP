@@ -81,6 +81,13 @@ def main() -> int:
     for cur in sorted(seen):
         if cur.suffix.lower() != ".md":
             continue
+        # Cursor Plan 副本内的仓库相对链接（如 src/...）相对副本目录解析会误报，跳过断链检查
+        try:
+            rel_cur = cur.relative_to(ROOT).as_posix()
+        except ValueError:
+            continue
+        if "/cursor-plans/" in rel_cur or rel_cur.endswith(".plan.md"):
+            continue
         text = cur.read_text(encoding="utf-8")
         for href in iter_hrefs(text):
             if href.startswith(("http://", "https://", "mailto:", "#")):

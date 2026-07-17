@@ -146,7 +146,13 @@ pipeline {
 
         stage('Unit tests') {
           steps {
-            sh 'make test-all'
+            sh '''
+              set -euo pipefail
+              mkdir -p docs/ci_results
+              bash scripts/ci_capture.sh unit-main bin/graphmcp_tests
+              bash scripts/ci_capture.sh unit-version bin/graphmcp_version_tests
+              bash scripts/ci_capture.sh unit-cursor bin/graphmcp_cursor_tests
+            '''
           }
         }
 
@@ -156,8 +162,10 @@ pipeline {
             GRAPHMCP_LOG = 'info'
           }
           steps {
-            sh 'make smoke'
-            sh 'make mcp-smoke'
+            sh 'bash scripts/ci_capture.sh smoke bash tests/smoke_test.sh bin/graphmcp'
+            sh 'bash scripts/ci_capture.sh mcp-smoke bash tests/mcp_smoke.sh bin/graphmcp'
+            sh 'bash scripts/ci_capture.sh table-smoke bash tests/table_smoke.sh bin/graphmcp'
+            sh 'bash scripts/ci_capture.sh perf-smoke python3 scripts/mcp_perf_smoke.py bin/graphmcp'
           }
         }
 
@@ -167,7 +175,20 @@ pipeline {
           }
           steps {
             // 失败告警并重试，最多 3 次；连续 3 次失败才阻断（scripts/bench_ci_retry.sh）
-            sh 'make bench-ci CXXFLAGS="${CXXFLAGS}"'
+            sh 'bash scripts/ci_capture.sh bench make bench-ci CXXFLAGS="${CXXFLAGS}"'
+          }
+        }
+
+        stage('Export regression') {
+          steps {
+            sh 'bash scripts/ci_capture.sh export-testout bash scripts/export-example-testout.sh bin/graphmcp'
+          }
+        }
+
+        stage('Assemble test report') {
+          steps {
+            // 只组装，不重跑；失败不阻断（报告仍 archive）
+            sh 'python3 scripts/generate_docs_test_report.py --from-ci || true'
           }
         }
 
@@ -189,8 +210,12 @@ pipeline {
       }
       post {
         always {
+          // 即使前面 stage 失败也尝试组装一次（幂等）
+          sh 'python3 scripts/generate_docs_test_report.py --from-ci || true'
+          archiveArtifacts artifacts: 'docs/TEST_REPORT.md,docs/TEST_REPORT.json,docs/SMOKE_REPORT.md,docs/images/test-report-summary.svg', allowEmptyArchive: true
+          archiveArtifacts artifacts: 'docs/ci_results/**', allowEmptyArchive: true
           archiveArtifacts artifacts: 'bin/bench_result.json', allowEmptyArchive: true, fingerprint: true
-          archiveArtifacts artifacts: 'SMOKE_REPORT.md,mcp-smoke.log', allowEmptyArchive: true
+          archiveArtifacts artifacts: 'mcp-smoke.log', allowEmptyArchive: true
           archiveArtifacts artifacts: 'examples/example_testout/TEST_REPORT.md,examples/example_testout/TEST_REPORT.json', allowEmptyArchive: true
           archiveArtifacts artifacts: "bin/graphmcp,graphmcp-${env.BUILD_NUMBER}.tar.gz", allowEmptyArchive: true, fingerprint: true
         }

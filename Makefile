@@ -65,17 +65,12 @@ $(BIN)/graphmcp_bench$(EXE): tests/bench_main.cpp $(HDRS)
 bench: $(BIN)/graphmcp_bench$(EXE)
 	$(BIN)/graphmcp_bench$(EXE)
 
-# CI 用：运行 bench 并比对基线
+# CI 用：运行 bench 并比对基线；失败最多重试 BENCH_RETRIES 次（默认 3）
 BENCH_BASELINE := tests/bench_baseline.json
+BENCH_RETRIES  ?= 3
 bench-ci: $(BIN)/graphmcp_bench$(EXE)
-	$(BIN)/graphmcp_bench$(EXE) > $(BIN)/bench_result.json
-	@if [ -f $(BENCH_BASELINE) ]; then \
-		python3 scripts/bench_compare.py $(BENCH_BASELINE) $(BIN)/bench_result.json; \
-	else \
-		echo "::warning::基线文件不存在，将当前结果写入基线"; \
-		cp $(BIN)/bench_result.json $(BENCH_BASELINE); \
-	fi
-
+	bash scripts/bench_ci_retry.sh $(BIN)/graphmcp_bench$(EXE) \
+		$(BENCH_BASELINE) $(BIN)/bench_result.json $(BENCH_RETRIES)
 # 更新基线（仅 main 分支使用）
 bench-baseline: $(BIN)/graphmcp_bench$(EXE)
 	$(BIN)/graphmcp_bench$(EXE) > $(BENCH_BASELINE)

@@ -459,7 +459,7 @@ Draft 基于操作序列（非快照）：存储 `OpType` 11 种操作（含 `ME
 | `make test-cursor` | `tests/test_cursor.cpp`（游标单测） |
 | `make test-all` | 上述三者 |
 | `make bench` | `tests/bench_main.cpp`（性能基准测试，输出结果） |
-| `make bench-ci` | 运行 bench 并比对 `tests/bench_baseline.json` 基线（CI 用） |
+| `make bench-ci` | 运行 bench 并比对基线；失败告警并重试，默认最多 3 次（`BENCH_RETRIES`），连续失败才阻断 |
 | `make bench-baseline` | 更新性能基线文件（仅 main 分支使用） |
 | `make smoke` | `tests/smoke_test.sh`（含 `[fixture-regression]`），写根目录 `SMOKE_REPORT.md` |
 | `make mcp-smoke` | `tests/mcp_smoke.sh` |
@@ -469,7 +469,7 @@ Draft 基于操作序列（非快照）：存储 `OpType` 11 种操作（含 `ME
 | `make export-table-collab-examples` | `scripts/export-table-collab-examples.sh`（图↔表协作示例：rules/fix/derive/slug/sample/propose） |
 | `make docs-api` | `dump-tools` → `docs/api_reference/openapi.yaml` |
 
-`.github/workflows/ci.yml` 默认：`make docs-api`（与 OpenAPI diff 校验）、`make test-all`、`make bench-ci`（仅比对不写回）、`make smoke`、`make mcp-smoke`，并上传冒烟报告等制品。
+`.github/workflows/ci.yml` 与 Jenkins CI 默认顺序：`make docs-api`（OpenAPI diff）→ `make test-all` → `make smoke` / `make mcp-smoke` → `make bench-ci`（失败最多重试 3 次，见 `scripts/bench_ci_retry.sh`）→ 打包制品。
 
 
 | 组件 | 文件 | 说明 |

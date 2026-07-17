@@ -194,6 +194,19 @@ class Store {
         if (!ge::writeFileAtomic(verPath, snap.dump()))
             return -1;
 
+        // 新增开始：同步写轻量 meta，避免 history 回退解析整图快照
+        {
+            Json meta = Json::obj();
+            meta.set("savedAt", savedAt);
+            meta.set("note", note);
+            meta.set("nodes", (double)g.nodes.size());
+            meta.set("edges", (double)g.edges.size());
+            (void)ge::writeFileAtomic(
+                dir + "/versions/v" + std::to_string(version) + ".meta.json",
+                meta.dump());
+        }
+        // 新增结束
+
         // latest 只存版本指针，避免与 vN.json 重复落整图。
         Json latestPtr = Json::obj();
         latestPtr.set("version", version);

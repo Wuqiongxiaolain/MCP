@@ -1,6 +1,6 @@
 # graphmcp 开发过程
 
-> latest update: v0.2.6-beta, 2026-07-16
+> latest update: v0.2.9-beta, 2026-07-17
 
 > 本文档依据仓库提交记录事后整理，按日期还原实际演进，**不是**开发当日的实时日记。  
 > 已并入原 `WORKLOG.md` / `CHANGELOG.md` / `DEV_LOG.md`。  
@@ -415,18 +415,20 @@
 | 版本 | 简单 versions 快照 | Draft → Stage → Commit + HEAD 同步 |
 | macOS CD | — | **暂禁** |
 
-### 扩展期后（截至 2026-07-16，当前）
+### 扩展期后（截至 2026-07-17，当前）
 
 | 指标 | 当前值 |
 |------|--------|
-| MCP 工具 | **51**（图 + 表 + property；以 `toolList()`/OpenAPI 为准） |
+| MCP 工具 | **51**（图 + 表 + property + 几何编辑；以 `toolList()`/OpenAPI 为准） |
 | CLI 命令族 | **15**（含 `table` / `dump-tools` / `import`） |
 | Mermaid | 19 种深解析 + 颜色全链路（`classDef`/`linkStyle`/BOM）；坏样例硬/软失败语义明确 |
 | 通用表 | TableStore + CSV/表 XML + 图↔表协同增强（rules/check/fix/derive/transform/sample/propose） |
 | Drawio | 多图层/多页/形状扩展/边标签定位 |
 | 布局 | 分层增强（层平衡 / barycenter 减交叉 / waypoint 折线路由，v0.2.6，尚不完善） |
+| 几何编辑 | MCP 原子工具（`graph_set_edge_route` / `nudge_node` / `set_edge_heads` / `graph_apply`，v0.2.9） |
 | 性能 | 微基准套件（18 指标）+ MCP 热路径优化（写放大/存储一致性/超时语义）+ CI 性能回归检测 |
 | CI/CD | GitHub Actions（构建/单测/冒烟/bench/OpenAPI 校验）+ 本地 Jenkins DevOps + Ansible 发布到 nginx |
+| 版本 | **v0.2.9-beta** |
 | CD | **含 macOS** 构建矩阵（已恢复） |
 | 契约 | OpenAPI 自动生成 + CI 漂移校验；`workflow_dispatch` 按需写回 VERSION/基线 |
 

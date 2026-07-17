@@ -1,8 +1,8 @@
 # graphmcp 时间线与里程碑
 
-> latest update: v0.2.6-beta, 2026-07-16
+> latest update: v0.2.9-beta, 2026-07-17
 
-> 项目启动：2026-07-05 — 覆盖至：2026-07-16（版本以根目录 VERSION 为准）  
+> 项目启动：2026-07-05 — 覆盖至：2026-07-17（版本以根目录 VERSION 为准）  
 > 早期阶段（P1–P6）为 07-10 初步收尾；**P7 起为扩展期**，对应 `c6e8009`（macOS CD 恢复）以来及并行合入的表协作 / Mermaid / OpenAPI 等交付。  
 > **P11–P13** 为深度工程化阶段，覆盖 MCP 性能重构、drawio 深化、Jenkins DevOps、Ansible Runner 发布链与布局增强。  
 > 逐日详情见 [DEV_PROCESS.md](DEV_PROCESS.md)；需求与模块全景见 [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md)。
@@ -23,22 +23,24 @@
 | **P11** | **性能重构 + drawio + DevOps** | **07-14～15** | MCP 四维性能改造（存储一致性/写放大削减/超时语义/跨平台回归）；微基准 CI 套件与基线策略重构；drawio 多图层/多页/形状扩展/边标签定位（PR #80）；Jenkins 本地 DevOps 链（Docker/Ansible/nginx）（PR #84）；v0.2.2～v0.2.4-beta（PR #72/#76/#79） |
 | **P12** | **Ansible Runner 发布收口** | **07-16** | ansible-runner 容器替代 Semaphore（PR #85）；Jenkins → Ansible Runner → nginx 下载站全自动发布链；v0.2.5-beta |
 | **P13** | **分层布局增强** | **07-15～16** | 层平衡、barycenter 交叉最小化、waypoint 折线路由与边标签定位（PR #78）；v0.2.6-beta（尚不完善） |
+| **P14** | **MCP 几何原子编辑** | **07-17** | `graph_set_edge_route` / `nudge_node` / `set_edge_heads` 等；`graph_update` 支持 waypoints；优先原子改，整图 model 往返为下下策（v0.2.9-beta） |
 
-## 扩展期结果对照（截至 07-16）
+## 扩展期结果对照（截至 07-17）
 
 | 维度 | 07-10 收口（历史） | 当前（扩展期后） |
 |------|-------------------|------------------|
-| MCP 工具 | ~25 | **46**（`toolList()` / OpenAPI） |
+| MCP 工具 | ~25 | **51**（`toolList()` / OpenAPI） |
 | CLI | 多命令族（尚未含完整 table 族） | **15** 族（含 `table` / `dump-tools` / `import`） |
 | Mermaid | 以 flowchart/mindmap/er 为主 | **19 种子类型**深解析 + 颜色全链路 |
 | 通用表 | 无 | CSV / 表 XML + 图↔表协同增强（10 工具） |
 | Drawio | 基础 mxCell 往返 | 多图层/多页/形状扩展/边标签定位 |
 | 布局 | Kahn / 树 / 网格基础布局 | **分层增强**（层平衡 + barycenter 减交叉 + waypoint 路由，尚不完善） |
+| 几何编辑 | 依赖外部编辑器或整图 model | **MCP 原子工具**（折点/微移/箭头 + `graph_apply`） |
 | CD | macOS 暂禁 | **macOS Runner 已恢复**（三平台矩阵） |
 | 性能 | 无 | 微基准 18 指标 + CI 基线比对 + MCP 热路径优化 |
 | DevOps | GitHub Actions 为主 | 双轨并行：GitHub Actions + 本地 Jenkins（Docker/Ansible Runner/nginx） |
 | 契约 | 无 | OpenAPI 自动生成 + CI 漂移校验 |
-| 版本 | v0.1.0 | v0.2.6-beta（6 次版本迭代） |
+| 版本 | v0.1.0 | **v0.2.9-beta** |
 
 ## 版本演进
 
@@ -47,6 +49,11 @@ v0.1.0 ──▶ v0.2.0 ──▶ v0.2.2 ──▶ v0.2.3-beta ──▶ v0.2.4-
 (07-10)    (07-14)    (07-14)    (07-14)         (07-15)         (07-16)         (07-16)
  初版收尾   表+Mermaid  CI策略    颜色+drawio     MCP性能+DevOps  发布链收口     布局增强
             +OpenAPI   重构        深化            合入                           （尚不完善）
+                                                                    │
+                                                                    ▼
+                                                         v0.2.8-beta ──▶ v0.2.9-beta
+                                                         (中间发布)      (07-17)
+                                                                       几何 MCP 原子编辑
 ```
 
 | 版本 | 日期 | 关键交付 |
@@ -58,6 +65,8 @@ v0.1.0 ──▶ v0.2.0 ──▶ v0.2.2 ──▶ v0.2.3-beta ──▶ v0.2.4-
 | v0.2.4-beta | 07-15 | MCP 性能重构 + Jenkins DevOps 链 + drawio 审查修复 |
 | v0.2.5-beta | 07-16 | Ansible Runner 替代 Semaphore + 发布链收口 |
 | v0.2.6-beta | 07-16 | 分层布局增强：层平衡 / barycenter 减交叉 / waypoint 折线路由（尚不完善） |
+| v0.2.8-beta | — | 中间发布（以当时 VERSION / OpenAPI 为准） |
+| v0.2.9-beta | 07-17 | MCP 几何原子编辑（折点/微移/箭头）；引导优先原子改，整图 model 往返为下下策 |
 
 ## 尚未关闭（与进度相关）
 

@@ -1,18 +1,19 @@
 # graphmcp 项目全景总结
 
-> latest update: v0.2.6-beta, 2026-07-16
+> latest update: v0.2.9-beta, 2026-07-17
 
 > 说明：本文包含大量”立项/阶段过程”信息（历史视角）。涉及当前能力的口径，请以 `src/main.cpp`、`src/mcp.hpp::toolList()` 与 `docs/api_reference/openapi.yaml` 为准。
 
 ## 当前状态快照（截至本次更新）
 
 - CLI 命令族 **15** 个（含 `table`、`dump-tools`、`import`）。
-- MCP 工具总数 **46**（图 + 表协作 + 规则/修复/派生链路）。
+- MCP 工具总数 **51**（图 + 表协作 + 规则/修复/派生链路；以 `toolList()` / OpenAPI 为准）。
 - Mermaid 已支持 **19 种子类型**深解析（含 sankey/kanban/gitGraph/journey 等）。
 - 通用表（CSV / 表 XML）与图↔表协同链路（rules/check/fix/derive/transform/sample/propose）已落地。
 - 颜色全链路：`fillColor`/`strokeColor` 一等字段 + `classDef`/`linkStyle` + 多格式往返。
 - Drawio 多图层（layers）/ 多页（pages）/ 形状扩展 / 边标签定位已合入。
-- 布局（v0.2.6）：分层布局含层平衡、barycenter 减交叉、waypoint 折线路由（尚不完善，复杂图观感仍待打磨）。
+- 布局（v0.2.6+）：分层布局含层平衡、barycenter 减交叉、waypoint 折线路由（复杂图观感仍待打磨）。
+- **MCP 几何编辑（v0.2.9）**：`graph_set_edge_route` / `graph_nudge_node` / `graph_set_edge_heads` / `graph_apply` 等原子改图优先；整图 model 导出改写可行但是下下策。
 - 性能：微基准套件（18 指标）+ CI 性能回归检测 + MCP 热路径优化（写放大削减/存储一致性）。
 - CI/CD：GitHub Actions（构建/测试/冒烟/bench/OpenAPI 校验）+ 本地 Jenkins DevOps（Docker/Ansible Runner/nginx 发布）。
 - OpenAPI 由 `dump-tools` / `make docs-api` 从 `toolList()` 自动生成并由 CI 校验漂移。
@@ -59,6 +60,7 @@
 | **Jenkins DevOps + Ansible 发布**（v0.2.4/5） | ✅ | Docker 镜像/Jenkins Pipeline/Ansible Runner/nginx 下载站 |
 | **性能基准与回归检测**（v0.2.2+） | ✅ | 微基准套件 18 指标 + CI 仅比对（不自动写回）+ workflow_dispatch 按需刷新 |
 | **分层布局增强**（v0.2.6） | ✅（尚不完善） | 层平衡、barycenter 交叉最小化、waypoint 折线路由、边标签按最长段定位；与节点坐标归一化同步（PR #78） |
+| **MCP 几何原子编辑**（v0.2.9） | ✅ | `graph_set_edge_route` / `clear_edge_route` / `nudge_node` / `set_edge_heads`；`graph_update`/`graph_apply` 支持 waypoints；整图 model 往返可行但是下下策 |
 | 可选：实时画布预览 | ❎ | 列为后续目标 |
 
 能力与目标的思维导图总览见 [MINDMAP.md](MINDMAP.md)。
@@ -157,11 +159,11 @@
 | 指标 | 数值（约） |
 |------|------|
 | 总提交数 | 280+（含扩展期） |
-| 开发跨度 | 07-05 启动；07-10 初步收尾；07-16 扩展至 v0.2.6-beta（布局增强） |
+| 开发跨度 | 07-05 启动；07-10 初步收尾；07-16 布局增强（v0.2.6）；07-17 几何 MCP（v0.2.9） |
 | 核心模块 | 图核心 + 表协作模块（`table_*.hpp` / `mcp_table_tools.hpp` 等）+ 性能基准 + DevOps 工具链 |
-| MCP 工具 | 46（以 `toolList()` 为准） |
+| MCP 工具 | **51**（以 `toolList()` / OpenAPI 为准） |
 | CLI 命令族 | 15（含 `table` / `dump-tools` / `import`） |
-| 版本演进 | v0.1.0 → v0.2.0 → v0.2.2 → v0.2.3-beta → v0.2.4-beta → v0.2.5-beta → v0.2.6-beta |
+| 版本演进 | v0.1.0 → v0.2.0 → v0.2.2 → v0.2.3-beta → v0.2.4-beta → v0.2.5-beta → v0.2.6-beta → v0.2.8-beta → **v0.2.9-beta** |
 
 ### 4.3 07-10 以来的需求落地（已解决）
 
@@ -180,6 +182,7 @@
 | **Jenkins DevOps** | v0.2.4-beta | Docker 镜像（Jenkins/Ansible）+ Jenkins Pipeline + 本地 Bench |
 | **Ansible Runner 发布** | v0.2.5-beta | ansible-runner 容器替代 Semaphore；Jenkins → Ansible → nginx 下载站全自动 |
 | **分层布局增强** | v0.2.6-beta | 层平衡 + barycenter 减交叉 + waypoint 折线路由与边标签定位（尚不完善，复杂图仍待打磨） |
+| **MCP 几何原子编辑** | v0.2.9-beta | 折点/微移/箭头专用工具 + `graph_apply`；整图 model 覆盖可行但是下下策，优先原子改 |
 
 ---
 

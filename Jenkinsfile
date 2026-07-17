@@ -175,6 +175,9 @@ pipeline {
         stage('Bench') {
           environment {
             CI = 'true'
+            // Jenkins Docker 盘相对 GHA 基线常有稳定偏差：IO 敏感指标 FAIL 放到 +200%
+            GRAPHMCP_BENCH_RELAXED = '1'
+            GRAPHMCP_BENCH_IO_FAIL_RATIO = '3.0'
           }
           steps {
             // 失败告警并重试，最多 3 次；连续 3 次失败才阻断（scripts/bench_ci_retry.sh）

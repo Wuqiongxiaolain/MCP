@@ -382,7 +382,11 @@ if [ "$FAILED" -gt 0 ]; then printf "\033[31m%d failed\033[0m" "$FAILED"; else p
 echo ""
 echo "=========================================="
 
-# 简要 Markdown 报告（供 CI artifact / Plan 2 合并）
+# 简要 Markdown 报告（与 docs/TEST_REPORT.md 同目录，供 CI artifact）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPORT_DIR="$REPO_ROOT/docs"
+mkdir -p "$REPORT_DIR"
 {
     echo "# graphmcp CLI smoke report"
     echo ""
@@ -394,6 +398,6 @@ echo "=========================================="
     echo "- smoke_require_raster: ${SMOKE_REQUIRE_RASTER:-0}"
     echo ""
     if [ "$FAILED" -eq 0 ]; then echo "**ALL PASSED**"; else echo "**HAS FAILURES**"; fi
-} > SMOKE_REPORT.md
+} > "$REPORT_DIR/SMOKE_REPORT.md"
 
 exit $FAILED

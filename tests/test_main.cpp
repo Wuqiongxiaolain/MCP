@@ -3247,6 +3247,63 @@ static void testGeometryEditMcp()
         }
     }
 
+    // selector + 非法 waypoints 必须报错
+    Json badSel = Json::parse(
+        R"({"jsonrpc":"2.0","id":12,"method":"tools/call","params":{
+            "name":"graph_update","arguments":{"id":")" +
+            gid + R"(","selector":"id=)" + eid +
+            R"(","set":"waypoints=not-json"}}})",
+        &err);
+    CHECK(mcp::handleMessage(badSel, store, resp));
+    CHECK(isErr());
+
+    // graph_apply + waypoints
+    Json apply = Json::parse(
+        R"({"jsonrpc":"2.0","id":13,"method":"tools/call","params":{
+            "name":"graph_apply","arguments":{"id":")" +
+            gid +
+            R"(","message":"apply wp","ops":[{"op":"update","edge":")" + eid +
+            R"(","set":"waypoints=[{\"x\":9,\"y\":8}]"}]}}})",
+        &err);
+    CHECK(mcp::handleMessage(apply, store, resp));
+    CHECK(!isErr());
+    Graph g7;
+    CHECK(store.load(gid, g7));
+    for (auto& e : g7.edges) {
+        if (e.id == eid) {
+            CHECK(e.waypoints.size() == 1);
+            CHECK(e.waypoints[0].first == 9.0);
+            CHECK(e.waypoints[0].second == 8.0);
+            // 记下标签位置，清空折点后应重算
+            double lx = e.labelX, ly = e.labelY;
+            Json clear2 = Json::parse(
+                R"({"jsonrpc":"2.0","id":14,"method":"tools/call","params":{
+                    "name":"graph_clear_edge_route","arguments":{"id":")" +
+                    gid + R"(","edge":")" + eid +
+                    R"(","recompute_label":true}}})",
+                &err);
+            CHECK(mcp::handleMessage(clear2, store, resp));
+            CHECK(!isErr());
+            Json commit6 = Json::parse(
+                R"({"jsonrpc":"2.0","id":15,"method":"tools/call","params":{
+                    "name":"graph_commit","arguments":{"id":")" +
+                    gid + R"(","message":"clear2","all":true}}})",
+                &err);
+            CHECK(mcp::handleMessage(commit6, store, resp));
+            Graph g8;
+            CHECK(store.load(gid, g8));
+            for (auto& e2 : g8.edges) {
+                if (e2.id == eid) {
+                    CHECK(e2.waypoints.empty());
+                    CHECK(e2.labelX != lx || e2.labelY != ly ||
+                          (e2.labelX != 0.0 || e2.labelY != 0.0));
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
     ge::removeDirectory("test-geom-edit-tmp");
 }
 

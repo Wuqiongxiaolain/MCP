@@ -451,6 +451,7 @@ static void testFieldAccess()
 
     gv::setNodeField(n, "x", "99");
     CHECK(n.x == 99.0);
+    CHECK(!gv::setNodeField(n, "unknownField", "x"));
 }
 
 // ─── Test 9: Edge field access ───────────────────────────────
@@ -490,6 +491,21 @@ static void testEdgeFieldAccess()
     CHECK(e.arrow == "both");
     CHECK(gv::setEdgeField(e, "labelX", "12.5"));
     CHECK(e.labelX == 12.5);
+
+    // 未知字段失败；open/cross 经 arrow 往返保留
+    CHECK(!gv::setEdgeField(e, "waypoint", "[]"));
+    CHECK(gv::setEdgeField(e, "headStart", "none"));
+    CHECK(gv::setEdgeField(e, "headEnd", "open"));
+    CHECK(e.headEnd == "open");
+    CHECK(e.arrow == "arrow");
+    CHECK(gv::setEdgeField(e, "arrow", e.arrow));
+    CHECK(e.headEnd == "open");
+    CHECK(gv::setEdgeField(e, "headStart", "cross"));
+    CHECK(e.headStart == "cross");
+    CHECK(e.arrow == "both");
+    CHECK(gv::setEdgeField(e, "arrow", "both"));
+    CHECK(e.headStart == "cross");
+    CHECK(e.headEnd == "open");
 }
 
 int main()

@@ -37,6 +37,9 @@ paths:
                 no_layout:
                   type: boolean
                   description: skip automatic layout (default false)
+                id:
+                  type: string
+                  description: "optional graph id; when set, save upserts this id (default: auto-generate)"
                 note:
                   type: string
                   description: version note

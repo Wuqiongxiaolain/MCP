@@ -133,7 +133,7 @@
 |--------|------|----------|
 | `create` | 从 CSV / 表 XML / model 创建表 | `--file` / `--content`、`--format`（默认 csv）、`--name`、`--id`、`--force`、`--note` |
 | `import` | 导入（upsert） | 同上 |
-| `export` | 导出为 csv / xml / model | `--id`、`--to`（默认 csv）、`-o`、`--version` |
+| `export` | 导出为 csv / xml / model | `--id`、`--to`（默认 csv）、`-o`、`--version`；csv 另支持 `--no-bom` / `--lf` |
 | `list` | 列出所有表 | `--format json` |
 | `show` | 查看表元数据与行 | `--id`、`--limit`、`--version` |
 | `update` | 批量补丁或 CLI 便捷修改 | `--id`、见下方详细说明 |
@@ -304,7 +304,7 @@
 |--------|------|----------|-------------|
 | `table_create` | 从 CSV/表 XML/model 创建表 | `content` | `format`（默认 csv）、`name`、`id`、`force`（覆盖已存在 id）、`note` |
 | `table_import` | 导入（upsert） | `content` | `format`、`name`、`id`、`note` |
-| `table_export` | 导出 csv / model / xml | `id` | `to`（默认 csv）、`path`、`version` |
+| `table_export` | 导出 csv / model / xml | `id` | `to`（默认 csv=Excel 友好 BOM+CRLF）、`path`、`version`、`no_bom`（原始 LF） |
 | `table_list` | 列出所有表 | （无） | `format`（json\|table） |
 | `table_show` | 查看表 | `id` | `limit`（行数限制）、`version` |
 | `table_update` | 批量补丁 | `id` | 见下方详解 |
@@ -367,7 +367,8 @@
 - `table_sample_rows` 响应含 `placeholder=true`；枚举列取首个 allowed，动画列默认 `x`，其他列填 `TODO`。
 - `table_propose_rows` 可选 `rules_id` 枚举校验（非空单元格校验；非法整批拒绝）。
 - `table_check` 支持 `ignore_hint_row`；当 `table.hasHintRow=true` 时默认忽略首行说明。`GRAPHMCP_TABLE_CHECK_LEGACY_HINT=1`（或 `true`）可将缺省改为不跳过 hint 行。
-- **表 XML**：`format=xml` 导入根为 `<table>` 的模式 A 方言（命名字段行，见 USER_GUIDE）；`to=xml` 导出。与 `create from-xml`（图 `<graph>`）无关。
+- **表 CSV 导出**：默认 UTF-8 BOM + CRLF（Excel 友好）；CLI `--no-bom` / `--lf` 或 MCP `no_bom=true` 改为原始格式。MCP 内联 `csv_preview` 始终为无 BOM 的 Raw。
+- **表 XML**：`format=xml` 导入根为 `<table>` 的模式 A 方言（命名字段行，见 USER_GUIDE）；`to=xml` 导出。与 `create from-xml`（图 `<graph>`）无关。表 XML **不是** SpreadsheetML，勿用 Excel/浏览器打开。
 - **维护约定（抽离触发）**：当前表 XML 实现为多新增少修改（`table_xml.hpp`），与 `fromCsv` 装表样板可能少量重复且依赖 `gp::detail::parseXmlDoc`。出现以下**任一**情况时应单独开重构 PR（抽出 `xml_util` + `buildTable`），勿继续叠债：① CSV 与表 XML 在 normalize/缺列/meta 等行为漂移；② 再增加第三种表交换格式；③ 表侧需脱离 `parsers.hpp`。详见 `APPLICATION_LOGIC.md`。
 
 ---

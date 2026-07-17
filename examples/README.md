@@ -68,6 +68,8 @@ graphmcp convert to-model --file examples/example_input/flowchart_colors_bad.mmd
 
 表交换格式（与表 XML 互通）：`csv` / `model`（JSON）/ `xml`。宽表另可导出 `check_report.csv`。
 
+**格式用途**：`csv` 默认 UTF-8 BOM+CRLF（Excel 可双击）；`xml` 为 graphmcp 方言（勿用 Excel/浏览器打开）；`model` 为机器快照。人侧请用 csv。
+
 | 输入 | 输出目录 | 产物 |
 |------|----------|------|
 | `enemy_sample.csv` | `example_output/enemy_sample.csv_out/` | `*.csv`、`*.model.json`、`*.xml`、`*.check_report.csv`；协同增强另有 `*.anim_checklist.csv`、`*.with_slug.csv` |

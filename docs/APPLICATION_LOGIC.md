@@ -423,7 +423,7 @@ Draft 基于操作序列（非快照）：存储 `OpType` 11 种操作（含 `ME
 
 | 组件 | 文件 | 说明 |
 |------|------|------|
-| Jenkins Pipeline | `Jenkinsfile` | 本地 Jenkins 构建 + 测试 + Ansible 发布 |
+| Jenkins Pipeline | `Jenkinsfile` | 本地 Jenkins 构建 + 测试 + Ansible 发布。手动构建可填 `CI_REF` / `CD_REF` 指定分支（不必先合 main） |
 | Ansible | `ansible/` | `deploy_release.yml`（发布制品到 nginx 下载站）、`configure_jenkins_tools.yml` |
 | Docker | `docker/jenkins/`、`docker/ansible/` | Jenkins 镜像（固化 CI 运行时依赖）、Ansible Runner 镜像 |
 | GitHub Actions | `.github/workflows/bump-version.yml` | 手动触发写回 VERSION + OpenAPI（不自动打 tag） |

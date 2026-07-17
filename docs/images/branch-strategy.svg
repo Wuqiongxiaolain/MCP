@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1010" height="890" viewBox="0 0 1010 890">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <polyline fill="none" stroke="#b0714b" stroke-width="1.5" stroke-linejoin="round" points="545,460 480,460 480,100 610.75,100" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#b0714b" stroke-width="1.5" stroke-linejoin="round" points="545,460 558.099,460 558.099,135.651 758.448,135.651" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="480,482 620.73,343.772 761.459,205.544" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="480,482 655.487,415.946 830.974,349.892" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="480,482 655.487,496.054 830.974,510.108" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="480,482 620.73,568.228 761.459,654.456" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="480,482 558.099,618.174 636.198,754.349" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="480,482 480,636 480,790" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="480,482 401.901,618.174 323.802,754.349" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="480,482 339.27,568.228 198.541,654.456" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="480,482 304.513,496.054 129.026,510.108" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="480,482 304.513,415.946 129.026,349.892" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="480,482 339.27,343.772 198.541,205.544" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#b0714b" stroke-width="1.5" stroke-linejoin="round" points="545,460 401.901,460 401.901,135.651 437.552,135.651" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+  <rect x="415" y="438" width="130" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="480" y="465" text-anchor="middle">main 主线</text>
+  <rect x="349.25" y="70" width="261.5" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="480" y="97">feature/github-actions-cicd</tspan>
+    <tspan x="480" y="113">PR 10/11</tspan>
+  </text>
+  <rect x="513.948" y="105.651" width="244.5" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="636.198" y="132.651">feature/excalidraw-export</tspan>
+    <tspan x="636.198" y="148.651">PR 16</tspan>
+  </text>
+  <rect x="711.459" y="205.544" width="100" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="761.459" y="232.544">CLI</tspan>
+    <tspan x="761.459" y="248.544">PR 13</tspan>
+  </text>
+  <rect x="742.724" y="349.892" width="176.5" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="830.974" y="376.892">ah_feng-editor-v2</tspan>
+    <tspan x="830.974" y="392.892">PR 25</tspan>
+  </text>
+  <rect x="691.724" y="510.108" width="278.5" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="830.974" y="537.108">feature/mcp-three-layer-tests</tspan>
+    <tspan x="830.974" y="553.108">PR 26</tspan>
+  </text>
+  <rect x="698.709" y="654.456" width="125.5" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="761.459" y="681.456">docs/*</tspan>
+    <tspan x="761.459" y="697.456">PR 41/73-75</tspan>
+  </text>
+  <rect x="513.948" y="754.349" width="244.5" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="636.198" y="781.349">feature/ah-feng-log-local</tspan>
+    <tspan x="636.198" y="797.349">PR 71</tspan>
+  </text>
+  <rect x="391.75" y="790" width="176.5" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="480" y="817">feat/benchmark-ci</tspan>
+    <tspan x="480" y="833">PR 72</tspan>
+  </text>
+  <rect x="205.802" y="754.349" width="236" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="323.802" y="781.349">chore/ci-baseline-policy</tspan>
+    <tspan x="323.802" y="797.349">PR 76</tspan>
+  </text>
+  <rect x="80.5407" y="654.456" width="236" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="198.541" y="681.456">fix/drawio-compatibility</tspan>
+    <tspan x="198.541" y="697.456">PR 80</tspan>
+  </text>
+  <rect x="11.026" y="510.108" width="236" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="129.026" y="537.108">perf/improve-mcp-overall</tspan>
+    <tspan x="129.026" y="553.108">PR 79</tspan>
+  </text>
+  <rect x="6.77595" y="349.892" width="244.5" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="129.026" y="376.892">feat/local-jenkins-devops</tspan>
+    <tspan x="129.026" y="392.892">PR 84</tspan>
+  </text>
+  <rect x="89.0407" y="205.544" width="219" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="198.541" y="232.544">feat/replace-semaphore</tspan>
+    <tspan x="198.541" y="248.544">PR 85</tspan>
+  </text>
+  <rect x="210.052" y="105.651" width="227.5" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="323.802" y="132.651">feature/layout-crossing</tspan>
+    <tspan x="323.802" y="148.651">PR 78</tspan>
+  </text>
+</svg>

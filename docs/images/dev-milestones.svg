@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="414" height="760" viewBox="0 0 414 760">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="197,96 197,136 197,176" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="197,252 197,292 197,332" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="197,408 197,448 197,488" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="197,564 197,604 197,644" marker-end="url(#arrow)"/>
+  <rect x="147" y="20" width="100" height="76" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="197" y="47">Day1</tspan>
+    <tspan x="197" y="63">07-05</tspan>
+    <tspan x="197" y="79">核心引擎</tspan>
+  </text>
+  <rect x="134.25" y="176" width="125.5" height="76" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="197" y="203">Day2-4</tspan>
+    <tspan x="197" y="219">CI/CD + CLI</tspan>
+    <tspan x="197" y="235">版本与白板</tspan>
+  </text>
+  <rect x="125" y="332" width="144" height="76" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="197" y="359">Day5-6</tspan>
+    <tspan x="197" y="375">编辑器 + 文档</tspan>
+    <tspan x="197" y="391">初步收尾</tspan>
+  </text>
+  <rect x="20" y="488" width="354" height="76" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="197" y="515">扩展期 I</tspan>
+    <tspan x="197" y="531">07-11~14</tspan>
+    <tspan x="197" y="547">表/Mermaid/macOS/OpenAPI</tspan>
+  </text>
+  <rect x="97" y="644" width="200" height="76" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="197" y="671">扩展期 II</tspan>
+    <tspan x="197" y="687">07-15~16</tspan>
+    <tspan x="197" y="703">drawio/性能/发布</tspan>
+  </text>
+</svg>

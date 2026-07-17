@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="630" height="432" viewBox="0 0 630 432">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <polyline fill="none" stroke="#5a6a7a" stroke-width="1.5" stroke-linejoin="round" points="190,76 240,76" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#5a6a7a" stroke-width="1.5" stroke-linejoin="round" points="390,76 440,76" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#5a6a7a" stroke-width="1.5" stroke-linejoin="round" points="515,112 515,146 515,180" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#5a6a7a" stroke-width="1.5" stroke-linejoin="round" points="440,216 390,216" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#5a6a7a" stroke-width="1.5" stroke-linejoin="round" points="240,216 190,216" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#5a6a7a" stroke-width="1.5" stroke-linejoin="round" points="115,252 115,286 115,320" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#5a6a7a" stroke-width="1.5" stroke-linejoin="round" points="190,356 240,356" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#2d8a4e" stroke-width="1.5" stroke-linejoin="round" points="390,356 440,356" marker-end="url(#arrow)"/>
+  <rect x="40" y="40" width="150" height="72" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="115" y="65">v0.1.0</tspan>
+    <tspan x="115" y="81">07-10</tspan>
+    <tspan x="115" y="97">初版收尾</tspan>
+  </text>
+  <rect x="240" y="40" width="150" height="72" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="315" y="65">v0.2.0</tspan>
+    <tspan x="315" y="81">07-14</tspan>
+    <tspan x="315" y="97">表+Mermaid+OpenAPI</tspan>
+  </text>
+  <rect x="440" y="40" width="150" height="72" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="515" y="65">v0.2.2</tspan>
+    <tspan x="515" y="81">07-14</tspan>
+    <tspan x="515" y="97">CI 策略重构</tspan>
+  </text>
+  <rect x="440" y="180" width="150" height="72" rx="4" fill="#e8f4fc" stroke="#2f6f9f"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="515" y="205">v0.2.3-beta</tspan>
+    <tspan x="515" y="221">07-14</tspan>
+    <tspan x="515" y="237">颜色+drawio 深化</tspan>
+  </text>
+  <rect x="240" y="180" width="150" height="72" rx="4" fill="#e8f4fc" stroke="#2f6f9f"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="315" y="205">v0.2.4-beta</tspan>
+    <tspan x="315" y="221">07-15</tspan>
+    <tspan x="315" y="237">MCP性能+DevOps</tspan>
+  </text>
+  <rect x="40" y="180" width="150" height="72" rx="4" fill="#e8f4fc" stroke="#2f6f9f"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="115" y="205">v0.2.5-beta</tspan>
+    <tspan x="115" y="221">07-16</tspan>
+    <tspan x="115" y="237">发布链收口</tspan>
+  </text>
+  <rect x="40" y="320" width="150" height="72" rx="4" fill="#f0f7e8" stroke="#5a8f3a"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="115" y="345">v0.2.6-beta</tspan>
+    <tspan x="115" y="361">07-16</tspan>
+    <tspan x="115" y="377">分层布局增强</tspan>
+  </text>
+  <rect x="240" y="320" width="150" height="72" rx="4" fill="#f0f7e8" stroke="#5a8f3a"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="315" y="345">v0.2.8-beta</tspan>
+    <tspan x="315" y="361">—</tspan>
+    <tspan x="315" y="377">中间发布</tspan>
+  </text>
+  <rect x="440" y="320" width="150" height="72" rx="4" fill="#e8f7ec" stroke="#2d8a4e"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="515" y="345">v0.2.9-beta</tspan>
+    <tspan x="515" y="361">07-17</tspan>
+    <tspan x="515" y="377">几何 MCP 原子编辑</tspan>
+  </text>
+</svg>

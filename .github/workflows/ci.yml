@@ -68,7 +68,20 @@ jobs:
           bash scripts/ci_capture.sh bench make bench-ci CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
 
       - name: 样例全量导出回归
+        # bench 失败仍须跑导出，避免证据链被截断（cancelled 除外）
+        if: ${{ !cancelled() }}
         run: bash scripts/ci_capture.sh export-testout bash scripts/export-example-testout.sh bin/graphmcp
+
+      - name: 写入 CI 运行元数据（供 --from-ci 回填 branch/commit）
+        if: always()
+        run: |
+          mkdir -p docs/ci_results
+          {
+            echo "BRANCH=${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-unknown}}"
+            echo "COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+            echo "RUN_ID=${GITHUB_RUN_ID:-}"
+            echo "RUN_NUMBER=${GITHUB_RUN_NUMBER:-}"
+          } > docs/ci_results/run_meta.env
 
       - name: 汇总测试报告（不重跑）
         if: always()
@@ -128,6 +141,8 @@ jobs:
             bin/bench_result.json
             examples/example_testout/TEST_REPORT.md
             examples/example_testout/TEST_REPORT.json
+            docs/ci_results/mcp-protocol/TEST_REPORT.md
+            docs/ci_results/mcp-protocol/TEST_REPORT.json
             mcp-smoke.log
           retention-days: 30
           if-no-files-found: ignore

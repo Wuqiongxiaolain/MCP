@@ -133,7 +133,7 @@ pipeline {
               # 步骤：已有工具则跳过；否则用 root / sudo 装依赖（Jenkins 官方镜像默认无 sudo）
               # rsvg-convert：SMOKE_REQUIRE_RASTER=1 需要真实 PNG/PDF（ImageMagick 在 Debian 上常禁 SVG）
               missing=0
-              for c in g++ make python3 jq rsvg-convert; do
+              for c in g++ make python3 jq rsvg-convert cppcheck; do
                 command -v "$c" >/dev/null 2>&1 || missing=1
               done
               command -v convert >/dev/null 2>&1 || command -v magick >/dev/null 2>&1 || missing=1
@@ -142,15 +142,15 @@ pipeline {
                 exit 0
               fi
               if ! command -v apt-get >/dev/null 2>&1; then
-                echo "非 apt 环境：请预先安装 g++ make python3 imagemagick librsvg2-bin jq"
+                echo "非 apt 环境：请预先安装 g++ make python3 imagemagick librsvg2-bin jq cppcheck"
                 exit 1
               fi
               if [ "$(id -u)" -eq 0 ]; then
                 apt-get update
-                apt-get install -y g++ make python3 imagemagick librsvg2-bin jq
+                apt-get install -y g++ make python3 imagemagick librsvg2-bin jq cppcheck
               elif command -v sudo >/dev/null 2>&1; then
                 sudo apt-get update
-                sudo apt-get install -y g++ make python3 imagemagick librsvg2-bin jq
+                sudo apt-get install -y g++ make python3 imagemagick librsvg2-bin jq cppcheck
               else
                 echo "无 root/sudo：请在 Agent 预装依赖，或为 jenkins 配置免密 sudo"
                 exit 1
@@ -212,14 +212,35 @@ pipeline {
             GRAPHMCP_BENCH_IO_FAIL_RATIO = '3.0'
           }
           steps {
-            // 失败告警并重试，最多 3 次；连续 3 次失败才阻断（scripts/bench_ci_retry.sh）
-            sh 'bash scripts/ci_capture.sh bench make bench-ci CXXFLAGS="${CXXFLAGS}"'
+            // catchError：bench 失败仍继续 Export，与 GHA if: !cancelled() 对齐
+            catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+              sh 'bash scripts/ci_capture.sh bench make bench-ci CXXFLAGS="${CXXFLAGS}"'
+            }
           }
         }
 
         stage('Export regression') {
           steps {
-            sh 'bash scripts/ci_capture.sh export-testout bash scripts/export-example-testout.sh bin/graphmcp'
+            catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+              sh 'bash scripts/ci_capture.sh export-testout bash scripts/export-example-testout.sh bin/graphmcp'
+            }
+          }
+        }
+
+        stage('Write run meta') {
+          steps {
+            sh '''
+              set -euo pipefail
+              mkdir -p docs/ci_results
+              BR="${BRANCH_NAME:-${GIT_BRANCH:-}}"
+              BR="${BR#origin/}"
+              {
+                echo "BRANCH=${BR:-unknown}"
+                echo "COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+                echo "RUN_ID=${BUILD_NUMBER:-}"
+                echo "RUN_NUMBER=${BUILD_NUMBER:-}"
+              } > docs/ci_results/run_meta.env
+            '''
           }
         }
 
@@ -288,6 +309,7 @@ pipeline {
           archiveArtifacts artifacts: 'bin/bench_result.json', allowEmptyArchive: true, fingerprint: true
           archiveArtifacts artifacts: 'mcp-smoke.log', allowEmptyArchive: true
           archiveArtifacts artifacts: 'examples/example_testout/TEST_REPORT.md,examples/example_testout/TEST_REPORT.json', allowEmptyArchive: true
+          archiveArtifacts artifacts: 'docs/ci_results/mcp-protocol/TEST_REPORT.md,docs/ci_results/mcp-protocol/TEST_REPORT.json', allowEmptyArchive: true
           archiveArtifacts artifacts: "bin/graphmcp,graphmcp-${env.BUILD_NUMBER}.tar.gz", allowEmptyArchive: true, fingerprint: true
         }
       }

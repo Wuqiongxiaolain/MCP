@@ -23,6 +23,9 @@
 
 - 技术选型分析文首统一「决策摘要」框。
 - CLI/MCP 参考明确：契约真源为 `toolList()`，OpenAPI 为生成物。
+- 性能回归：IO 敏感 bench 指标改用 **p50** 比对；计时 value/p50/p95 统一量纲。
+- 测试报告 GO/NO-GO：**含**微基准比对；bench/compare 失败 → NO-GO（与 PERF_REPORT 对齐）。
+- MCP 协议冒烟报告改写至 `docs/ci_results/mcp-protocol/`，与样例导出 `example_testout` 分离。
 
 ### Breaking
 
@@ -30,7 +33,9 @@
 
 ### 修复
 
-- （发版时按需从 Release notes 回填）
+- bench 失败后 GHA/Jenkins 仍执行样例导出，避免导出证据被截断。
+- `exporters.hpp` 不同层边路由去掉不可达的同层分支（消除 cppcheck warning）。
+- CI 回填 `run_meta.env` 与各套件 `.duration`，减轻 Artifact 中 branch=unknown / 耗时 0.0s。
 
 ---
 

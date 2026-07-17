@@ -349,8 +349,8 @@ def run_bench(compare: bool = True) -> SuiteResult:
             warn = len(re.findall(r"WARN|warning|退化", cout, re.I))
             fail = len(re.findall(r"FAIL|::error|失败", cout, re.I))
             if ccode != 0:
-                # 本地/CI runner 差异常导致相对基线失败：报告记 WARN，不阻断「bench 已跑通」
-                status = "WARN"
+                # 与 PERF_REPORT / bench.exit 对齐：比对失败记 FAIL → 总评 NO-GO
+                status = "FAIL"
                 fail = max(fail, 1)
             elif warn > 0:
                 status = "WARN"
@@ -360,7 +360,7 @@ def run_bench(compare: bool = True) -> SuiteResult:
                     "excerpt": excerpt(cout, 50),
                 }
             )
-            note += f"; compare exit={ccode} (相对 CI 基线；本地波动记 WARN)"
+            note += f"; compare exit={ccode}（相对基线；失败则套件 FAIL）"
         else:
             note += "; baseline/compare skipped"
 
@@ -384,7 +384,7 @@ def run_bench(compare: bool = True) -> SuiteResult:
         status,
         passed=n if status != "FAIL" else max(0, n - fail),
         failed=0 if status != "FAIL" else max(1, fail),
-        skipped=warn + (fail if status == "WARN" else 0),
+        skipped=warn if status == "WARN" else 0,
         duration_s=dt,
         note=note,
         details=details,
@@ -440,7 +440,7 @@ def overall_status(suites: List[SuiteResult]) -> str:
 
 
 def go_nogo(overall: str) -> str:
-    """测试套件维度的签核结论；完整 DoD 见 docs/ACCEPTANCE_DOD.md。"""
+    """测试套件维度的签核结论（含微基准比对）；完整 DoD 见 docs/ACCEPTANCE_DOD.md。"""
     if overall == "FAIL":
         return "NO-GO"
     if overall == "WARN":
@@ -465,6 +465,58 @@ def read_exit_code(name: str) -> Optional[int]:
         return int(p.read_text(encoding="utf-8").strip().splitlines()[0])
     except Exception:
         return None
+
+
+def read_duration_s(name: str) -> float:
+    """读取 ci_capture 写出的墙钟耗时（秒）；缺失则为 0。"""
+    p = CI_RESULTS / f"{name}.duration"
+    if not p.is_file():
+        return 0.0
+    try:
+        return max(0.0, float(p.read_text(encoding="utf-8").strip().splitlines()[0]))
+    except Exception:
+        return 0.0
+
+
+def read_run_meta() -> Dict[str, str]:
+    """读取 CI 写入的 run_meta.env（BRANCH/COMMIT），避免 Artifact 无 .git 时全 unknown。"""
+    p = CI_RESULTS / "run_meta.env"
+    out: Dict[str, str] = {}
+    if not p.is_file():
+        return out
+    for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        out[k.strip()] = v.strip()
+    return out
+
+
+def resolve_git_meta() -> Tuple[str, str]:
+    """优先环境变量与 run_meta.env，其次本地 git。"""
+    meta_env = read_run_meta()
+    branch = (
+        os.environ.get("GITHUB_HEAD_REF")
+        or os.environ.get("GITHUB_REF_NAME")
+        or os.environ.get("BRANCH_NAME")
+        or os.environ.get("GIT_BRANCH")
+        or meta_env.get("BRANCH")
+        or ""
+    )
+    if branch.startswith("origin/"):
+        branch = branch[len("origin/") :]
+    if not branch or branch == "HEAD":
+        branch = subprocess.getoutput("git branch --show-current").strip() or "unknown"
+
+    commit = (
+        os.environ.get("GITHUB_SHA", "")[:7]
+        or os.environ.get("GIT_COMMIT", "")[:7]
+        or meta_env.get("COMMIT")
+        or subprocess.getoutput("git rev-parse --short HEAD").strip()
+        or "unknown"
+    )
+    return branch or "unknown", commit or "unknown"
 
 
 def read_ci_log(name: str) -> str:
@@ -496,6 +548,7 @@ def suite_from_unit_log(name: str, label: str) -> SuiteResult:
         status,
         passed=p,
         failed=f,
+        duration_s=read_duration_s(name),
         note=f"from-ci; exit={code}",
         log_excerpt=excerpt(out, 30),
     )
@@ -528,6 +581,7 @@ def suite_from_smoke_artifacts(label: str, log_name: str, report_fallback: Optio
         status,
         passed=p,
         failed=f,
+        duration_s=read_duration_s(log_name),
         note=f"from-ci; exit={code}",
         log_excerpt=excerpt(out, 40),
     )
@@ -548,6 +602,7 @@ def suite_from_perf_log() -> SuiteResult:
             "FAIL",
             passed=max(0, oks - fails),
             failed=max(1, fails),
+            duration_s=read_duration_s("perf-smoke"),
             note=f"from-ci; exit={code}",
             log_excerpt=excerpt(out, 40),
         )
@@ -556,6 +611,7 @@ def suite_from_perf_log() -> SuiteResult:
         "PASS",
         passed=max(1, oks),
         failed=0,
+        duration_s=read_duration_s("perf-smoke"),
         note=f"from-ci; exit={code}",
         log_excerpt=excerpt(out, 30),
     )
@@ -600,9 +656,11 @@ def suite_from_bench_artifacts() -> SuiteResult:
         )
 
     details: List[Dict[str, Any]] = []
+    # bench.exit≠0（含比对失败经 retry 后）→ FAIL，与 PERF_REPORT 对齐
     status = "PASS" if (code in (0, None)) else "FAIL"
     note = f"from-ci; metrics={n}; {out_json.relative_to(ROOT)}"
     warn = fail = 0
+    dur = read_duration_s("bench")
 
     cout = compare_log
     ccode: Optional[int] = read_exit_code("bench-compare")
@@ -618,12 +676,12 @@ def suite_from_bench_artifacts() -> SuiteResult:
         warn = len(re.findall(r"WARN|warning|退化", cout, re.I))
         fail = len(re.findall(r"FAIL|::error|失败", cout, re.I))
         if ccode is not None and ccode != 0:
-            status = "WARN"
+            status = "FAIL"
             fail = max(fail, 1)
-        elif warn > 0:
+        elif status == "PASS" and warn > 0:
             status = "WARN"
         details.append({"compare_exit": ccode, "excerpt": excerpt(cout, 50)})
-        note += f"; compare exit={ccode} (相对 CI 基线；本地波动记 WARN)"
+        note += f"; compare exit={ccode}（相对基线；失败则套件 FAIL）"
 
     try:
         for b in data.get("benchmarks", [])[:8]:
@@ -643,9 +701,11 @@ def suite_from_bench_artifacts() -> SuiteResult:
         status,
         passed=n if status != "FAIL" else max(0, n - fail),
         failed=0 if status != "FAIL" else max(1, fail),
-        skipped=warn + (fail if status == "WARN" else 0),
+        skipped=warn if status == "WARN" else 0,
+        duration_s=dur,
         note=note,
         details=details,
+        log_excerpt=excerpt(cout or read_ci_log("bench"), 30) if status == "FAIL" else "",
     )
 
 
@@ -663,6 +723,7 @@ def suite_from_export_artifacts() -> SuiteResult:
             status,
             passed=1 if status == "PASS" else 0,
             failed=1 if status == "FAIL" else 0,
+            duration_s=read_duration_s("export-testout"),
             note=f"from-ci; exit={code}; no TEST_REPORT.json",
             log_excerpt=excerpt(log, 30),
         )
@@ -685,6 +746,7 @@ def suite_from_export_artifacts() -> SuiteResult:
             passed=p,
             failed=f + smoke_fail,
             skipped=sk,
+            duration_s=read_duration_s("export-testout"),
             note=(
                 f"from-ci; exit={code}; convert PASS={p} FAIL={f} SKIP={sk}; "
                 "see examples/example_testout/TEST_REPORT.md"
@@ -914,11 +976,14 @@ def write_markdown(
         f"| 套件总体 | **{overall}** |",
         f"| **GO / NO-GO** | **{verdict}** |",
         "",
-        "> GO/NO-GO 仅覆盖本报告测试套件。质量门、OpenAPI、文档一致性见 "
+        "> **GO/NO-GO** 覆盖本报告全部测试套件（含微基准相对基线比对）。"
+        "bench/compare 失败 → 套件 FAIL → **NO-GO**。"
+        "质量门（cppcheck/Sonar）、OpenAPI、文档一致性见 "
         "[ACCEPTANCE_DOD.md](ACCEPTANCE_DOD.md)。",
         "",
         "> **职责**：本文件为 CI 验收汇总；样例逐格式明细见 "
-        "`examples/example_testout/TEST_REPORT.md`（导出回归子集）。",
+        "`examples/example_testout/TEST_REPORT.md`；"
+        "MCP 协议冒烟明细见 `docs/ci_results/mcp-protocol/TEST_REPORT.md`。",
         "",
     ]
     if failed:
@@ -1130,16 +1195,23 @@ def main() -> int:
     if vp.is_file():
         version = vp.read_text(encoding="utf-8").strip()
 
+    branch, commit = resolve_git_meta()
     meta = {
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "branch": subprocess.getoutput("git branch --show-current") or "unknown",
-        "commit": subprocess.getoutput("git rev-parse --short HEAD") or "unknown",
+        "branch": branch,
+        "commit": commit,
         "os": sys.platform,
         "python": sys.version.split()[0],
         "bin": str(gm) if gm else "missing",
         "version": version,
         "bash": which_bash() or "missing",
         "mode": "from-ci" if args.from_ci else "rerun",
+        "runner": (
+            os.environ.get("GITHUB_RUN_ID")
+            or os.environ.get("BUILD_NUMBER")
+            or read_run_meta().get("RUN_ID")
+            or ""
+        ),
     }
 
     if args.from_ci:

@@ -42,6 +42,43 @@ def git_cmd(*args: str) -> str:
         return "unknown"
 
 
+def read_run_meta() -> Dict[str, str]:
+    p = CI_RESULTS / "run_meta.env"
+    out: Dict[str, str] = {}
+    if not p.is_file():
+        return out
+    for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line or "=" not in line or line.startswith("#"):
+            continue
+        k, _, v = line.partition("=")
+        out[k.strip()] = v.strip()
+    return out
+
+
+def resolve_branch_commit() -> Tuple[str, str]:
+    meta = read_run_meta()
+    branch = (
+        os.environ.get("GITHUB_HEAD_REF")
+        or os.environ.get("GITHUB_REF_NAME")
+        or os.environ.get("BRANCH_NAME")
+        or os.environ.get("GIT_BRANCH")
+        or meta.get("BRANCH")
+        or git_cmd("branch", "--show-current")
+        or "unknown"
+    )
+    if branch.startswith("origin/"):
+        branch = branch[len("origin/") :]
+    commit = (
+        (os.environ.get("GITHUB_SHA") or "")[:7]
+        or (os.environ.get("GIT_COMMIT") or "")[:7]
+        or meta.get("COMMIT")
+        or git_cmd("rev-parse", "--short", "HEAD")
+        or "unknown"
+    )
+    return branch or "unknown", commit or "unknown"
+
+
 def read_version() -> str:
     p = ROOT / "VERSION"
     return p.read_text(encoding="utf-8").strip() if p.is_file() else ""
@@ -327,10 +364,11 @@ def write_report(
 
 
 def main() -> int:
+    branch, commit = resolve_branch_commit()
     meta = {
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "branch": git_cmd("branch", "--show-current") or "unknown",
-        "commit": git_cmd("rev-parse", "--short", "HEAD") or "unknown",
+        "branch": branch,
+        "commit": commit,
         "version": read_version(),
         "bench_exit": read_bench_exit(),
     }

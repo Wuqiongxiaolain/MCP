@@ -11,10 +11,13 @@ MKDIR = mkdir -p $(BIN)
 # MCP clients may spawn the server with a stripped PATH where those DLLs
 # (and the browser used for PNG/PDF) would otherwise be unreachable.
 STATIC := -static -static-libgcc -static-libstdc++
+# bench 内存采样依赖 GetProcessMemoryInfo（psapi）
+BENCH_LIBS := -lpsapi
 else
 EXE :=
 MKDIR = mkdir -p $(BIN)
 STATIC :=
+BENCH_LIBS :=
 endif
 
 HDRS := src/json.hpp src/model.hpp src/parsers.hpp src/layout.hpp \
@@ -60,7 +63,7 @@ test-all: test test-version test-cursor
 # ── 性能基准测试 ──
 $(BIN)/graphmcp_bench$(EXE): tests/bench_main.cpp $(HDRS)
 	-$(MKDIR)
-	$(CXX) $(CXXFLAGS) -o $@ tests/bench_main.cpp
+	$(CXX) $(CXXFLAGS) -o $@ tests/bench_main.cpp $(BENCH_LIBS)
 
 bench: $(BIN)/graphmcp_bench$(EXE)
 	$(BIN)/graphmcp_bench$(EXE)

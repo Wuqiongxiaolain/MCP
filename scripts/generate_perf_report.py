@@ -83,6 +83,16 @@ def compare_rows(
                 f"(2nd/1st>={bc.memory_half_ratio():.1f}x)"
             )
 
+    abs_before = current.get("memory_RSS_abs_before")
+    if abs_before is not None:
+        abs_val, abs_u = bc.to_canonical(
+            float(abs_before["value"]), abs_before.get("unit", "MB")
+        )
+        if abs_u == "MB" and abs_val <= 0:
+            warnings.append(
+                "memory_RSS_abs_before=0：RSS 采样可能失败（增量 0 不可信）"
+            )
+
     for name, cur in sorted(current.items()):
         if name in bc.RETIRED_BENCHMARKS:
             continue
@@ -92,7 +102,26 @@ def compare_rows(
         note = ""
         ratio: Optional[float] = None
 
-        if bc.is_memory_stability(name) and cur_u == "MB":
+        # 绝对 RSS：信息行，区分「增量 0」与「采样失败」
+        if bc.is_memory_abs_info(name) and cur_u == "MB":
+            vs = "绝对 RSS（信息项，不参与门禁）"
+            if cur_val <= 0 and name.endswith("_before"):
+                status = "WARN"
+            rows.append(
+                {
+                    "name": name,
+                    "value": cur.get("value"),
+                    "unit": cur.get("unit", ""),
+                    "p95": cur.get("p95"),
+                    "baseline": "—",
+                    "ratio": None,
+                    "status": status,
+                    "vs": vs,
+                }
+            )
+            continue
+
+        if bc.is_memory_delta(name) and cur_u == "MB":
             fail_mb = bc.memory_fail_mb()
             warn_mb = bc.memory_warn_mb()
             cur_show = f"{cur['value']:.2f}{cur.get('unit', 'MB')}"
@@ -137,7 +166,8 @@ def compare_rows(
             continue
 
         bl = baseline[name]
-        bl_val, bl_u = bc.to_canonical(float(bl["value"]), bl.get("unit", ""))
+        cur_val, cur_u, cur_raw, cur_tag = bc.pick_stat(cur, name)
+        bl_val, bl_u, bl_raw, bl_tag = bc.pick_stat(bl, name)
         if cur_u != bl_u:
             status = "WARN"
             note = f"单位不一致 {bl.get('unit')} vs {cur.get('unit')}"
@@ -149,8 +179,8 @@ def compare_rows(
         else:
             ratio = cur_val / bl_val
             warn_thr, fail_thr = bc.thresholds_for(name)
-            bl_show = f"{bl['value']:.2f}{bl.get('unit', '')}"
-            cur_show = f"{cur['value']:.2f}{cur.get('unit', '')}"
+            bl_show = bc.format_stat(bl, bl_raw, bl_tag)
+            cur_show = bc.format_stat(cur, cur_raw, cur_tag)
             vs = f"{bl_show} → {cur_show} ({ratio:.2f}x)"
             if ratio >= fail_thr:
                 status = "FAIL"
@@ -338,7 +368,7 @@ def main() -> int:
     baseline = bc.load_results(str(BASELINE_JSON))
     overall, failures, warnings, improvements, rows = compare_rows(baseline, current)
     note = (
-        f"相对基线比对完成；阈值见 bench_compare"
+        f"相对基线比对完成；IO 敏感项用 p50；阈值见 bench_compare"
         f"（relaxed={bc.bench_relaxed()}）"
     )
     write_report(overall, failures, warnings, improvements, rows, meta, note)

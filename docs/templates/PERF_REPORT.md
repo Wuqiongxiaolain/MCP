@@ -1,7 +1,8 @@
 # 性能报告模板
 
 > 数据源：`bin/bench_result.json`（相对 `tests/bench_baseline.json`）。  
-> CI 通过 `make bench-ci` 比对后，由 `scripts/generate_perf_report.py` **组装**为 Artifact 中的 `docs/PERF_REPORT.md`（不入库）。本地可 `make docs-perf-report`。
+> CI 通过 `make bench-ci` 比对后，由 `scripts/generate_perf_report.py` **组装**为 Artifact 中的 `docs/PERF_REPORT.md`（不入库）。本地可 `make docs-perf-report`。  
+> IO/写盘敏感项（`store_save` / `mcp_graph_create` 等）比对用 **p50**，抑制 mean 长尾假退化；`memory_RSS_abs_*` 为绝对 RSS 信息项。
 
 ## 元信息
 

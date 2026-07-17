@@ -231,6 +231,96 @@ def testBenchUnits(root: pathlib.Path):
         )
         assertTrue(regression_run.returncode == 2, "2x regression was not detected")
 
+        # IO 敏感：mean 严重退化但 p50 正常 → 应按 p50 判定为通过
+        io_bl = pathlib.Path(temp_dir) / "io_baseline.json"
+        io_cur = pathlib.Path(temp_dir) / "io_current.json"
+        io_bl.write_text(
+            json.dumps(
+                {
+                    "benchmarks": [
+                        {
+                            "name": "store_save",
+                            "value": 400.0,
+                            "p50": 390.0,
+                            "unit": "us",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        io_cur.write_text(
+            json.dumps(
+                {
+                    "benchmarks": [
+                        {
+                            "name": "store_save",
+                            "value": 18000.0,
+                            "p50": 250.0,
+                            "unit": "us",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        io_run = subprocess.run(
+            [sys.executable, str(script), str(io_bl), str(io_cur)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env={**os.environ, "PYTHONUTF8": "1"},
+        )
+        assertTrue(
+            io_run.returncode == 0,
+            "IO p50 compare should ignore mean spike: " + io_run.stdout + io_run.stderr,
+        )
+        assertTrue(
+            "p50" in (io_run.stdout + io_run.stderr),
+            "IO compare message should mention p50",
+        )
+
+        # 绝对 RSS=0 → 告警但不阻断；增量超帽仍 FAIL
+        abs_cur = pathlib.Path(temp_dir) / "abs_rss_current.json"
+        abs_cur.write_text(
+            json.dumps(
+                {
+                    "benchmarks": [
+                        {
+                            "name": "memory_RSS_abs_before",
+                            "value": 0.0,
+                            "unit": "MB",
+                        },
+                        {
+                            "name": "memory_RSS_abs_after",
+                            "value": 0.0,
+                            "unit": "MB",
+                        },
+                        {
+                            "name": "memory_RSS_repeat_save_same_id",
+                            "value": 0.0,
+                            "unit": "MB",
+                        },
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        abs_run = subprocess.run(
+            [sys.executable, str(script), str(io_bl), str(abs_cur)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env={**os.environ, "PYTHONUTF8": "1"},
+        )
+        assertTrue(abs_run.returncode == 0, abs_run.stdout + abs_run.stderr)
+        assertTrue(
+            "RSS 采样可能失败" in (abs_run.stdout + abs_run.stderr),
+            "abs_before=0 should warn about sampling",
+        )
+
         # 内存稳定性：绝对上限（不依赖相对基线百分比）
         mem_bl = pathlib.Path(temp_dir) / "mem_baseline.json"
         mem_cur = pathlib.Path(temp_dir) / "mem_current.json"

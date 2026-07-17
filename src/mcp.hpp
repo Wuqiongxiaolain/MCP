@@ -100,6 +100,11 @@ inline Json toolList()
               prop("boolean", "skip structural validation (default false)"));
         p.set("no_layout",
               prop("boolean", "skip automatic layout (default false)"));
+        // 新增开始：可选固定 id，便于 upsert / 基准防 index 膨胀
+        p.set("id", prop("string",
+                         "optional graph id; when set, save upserts this id "
+                         "(default: auto-generate)"));
+        // 新增结束
         p.set("note", prop("string", "version note"));
         Json req = Json::arr();
         req.push(Json("content"));
@@ -1610,13 +1615,20 @@ class ToolRunner {
     // 原有工具实现（部分增强）
     // ==========================================================
 
-    // create: 解析输入并保存图（增强：支持 no_validate / no_layout）
+    // create: 解析输入并保存图（增强：支持 no_validate / no_layout / 可选 id）
     Json create(const Json& a)
     {
         Graph g = gp::parseAny(a.str("content"), a.str("format", "auto"),
                                a.str("type"));
         if (!a.str("name").empty())
             g.name = a.str("name");
+        // 新增开始：允许固定 id（upsert），避免基准反复 genId 撑爆 index
+        if (!a.str("id").empty()) {
+            if (!gs::Store::isValidGraphId(a.str("id")))
+                return textContent("invalid graph id: " + a.str("id"), true);
+            g.id = a.str("id");
+        }
+        // 新增结束
 
         bool doValidate = !a.boolean("no_validate", false);
         bool doLayout   = !a.boolean("no_layout", false);

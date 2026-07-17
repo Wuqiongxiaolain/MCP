@@ -57,7 +57,8 @@ class TableStore {
     }
 
     bool saveIndex(const Json& idx) const
-    { return ge::writeFileAtomic(tablesRoot() + "/index.json", idx.dump(2)); }
+    // 紧凑序列化：热路径避免 dump(2) 美化空白带来的多余 I/O
+    { return ge::writeFileAtomic(tablesRoot() + "/index.json", idx.dump()); }
 
     bool exists(const std::string& id) const
     {
@@ -107,7 +108,9 @@ class TableStore {
             version = (int)(*tables)[entry_idx].num("versions") + 1;
 
         Json model = t.toJson();
-        if (!ge::writeFileAtomic(dir + "/latest.json", model.dump(2))) {
+        // 紧凑 JSON：200 行表 pretty-print 会显著放大磁盘写入
+        const std::string model_txt = model.dump();
+        if (!ge::writeFileAtomic(dir + "/latest.json", model_txt)) {
             if (err)
                 *err = "failed to write latest.json";
             return -1;
@@ -120,7 +123,7 @@ class TableStore {
         snap.set("model", model);
         if (!ge::writeFileAtomic(dir + "/versions/v" + std::to_string(version) +
                                      ".json",
-                                 snap.dump(2))) {
+                                 snap.dump())) {
             if (err)
                 *err = "failed to write version snapshot";
             return -1;

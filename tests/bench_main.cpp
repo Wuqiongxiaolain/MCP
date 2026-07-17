@@ -18,11 +18,57 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#ifdef _WIN32
+#    include <direct.h>
+#else
+#    include <sys/stat.h>
+#endif
 
 using gj::Json;
 using gm::Edge;
 using gm::Graph;
 using gm::Node;
+
+// ── 基准用临时存储根：优先 TMPDIR/TEMP，降低 Jenkins 工作区磁盘噪声 ──
+static std::string benchTempRoot(const std::string& name)
+{
+    const char* tmp = std::getenv("TMPDIR");
+    if (!tmp || !*tmp)
+        tmp = std::getenv("TEMP");
+    if (!tmp || !*tmp)
+        tmp = std::getenv("TMP");
+#ifdef _WIN32
+    if (!tmp || !*tmp)
+        tmp = ".";
+#else
+    if (!tmp || !*tmp)
+        tmp = "/tmp";
+#endif
+    std::string root = std::string(tmp) + "/graphmcp-" + name;
+    return root;
+}
+
+static void benchSetStoreEnv(const std::string& root)
+{
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_STORE", root.c_str());
+    _putenv_s("GRAPHMCP_NO_LAUNCH", "1");
+#else
+    setenv("GRAPHMCP_STORE", root.c_str(), 1);
+    setenv("GRAPHMCP_NO_LAUNCH", "1", 1);
+#endif
+}
+
+// 删除指定版本快照（及 meta），避免反复 save 时 versions 线性膨胀主导耗时
+static void benchUnlinkVersion(const std::string& dir, int version)
+{
+    if (version <= 0)
+        return;
+    std::string base =
+        dir + "/versions/v" + std::to_string(version);
+    std::remove((base + ".json").c_str());
+    std::remove((base + ".meta.json").c_str());
+}
 
 // ── 轻量 JSON 输出辅助（不依赖 json.hpp 避免干扰被测对象） ──
 static void jsonStr(FILE* f, const std::string& s)
@@ -281,24 +327,27 @@ static void benchStorage()
     std::string text = makeBigFlowchart(100);
     Graph       g    = gp::parseMermaid(text);
     g.name           = "bench-storage";
+    g.id             = "bench-store-fixed";
 
-#ifdef _WIN32
-    _putenv_s("GRAPHMCP_STORE", "bench-store-tmp");
-#else
-    setenv("GRAPHMCP_STORE", "bench-store-tmp", 1);
-#endif
-    ge::removeDirectory("bench-store-tmp");
-    gs::Store store("bench-store-tmp");
+    std::string root = benchTempRoot("bench-store-tmp");
+    benchSetStoreEnv(root);
+    ge::removeDirectory(root);
+    gs::Store store(root);
 
+    // 原理：固定 id 反复 save；teardown 丢掉上一版快照，测热路径而非历史堆积
+    int last_store_ver = 0;
     bench("store_save", 100, {},
-          [&store, &g]() {
-              int v = store.save(g, "bench save");
-              (void)v;
+          [&store, &g, &last_store_ver]() {
+              last_store_ver = store.save(g, "bench save");
+          },
+          [&g, &root, &last_store_ver]() {
+              if (last_store_ver > 1)
+                  benchUnlinkVersion(root + "/" + g.id, last_store_ver - 1);
           });
 
     // 先保存一次以测试 load
-    std::string savedId = g.id;
     store.save(g, "pre-save for load test");
+    std::string savedId = g.id;
 
     bench("store_load", 100, {},
           [&store, &savedId]() {
@@ -307,22 +356,17 @@ static void benchStorage()
               (void)ok;
           });
 
-    ge::removeDirectory("bench-store-tmp");
+    ge::removeDirectory(root);
 }
 
 // ── 6. MCP 工具调用模拟 (tools/list / graph_create) ──
 
 static void benchMcpTools()
 {
-#ifdef _WIN32
-    _putenv_s("GRAPHMCP_STORE", "bench-mcp-tmp");
-    _putenv_s("GRAPHMCP_NO_LAUNCH", "1");
-#else
-    setenv("GRAPHMCP_STORE", "bench-mcp-tmp", 1);
-    setenv("GRAPHMCP_NO_LAUNCH", "1", 1);
-#endif
-    ge::removeDirectory("bench-mcp-tmp");
-    gs::Store store("bench-mcp-tmp");
+    std::string root = benchTempRoot("bench-mcp-tmp");
+    benchSetStoreEnv(root);
+    ge::removeDirectory(root);
+    gs::Store store(root);
 
     // tools/list
     bench("mcp_tools_list", 200, {},
@@ -333,19 +377,34 @@ static void benchMcpTools()
               mcp::handleMessage(req, store, resp);
           });
 
-    // graph_create (flowchart, small)
-    bench("mcp_graph_create", 100, {},
-          [&store]() {
-              Json resp;
-              Json req = Json::parse(
-                  R"({"jsonrpc":"2.0","id":2,"method":"tools/call",
+    // graph_create：固定 id upsert，避免 100 次 genId 撑爆 index.json
+    const std::string gid = "bench-mcp-graph";
+    bench(
+        "mcp_graph_create", 100, {},
+        [&store]() {
+            Json resp;
+            Json req = Json::parse(
+                R"({"jsonrpc":"2.0","id":2,"method":"tools/call",
               "params":{"name":"graph_create","arguments":{
-              "content":"flowchart TD\nA-->B\nB-->C","name":"bench"}}})",
-                  nullptr);
-              mcp::handleMessage(req, store, resp);
-          });
+              "content":"flowchart TD\nA-->B\nB-->C","name":"bench",
+              "id":"bench-mcp-graph"}}})",
+                nullptr);
+            mcp::handleMessage(req, store, resp);
+        },
+        [&store, &root, &gid]() {
+            // teardown 不计时
+            Json idx = store.loadIndex();
+            for (auto& item : *idx["graphs"].a) {
+                if (item.str("id") == gid) {
+                    int head = (int)item.num("head", item.num("versions", 0));
+                    if (head > 1)
+                        benchUnlinkVersion(root + "/" + gid, head - 1);
+                    break;
+                }
+            }
+        });
 
-    ge::removeDirectory("bench-mcp-tmp");
+    ge::removeDirectory(root);
 }
 
 // ── 7. Table 模型专项 ──
@@ -511,22 +570,27 @@ static void benchTableBridge()
 
 static void benchTableStorage()
 {
-#ifdef _WIN32
-    _putenv_s("GRAPHMCP_STORE", "bench-table-tmp");
-#else
-    setenv("GRAPHMCP_STORE", "bench-table-tmp", 1);
-#endif
-    ge::removeDirectory("bench-table-tmp");
-    gts::TableStore ts("bench-table-tmp");
+    std::string root = benchTempRoot("bench-table-tmp");
+    benchSetStoreEnv(root);
+    ge::removeDirectory(root);
+    gts::TableStore ts(root);
 
     std::string csv = makeCsv(200, 6);
     gt::Table   t   = gt::Table::fromCsv(csv);
     t.name          = "bench-table";
+    t.id            = "bench-table-fixed";
 
+    int last_tbl_ver = 0;
     bench("tableStore_save_n200", 50, {},
-          [&ts, &t]() {
-              int v = ts.save(t, "bench");
-              (void)v;
+          [&ts, &t, &last_tbl_ver]() {
+              last_tbl_ver = ts.save(t, "bench");
+          },
+          [&t, &root, &last_tbl_ver]() {
+              if (last_tbl_ver > 1) {
+                  std::string base = root + "/tables/" + t.id + "/versions/v" +
+                                     std::to_string(last_tbl_ver - 1);
+                  std::remove((base + ".json").c_str());
+              }
           });
 
     // 先存一个用于 load 测试
@@ -546,34 +610,47 @@ static void benchTableStorage()
               (void)idx;
           });
 
-    ge::removeDirectory("bench-table-tmp");
+    ge::removeDirectory(root);
 }
 
 static void benchTableMcpTools()
 {
-#ifdef _WIN32
-    _putenv_s("GRAPHMCP_STORE", "bench-table-mcp-tmp");
-    _putenv_s("GRAPHMCP_NO_LAUNCH", "1");
-#else
-    setenv("GRAPHMCP_STORE", "bench-table-mcp-tmp", 1);
-    setenv("GRAPHMCP_NO_LAUNCH", "1", 1);
-#endif
-    ge::removeDirectory("bench-table-mcp-tmp");
-    gs::Store       store("bench-table-mcp-tmp");
+    std::string root = benchTempRoot("bench-table-mcp-tmp");
+    benchSetStoreEnv(root);
+    ge::removeDirectory(root);
+    gs::Store       store(root);
     mcp::ToolRunner runner(store);
 
-    // table_create
+    // table_create：固定 id + force upsert，避免 index 膨胀
     std::string csv200 = makeCsv(200, 5);
-    bench("mcp_table_create_n200", 20, {},
-          [&runner, &csv200]() {
-              Json args = Json::obj();
-              args.set("content", csv200);
-              args.set("name", "bench-tbl");
-              Json res = runner.call("table_create", args);
-              (void)res;
-          });
+    const std::string tid = "bench-mcp-table";
+    bench(
+        "mcp_table_create_n200", 20, {},
+        [&runner, &csv200, &tid]() {
+            Json args = Json::obj();
+            args.set("content", csv200);
+            args.set("name", "bench-tbl");
+            args.set("id", tid);
+            args.set("force", true);
+            (void)runner.call("table_create", args);
+        },
+        [&root, &tid]() {
+            Json idx = gts::TableStore(root).loadIndex();
+            for (auto& item : *idx["tables"].a) {
+                if (item.str("id") == tid) {
+                    int ver = (int)item.num("versions", 0);
+                    if (ver > 1) {
+                        std::string base = root + "/tables/" + tid +
+                                           "/versions/v" +
+                                           std::to_string(ver - 1);
+                        std::remove((base + ".json").c_str());
+                    }
+                    break;
+                }
+            }
+        });
 
-    ge::removeDirectory("bench-table-mcp-tmp");
+    ge::removeDirectory(root);
 }
 
 // ── 8. 内存稳定性：固定 graphId 重复 save，检测泄漏而非 index 膨胀 ──

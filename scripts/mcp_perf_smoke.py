@@ -7,7 +7,7 @@
 验证:
   1) 双进程并发写时 index/目录一致，且读者看不到截断 JSON
   2) 并发 delete/create 后 index/目录集合一致
-  3) graph_update + commit(all)、history meta 与旧数据回退
+  3) graph_update + commit(all)、history meta（save 急写 + 缺失时惰性重建）与旧数据回退
   4) 外部导出硬超时后服务可恢复
   5) 内联导出护栏、紧凑响应与大载荷延迟/RSS
   6) bench_compare 的 ms/us 单位归一化
@@ -582,17 +582,27 @@ def main() -> int:
             "preserved draft/stage could not be retried",
         )
 
-        # --- history meta 与旧数据回退 ---
+        # --- history meta：save 热路径已写 meta；删掉后仍应回退整图并惰性重建 ---
         meta_path = pathlib.Path(store) / gid / "versions" / "v1.meta.json"
-        assertTrue(not meta_path.exists(), "history meta should be generated lazily")
+        assertTrue(
+            meta_path.exists(),
+            "save should write history meta eagerly (vN.meta.json)",
+        )
         history = c3.tool("graph_history", {"id": gid})
         history_data = json.loads(toolText(history))
         assertTrue(len(history_data) == 3, "history meta path returned wrong count")
-        assertTrue(meta_path.exists(), "history query did not generate meta cache")
-        meta_path.unlink()
+        # 删除全部 meta，验证旧快照回退 + history 惰性重建缓存
+        versions_dir = pathlib.Path(store) / gid / "versions"
+        for p in versions_dir.glob("v*.meta.json"):
+            p.unlink()
+        assertTrue(not meta_path.exists(), "meta should be gone before legacy test")
         legacy_history = c3.tool("graph_history", {"id": gid})
         legacy_data = json.loads(toolText(legacy_history))
         assertTrue(len(legacy_data) == 3, "legacy snapshot fallback failed")
+        assertTrue(
+            meta_path.exists(),
+            "history query should rebuild missing meta cache",
+        )
 
         # --- 大载荷与内联护栏 ---
         before_rss = getRssBytes(c3.p.pid)

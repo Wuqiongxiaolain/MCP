@@ -33,6 +33,18 @@ docker exec -u jenkins jenkins git config --show-origin --get-all safe.directory
 
 应能看到 `file:/etc/gitconfig` 与 `*` / `/workspace/MCP-/.git`。然后重跑 Pipeline。
 
+## 在非 main 分支跑 CI
+
+若 Job 挂在 `main`（或 Multibranch 只索引了部分分支），可用 **Build with Parameters**：
+
+| 参数 | 作用 |
+|------|------|
+| `PIPELINE_MODE=ci` | 强制走 CI 主链 |
+| `CI_REF` | 要测的分支/tag/commit，例如 `fix/bench-jenkins-io`、`origin/dev`；**留空**则用 Job 当前已检出的代码 |
+| `CD_REF` | 仅 CD 使用（对称参数） |
+
+首次加参数后若 UI 未出现 `CI_REF`，先跑一次默认构建让 Jenkins 加载新 `Jenkinsfile`，再点「Build with Parameters」。
+
 ## 预装内容
 
 `sudo`、`g++`、`make`、`python3`、`imagemagick`、`librsvg2-bin`（`rsvg-convert`，供 smoke PNG/PDF）、`jq`、`git`、`docker.io` + `docker-cli`

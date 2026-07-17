@@ -194,6 +194,19 @@ class Store {
         if (!ge::writeFileAtomic(verPath, snap.dump()))
             return -1;
 
+        // 新增开始：同步写轻量 meta，避免 history 回退解析整图快照
+        {
+            Json meta = Json::obj();
+            meta.set("savedAt", savedAt);
+            meta.set("note", note);
+            meta.set("nodes", (double)g.nodes.size());
+            meta.set("edges", (double)g.edges.size());
+            (void)ge::writeFileAtomic(
+                dir + "/versions/v" + std::to_string(version) + ".meta.json",
+                meta.dump());
+        }
+        // 新增结束
+
         // latest 只存版本指针，避免与 vN.json 重复落整图。
         Json latestPtr = Json::obj();
         latestPtr.set("version", version);
@@ -333,8 +346,8 @@ class Store {
                     "edges",
                     (double)(m->find("edges") ? m->find("edges")->size() : 0));
             }
-            // meta 是可重建缓存：首次 history 查询时惰性生成，
-            // 避免每次 save 在热路径额外创建一个文件。
+            // meta 是可重建缓存：save 时已尽量写好；此处缺失则惰性补写，
+            // 兼容旧数据与手工删除 meta 的情形。
             ge::writeFile(metaPath, e.dump());
             list.push(e);
         }

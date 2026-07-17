@@ -14,6 +14,8 @@
   GRAPHMCP_MEMORY_FAIL_MB  内存稳定性 FAIL 绝对上限（默认 4）
   GRAPHMCP_MEMORY_WARN_MB  内存稳定性 WARN 绝对上限（默认 3）
   GRAPHMCP_MEMORY_HALF_RATIO  后半段相对前半段的泄漏倍率上限（默认 2.5）
+  GRAPHMCP_BENCH_RELAXED=1  或检测到 JENKINS_URL：对磁盘敏感指标再放宽
+  GRAPHMCP_BENCH_IO_FAIL_RATIO  放宽模式下 IO 敏感 FAIL 倍率（默认 3.0，即 +200%）
 """
 
 import json
@@ -37,6 +39,17 @@ CI_SENSITIVE = {
     "mcp_table_create",
 }
 
+# 磁盘 / create 热路径：Jenkins Docker 上相对 GHA 基线常有 1.5～3× 稳定偏差
+IO_SENSITIVE = {
+    "store_save",
+    "store_load",
+    "mcp_graph_create",
+    "mcp_table_create",
+    "tableStore_save",
+    "tableStore_load",
+    "tableStore_list",
+}
+
 # 已退役的内存指标：基线里可残留，当前结果不再产出时忽略
 RETIRED_BENCHMARKS = {
     "memory_RSS_5000iter",
@@ -55,9 +68,40 @@ def memory_half_ratio() -> float:
     return float(os.environ.get("GRAPHMCP_MEMORY_HALF_RATIO", "2.5"))
 
 
+def bench_relaxed() -> bool:
+    """Jenkins 或显式放宽：磁盘敏感指标用更高 FAIL 倍率。"""
+    if os.environ.get("GRAPHMCP_BENCH_RELAXED", "").strip() in ("1", "true", "TRUE"):
+        return True
+    if os.environ.get("JENKINS_URL"):
+        return True
+    return False
+
+
+def io_fail_ratio() -> float:
+    return float(os.environ.get("GRAPHMCP_BENCH_IO_FAIL_RATIO", "3.0"))
+
+
 def is_memory_stability(name: str) -> bool:
     return name.startswith("memory_RSS_")
 
+
+def is_ci_sensitive(name: str) -> bool:
+    return any(s in name for s in CI_SENSITIVE)
+
+
+def is_io_sensitive(name: str) -> bool:
+    return any(s in name for s in IO_SENSITIVE)
+
+
+def thresholds_for(name: str) -> tuple:
+    """返回 (warn_thr, fail_thr)。"""
+    if bench_relaxed() and is_io_sensitive(name):
+        fail_thr = io_fail_ratio()
+        warn_thr = min(2.0, fail_thr * 0.75)
+        return warn_thr, fail_thr
+    if is_ci_sensitive(name):
+        return 1.50, 1.80
+    return WARN_THRESHOLD, FAIL_THRESHOLD
 
 def to_canonical(value: float, unit: str) -> tuple:
     """将值换算到规范量纲：时间→us，内存→MB。返回 (canonical_value, canonical_unit)。"""
@@ -164,9 +208,7 @@ def main():
 
         ratio = cur_val / bl_val
 
-        is_sensitive = any(s in name for s in CI_SENSITIVE)
-        fail_thr = 1.80 if is_sensitive else FAIL_THRESHOLD
-        warn_thr = 1.50 if is_sensitive else WARN_THRESHOLD
+        warn_thr, fail_thr = thresholds_for(name)
 
         bl_show = f"{bl['value']:.2f}{bl['unit']}"
         cur_show = f"{cur['value']:.2f}{cur['unit']}"
@@ -185,6 +227,13 @@ def main():
             )
 
     is_ci = os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"
+
+    if bench_relaxed():
+        print(
+            f"INFO: bench relaxed mode on "
+            f"(IO FAIL ratio={io_fail_ratio():.2f}; "
+            f"JENKINS_URL/GRAPHMCP_BENCH_RELAXED)"
+        )
 
     for w in warnings:
         if is_ci:

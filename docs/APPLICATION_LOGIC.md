@@ -403,7 +403,7 @@ Draft 基于操作序列（非快照）：存储 `OpType` 11 种操作（含 `ME
 | `make test-cursor` | `tests/test_cursor.cpp`（游标单测） |
 | `make test-all` | 上述三者 |
 | `make bench` | `tests/bench_main.cpp`（性能基准测试，输出结果） |
-| `make bench-ci` | 运行 bench 并比对基线；失败告警并重试，默认最多 3 次（`BENCH_RETRIES`），连续失败才阻断 |
+| `make bench-ci` | 运行 bench 并比对基线；失败告警并重试，默认最多 3 次（`BENCH_RETRIES`），连续失败才阻断。Jenkins 默认 `GRAPHMCP_BENCH_RELAXED=1`（IO 敏感指标 FAIL 放到约 +200%） |
 | `make bench-baseline` | 更新性能基线文件（仅 main 分支使用） |
 | `make smoke` | `tests/smoke_test.sh`（含 `[fixture-regression]`），写 `docs/SMOKE_REPORT.md` |
 | `make mcp-smoke` | `tests/mcp_smoke.sh` |
@@ -423,7 +423,7 @@ Draft 基于操作序列（非快照）：存储 `OpType` 11 种操作（含 `ME
 
 | 组件 | 文件 | 说明 |
 |------|------|------|
-| Jenkins Pipeline | `Jenkinsfile` | 本地 Jenkins 构建 + 测试 + Ansible 发布 |
+| Jenkins Pipeline | `Jenkinsfile` | 本地 Jenkins 构建 + 测试 + Ansible 发布。手动构建可填 `CI_REF` / `CD_REF` 指定分支（不必先合 main） |
 | Ansible | `ansible/` | `deploy_release.yml`（发布制品到 nginx 下载站）、`configure_jenkins_tools.yml` |
 | Docker | `docker/jenkins/`、`docker/ansible/` | Jenkins 镜像（固化 CI 运行时依赖）、Ansible Runner 镜像 |
 | GitHub Actions | `.github/workflows/bump-version.yml` | 手动触发写回 VERSION + OpenAPI（不自动打 tag） |

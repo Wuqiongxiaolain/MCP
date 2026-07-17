@@ -5,7 +5,9 @@
 
 比较当前基准测试结果与基线：
 - 延迟类：超出基线 30% → 警告；50% → 失败（敏感指标更宽松）
-- 内存稳定性（memory_RSS_*）：用绝对 MB 上限，不用古董相对基线百分比
+- 磁盘/IO 敏感指标：优先用 p50 比对（抑制共享 runner 写盘长尾对 mean 的污染）
+- 内存增量（memory_RSS_repeat_save_*）：用绝对 MB 上限，不用古董相对基线百分比
+- 绝对 RSS（memory_RSS_abs_*）：仅做采样健康检查，不参与相对基线门禁
 - 在 GitHub Actions 中输出 workflow 命令以生成注解和摘要
 
 比较前将 ms/us/s/MB 统一换算，避免单位混用导致假退化。
@@ -40,6 +42,7 @@ CI_SENSITIVE = {
 }
 
 # 磁盘 / create 热路径：Jenkins Docker 上相对 GHA 基线常有 1.5～3× 稳定偏差
+# 比对优先用 p50，避免偶发长尾抬高 mean 导致假 FAIL
 IO_SENSITIVE = {
     "store_save",
     "store_load",
@@ -81,8 +84,19 @@ def io_fail_ratio() -> float:
     return float(os.environ.get("GRAPHMCP_BENCH_IO_FAIL_RATIO", "3.0"))
 
 
+def is_memory_delta(name: str) -> bool:
+    """重复 save 的 RSS 增量门禁（MB）。"""
+    return name.startswith("memory_RSS_repeat_save_")
+
+
+def is_memory_abs_info(name: str) -> bool:
+    """绝对 RSS 信息项：只做采样健康检查。"""
+    return name.startswith("memory_RSS_abs_")
+
+
 def is_memory_stability(name: str) -> bool:
-    return name.startswith("memory_RSS_")
+    """兼容旧调用名：增量类内存稳定性指标。"""
+    return is_memory_delta(name)
 
 
 def is_ci_sensitive(name: str) -> bool:
@@ -102,6 +116,7 @@ def thresholds_for(name: str) -> tuple:
     if is_ci_sensitive(name):
         return 1.50, 1.80
     return WARN_THRESHOLD, FAIL_THRESHOLD
+
 
 def to_canonical(value: float, unit: str) -> tuple:
     """将值换算到规范量纲：时间→us，内存→MB。返回 (canonical_value, canonical_unit)。"""
@@ -125,6 +140,28 @@ def load_results(path: str) -> dict:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     return {b["name"]: b for b in data.get("benchmarks", [])}
+
+
+def pick_stat(entry: dict, name: str) -> tuple:
+    """选取比对统计量。
+
+    IO 敏感项优先 p50（与 unit 同一量纲），否则回退 mean(value)。
+    返回 (canonical_value, canonical_unit, raw_value, stat_tag)。
+    """
+    unit = entry.get("unit", "")
+    if is_io_sensitive(name) and entry.get("p50") is not None:
+        raw = float(entry["p50"])
+        canon, cu = to_canonical(raw, unit)
+        return canon, cu, raw, "p50"
+    raw = float(entry["value"])
+    canon, cu = to_canonical(raw, unit)
+    return canon, cu, raw, "mean"
+
+
+def format_stat(entry: dict, raw: float, tag: str) -> str:
+    unit = entry.get("unit", "")
+    suffix = f" ({tag})" if tag != "mean" else ""
+    return f"{raw:.2f}{unit}{suffix}"
 
 
 def main():
@@ -168,14 +205,29 @@ def main():
                 f"(2nd/1st>={memory_half_ratio():.1f}x suggests sustained growth)"
             )
 
+    # 绝对 RSS=0：采样失败或平台未实现；增量=0 仍可能合法
+    abs_before = current.get("memory_RSS_abs_before")
+    if abs_before is not None:
+        abs_val, abs_u = to_canonical(
+            float(abs_before["value"]), abs_before.get("unit", "MB")
+        )
+        if abs_u == "MB" and abs_val <= 0:
+            warnings.append(
+                "memory_RSS_abs_before=0：RSS 采样可能失败（增量 0 不可信）"
+            )
+
     for name, cur in sorted(current.items()):
         if name in RETIRED_BENCHMARKS:
             continue
 
+        # 绝对 RSS：信息项，不参与相对基线 / 增量帽
+        if is_memory_abs_info(name):
+            continue
+
         cur_val, cur_u = to_canonical(float(cur["value"]), cur.get("unit", ""))
 
-        # 内存稳定性：绝对上限，对齐「重复同一工作负载是否泄漏」
-        if is_memory_stability(name) and cur_u == "MB":
+        # 内存增量稳定性：绝对上限
+        if is_memory_delta(name) and cur_u == "MB":
             cur_show = f"{cur['value']:.2f}{cur.get('unit', 'MB')}"
             fail_mb = memory_fail_mb()
             warn_mb = memory_warn_mb()
@@ -187,7 +239,6 @@ def main():
                 warnings.append(
                     f"{name}: {cur_show} exceeds absolute WARN cap {warn_mb:.1f}MB"
                 )
-            # 不再用 memory_RSS_5000iter 一类旧基线做相对百分比
             continue
 
         if name not in baseline:
@@ -195,7 +246,8 @@ def main():
             continue
 
         bl = baseline[name]
-        bl_val, bl_u = to_canonical(float(bl["value"]), bl.get("unit", ""))
+        cur_val, cur_u, cur_raw, cur_tag = pick_stat(cur, name)
+        bl_val, bl_u, bl_raw, bl_tag = pick_stat(bl, name)
 
         if cur_u != bl_u:
             warnings.append(
@@ -210,8 +262,8 @@ def main():
 
         warn_thr, fail_thr = thresholds_for(name)
 
-        bl_show = f"{bl['value']:.2f}{bl['unit']}"
-        cur_show = f"{cur['value']:.2f}{cur['unit']}"
+        bl_show = format_stat(bl, bl_raw, bl_tag)
+        cur_show = format_stat(cur, cur_raw, cur_tag)
 
         if ratio >= fail_thr:
             failures.append(
@@ -259,7 +311,13 @@ def main():
             f.write("| 测试 | 基线 | 当前 | 变化 |\n")
             f.write("|------|------|------|------|\n")
             for name, cur in sorted(current.items()):
-                if is_memory_stability(name):
+                if is_memory_abs_info(name):
+                    f.write(
+                        f"| {name} | info | {cur['value']:.2f}{cur.get('unit', '')} | "
+                        f"abs RSS |\n"
+                    )
+                    continue
+                if is_memory_delta(name):
                     f.write(
                         f"| {name} | abs-cap | {cur['value']:.2f}{cur.get('unit', '')} | "
                         f"FAIL>{memory_fail_mb():.0f}MB |\n"
@@ -271,18 +329,18 @@ def main():
                         f"| {name} | — | {cur['value']:.2f}{cur['unit']} | new |\n"
                     )
                     continue
-                cur_val, cur_u = to_canonical(float(cur["value"]), cur.get("unit", ""))
-                bl_val, bl_u = to_canonical(float(bl["value"]), bl.get("unit", ""))
+                cur_val, cur_u, cur_raw, cur_tag = pick_stat(cur, name)
+                bl_val, bl_u, bl_raw, bl_tag = pick_stat(bl, name)
                 if bl_val <= 0 or cur_u != bl_u:
                     f.write(
-                        f"| {name} | {bl['value']:.2f}{bl['unit']} | "
-                        f"{cur['value']:.2f}{cur['unit']} | n/a |\n"
+                        f"| {name} | {format_stat(bl, bl_raw, bl_tag)} | "
+                        f"{format_stat(cur, cur_raw, cur_tag)} | n/a |\n"
                     )
                     continue
                 ratio = (cur_val - bl_val) / bl_val * 100
                 f.write(
-                    f"| {name} | {bl['value']:.2f}{bl['unit']} | "
-                    f"{cur['value']:.2f}{cur['unit']} | {ratio:+.0f}% |\n"
+                    f"| {name} | {format_stat(bl, bl_raw, bl_tag)} | "
+                    f"{format_stat(cur, cur_raw, cur_tag)} | {ratio:+.0f}% |\n"
                 )
             if missing:
                 f.write(f"\n新增 {len(missing)} 个指标，无基线数据\n")

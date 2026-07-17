@@ -24,13 +24,17 @@ if ! command -v jq >/dev/null 2>&1; then
     exit 2
 fi
 
-OUT_DIR="examples/example_testout"
+OUT_DIR="docs/ci_results/mcp-protocol"
 LOG_FILE="mcp-smoke.log"
 STORE="mcp-smoke-store-$$"
 TMP_REQ=".mcp-smoke.req.json"
 TMP_RESP=".mcp-smoke.resp.json"
 SERVER_PID=""
 export GRAPHMCP_STORE="$STORE"
+
+# 原理：与 export-example-testout 的 examples/example_testout 分离，
+# 避免 bench 失败截断导出后，汇总误把 MCP 冒烟 JSON 当成样例导出结果。
+mkdir -p "$OUT_DIR"
 
 PASSED=0
 FAILED=0

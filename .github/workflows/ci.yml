@@ -68,7 +68,20 @@ jobs:
           bash scripts/ci_capture.sh bench make bench-ci CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
 
       - name: 样例全量导出回归
+        # bench 失败仍须跑导出，避免证据链被截断（cancelled 除外）
+        if: ${{ !cancelled() }}
         run: bash scripts/ci_capture.sh export-testout bash scripts/export-example-testout.sh bin/graphmcp
+
+      - name: 写入 CI 运行元数据（供 --from-ci 回填 branch/commit）
+        if: always()
+        run: |
+          mkdir -p docs/ci_results
+          {
+            echo "BRANCH=${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-unknown}}"
+            echo "COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+            echo "RUN_ID=${GITHUB_RUN_ID:-}"
+            echo "RUN_NUMBER=${GITHUB_RUN_NUMBER:-}"
+          } > docs/ci_results/run_meta.env
 
       - name: 汇总测试报告（不重跑）
         if: always()
@@ -86,6 +99,10 @@ jobs:
           fi
           python3 scripts/generate_quality_gate_report.py
 
+      - name: 性能报告（组装 bench 结果，不重跑）
+        if: always()
+        run: python3 scripts/generate_perf_report.py || true
+
       - name: 写入 Job Summary
         if: always()
         run: |
@@ -99,6 +116,12 @@ jobs:
             echo "---" >> "$GITHUB_STEP_SUMMARY"
             cat docs/QUALITY_GATE_REPORT.md >> "$GITHUB_STEP_SUMMARY"
           fi
+          if [ -f docs/PERF_REPORT.md ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "---" >> "$GITHUB_STEP_SUMMARY"
+            # 摘要过长时只贴结论段（前 80 行）
+            head -n 80 docs/PERF_REPORT.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: 上传汇总测试报告
         if: always()
@@ -110,12 +133,16 @@ jobs:
             docs/TEST_REPORT.json
             docs/QUALITY_GATE_REPORT.md
             docs/QUALITY_GATE_REPORT.json
+            docs/PERF_REPORT.md
+            docs/PERF_REPORT.json
             docs/SMOKE_REPORT.md
             docs/images/test-report-summary.svg
             docs/ci_results/
             bin/bench_result.json
             examples/example_testout/TEST_REPORT.md
             examples/example_testout/TEST_REPORT.json
+            docs/ci_results/mcp-protocol/TEST_REPORT.md
+            docs/ci_results/mcp-protocol/TEST_REPORT.json
             mcp-smoke.log
           retention-days: 30
           if-no-files-found: ignore

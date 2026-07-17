@@ -34,7 +34,8 @@ docs/reviews/YYYY-MM-DD-简短主题.md
 
 | 日期 | 主题 | 文件 |
 |------|------|------|
-| （尚无按 TEMPLATE 提炼的正式件） | — | 可从 cursor-plans 结论摘录 |
+| 2026-07-17 | CI Artifact docs-test-report-272 验收分析 | [2026-07-17-ci-artifact-docs-test-report-272.md](2026-07-17-ci-artifact-docs-test-report-272.md) |
+| （其余可从 cursor-plans 结论摘录） | — | 见 [cursor-plans/](cursor-plans/README.md) |
 
 ## 不强制
 

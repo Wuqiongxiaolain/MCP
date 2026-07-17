@@ -19,7 +19,12 @@
 #include <string>
 #include <vector>
 #ifdef _WIN32
+#    ifndef NOMINMAX
+#        define NOMINMAX
+#    endif
 #    include <direct.h>
+#    include <windows.h>
+#    include <psapi.h>
 #else
 #    include <sys/stat.h>
 #endif
@@ -133,14 +138,18 @@ static void bench(const std::string&          name,
         timer.lap(t);
         if (teardown) teardown();
     }
-    double avg = timer.mean();
+    // 原理：unit 只按均值选一次，value/p50/p95 必须同一量纲；
+    // 否则均值≥1ms 而中位仍 <1ms 时会出现「p50>p95」的假象。
+    double avg_us = timer.mean();
+    double p50_us = timer.percentile(50);
+    double p95_us = timer.percentile(95);
+    const bool use_ms = avg_us >= 1000.0;
+    const double scale = use_ms ? 1000.0 : 1.0;
     BenchResult r{name,
-                  avg < 1000 ? "us" : "ms",
-                  avg < 1000 ? avg : avg / 1000.0,
-                  timer.percentile(50) < 1000 ? timer.percentile(50)
-                                              : timer.percentile(50) / 1000.0,
-                  timer.percentile(95) < 1000 ? timer.percentile(95)
-                                              : timer.percentile(95) / 1000.0,
+                  use_ms ? "ms" : "us",
+                  avg_us / scale,
+                  p50_us / scale,
+                  p95_us / scale,
                   iterations};
     g_results.push_back(r);
 }
@@ -661,7 +670,12 @@ static void benchTableMcpTools()
 static size_t getCurrentRSS()
 {
 #ifdef _WIN32
-    (void)0;
+    // Windows：WorkingSet；失败返回 0（报告侧可借 abs_before=0 识别）
+    PROCESS_MEMORY_COUNTERS pmc;
+    memset(&pmc, 0, sizeof(pmc));
+    pmc.cb = sizeof(pmc);
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc)))
+        return (size_t)pmc.WorkingSetSize;
     return 0;
 #else
     // 优先 RssAnon（更贴近堆泄漏）；否则回退 statm RSS
@@ -700,13 +714,12 @@ static size_t getCurrentRSS()
 
 static void benchMemoryStability()
 {
-#ifdef _WIN32
-    (void)getCurrentRSS;
-    return;
-#else
+#ifndef _WIN32
+    // Linux：无 /proc 则无法采样，直接跳过（避免写出全 0 假指标）
     if (ge::readFile("/proc/self/statm").empty() &&
         ge::readFile("/proc/self/status").empty())
         return;
+#endif
 
     std::string text = makeBigFlowchart(50);
     ge::removeDirectory("bench-leak-tmp");
@@ -740,9 +753,14 @@ static void benchMemoryStability()
             return 0.0;
         return (double)(b - a) / (1024.0 * 1024.0);
     };
+    auto absMB = [](size_t bytes) -> double {
+        return (double)bytes / (1024.0 * 1024.0);
+    };
     double totalMB  = toMB(before, after);
     double firstMB  = toMB(before, mid);
     double secondMB = toMB(mid, after);
+    double beforeMB = absMB(before);
+    double afterMB  = absMB(after);
 
     g_results.push_back(BenchResult{"memory_RSS_repeat_save_same_id", "MB",
                                     totalMB, totalMB, totalMB, 1});
@@ -751,9 +769,13 @@ static void benchMemoryStability()
     // 附带第一半便于人工看分段；CI 对 memory_* 用绝对阈值，不用旧相对基线
     g_results.push_back(BenchResult{"memory_RSS_repeat_save_1st_half", "MB",
                                     firstMB, firstMB, firstMB, 1});
+    // 绝对 RSS：区分「增量=0（无泄漏）」与「采样失败=0」；不对基线做相对比对
+    g_results.push_back(BenchResult{"memory_RSS_abs_before", "MB", beforeMB,
+                                    beforeMB, beforeMB, 1});
+    g_results.push_back(BenchResult{"memory_RSS_abs_after", "MB", afterMB,
+                                    afterMB, afterMB, 1});
 
     ge::removeDirectory("bench-leak-tmp");
-#endif
 }
 
 // ═══════════════════════════════════════════════════════════════ 主程序 ══

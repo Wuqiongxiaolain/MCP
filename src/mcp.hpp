@@ -357,7 +357,8 @@ inline Json toolList()
                    "field=value pairs (can be specified multiple times); "
                    "node fields include label/shape/parent/style/fillColor/"
                    "strokeColor/x/y/w/h; edge fields include from/to/label/"
-                   "style/arrow/strokeColor"));
+                   "style/arrow/strokeColor/headStart/headEnd/labelX/labelY/"
+                   "waypoints (JSON array string e.g. [{\"x\":1,\"y\":2}])"));
         Json req = Json::arr();
         req.push(Json("id"));
         req.push(Json("set"));
@@ -365,8 +366,85 @@ inline Json toolList()
             "graph_update",
             "Update node/edge attributes in the draft (in-memory selector; do "
             "NOT use graph_cursor_* for ordinary edits). Provide node, edge, "
-            "or selector plus set as 'field=value' (array allowed). Then "
+            "or selector plus set as 'field=value' (array allowed). Edge "
+            "waypoints/labelX/labelY/headStart/headEnd are supported. Then "
             "graph_commit with all=true, or prefer graph_apply to batch+commit.",
+            p, req));
+    }
+
+    // ── 12b. graph_set_edge_route ─────────────────────────────
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "graph id"));
+        p.set("edge", prop("string", "target edge id"));
+        p.set("waypoints",
+              prop("string",
+                   "JSON array of {x,y} points, or empty [] to clear; "
+                   "may also be a JSON array value"));
+        p.set("recompute_label",
+              prop("boolean",
+                   "recompute labelX/labelY from route when edge has label "
+                   "(default true)"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("edge"));
+        req.push(Json("waypoints"));
+        tools.push(toolDef(
+            "graph_set_edge_route",
+            "Set polyline waypoints for one edge in the draft (preferred over "
+            "exporting model JSON). Commit with graph_commit all=true or "
+            "graph_apply.",
+            p, req));
+    }
+
+    // ── 12c. graph_clear_edge_route ───────────────────────────
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "graph id"));
+        p.set("edge", prop("string", "target edge id"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("edge"));
+        tools.push(toolDef(
+            "graph_clear_edge_route",
+            "Clear edge waypoints so exporters fall back to default routing. "
+            "Writes draft; commit with all=true.",
+            p, req));
+    }
+
+    // ── 12d. graph_nudge_node ─────────────────────────────────
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "graph id"));
+        p.set("node", prop("string", "target node id"));
+        p.set("dx", prop("number", "delta x to add to node.x"));
+        p.set("dy", prop("number", "delta y to add to node.y"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("node"));
+        tools.push(toolDef(
+            "graph_nudge_node",
+            "Translate one node by relative dx/dy in the draft (for fine "
+            "layout tweaks). Commit with all=true.",
+            p, req));
+    }
+
+    // ── 12e. graph_set_edge_heads ─────────────────────────────
+    {
+        Json p = Json::obj();
+        p.set("id", prop("string", "graph id"));
+        p.set("edge", prop("string", "target edge id"));
+        p.set("headStart",
+              prop("string", "start decoration: none|arrow|open|cross"));
+        p.set("headEnd",
+              prop("string", "end decoration: none|arrow|open|cross"));
+        Json req = Json::arr();
+        req.push(Json("id"));
+        req.push(Json("edge"));
+        tools.push(toolDef(
+            "graph_set_edge_heads",
+            "Set edge arrow head decorations (headStart/headEnd) in the draft "
+            "and sync legacy arrow field. Commit with all=true.",
             p, req));
     }
 
@@ -568,7 +646,8 @@ inline Json toolList()
             "Batch-edit a graph then commit in one call (preferred Agent "
             "path). Applies ops[] to the draft, commits with all=true "
             "semantics when commit=true (default), optional export_to. "
-            "Do not use graph_cursor_* or empty graph_stage for this workflow.",
+            "Do not use graph_cursor_* or empty graph_stage for this workflow. "
+            "Edge update ops may set waypoints/labelX/labelY/headStart/headEnd.",
             p, req));
     }
 
@@ -1432,6 +1511,14 @@ class ToolRunner {
                 return property(args);
             if (name == "graph_update")
                 return update(args);
+            if (name == "graph_set_edge_route")
+                return setEdgeRoute(args);
+            if (name == "graph_clear_edge_route")
+                return clearEdgeRoute(args);
+            if (name == "graph_nudge_node")
+                return nudgeNode(args);
+            if (name == "graph_set_edge_heads")
+                return setEdgeHeads(args);
             if (name == "graph_insert")
                 return insert(args);
             if (name == "graph_delete_element")
@@ -2196,6 +2283,41 @@ class ToolRunner {
         if (pairs.empty())
             return textContent("no set pairs provided", true);
 
+        // 预校验边 waypoints，避免非法 JSON 半写入草稿
+        for (auto& p : pairs) {
+            if (p.first != "waypoints")
+                continue;
+            std::vector<std::pair<double, double>> tmp;
+            std::string                            perr;
+            if (!gv::parseWaypointsJson(p.second, tmp, &perr))
+                return textContent("invalid waypoints: " + perr, true);
+        }
+
+        bool hasWaypoints = false;
+        bool hasLabelXY   = false;
+        for (auto& p : pairs) {
+            if (p.first == "waypoints")
+                hasWaypoints = true;
+            if (p.first == "labelX" || p.first == "labelY")
+                hasLabelXY = true;
+        }
+
+        // syncEdgeLabelAfterWaypoints: waypoints 变更后按需重算并记入草稿
+        auto syncEdgeLabelAfterWaypoints = [&](gv::EdgeCursor& ec) {
+            if (!hasWaypoints || hasLabelXY)
+                return;
+            Edge* e = ec.get();
+            if (!e || e->label.empty())
+                return;
+            double ox = e->labelX, oy = e->labelY;
+            gl::recomputeEdgeLabelPos(g, *e);
+            double nx = e->labelX, ny = e->labelY;
+            e->labelX = ox;
+            e->labelY = oy;
+            ec.set("labelX", std::to_string(nx));
+            ec.set("labelY", std::to_string(ny));
+        };
+
         int updated = 0;
         if (!a.str("node").empty()) {
             gv::NodeCursor nc(g, &draft, a.str("node"));
@@ -2209,8 +2331,12 @@ class ToolRunner {
             gv::EdgeCursor ec(g, &draft, a.str("edge"));
             if (!ec.valid())
                 return textContent("edge not found: " + a.str("edge"), true);
-            for (auto& p : pairs)
-                ec.set(p.first, p.second);
+            for (auto& p : pairs) {
+                if (!ec.set(p.first, p.second))
+                    return textContent("failed to set edge field: " + p.first,
+                                       true);
+            }
+            syncEdgeLabelAfterWaypoints(ec);
             updated = 1;
         }
         else if (!a.str("selector").empty()) {
@@ -2222,6 +2348,12 @@ class ToolRunner {
                     "no elements matched selector: " + a.str("selector"), true);
             for (auto& p : pairs)
                 sc.setAll(p.first, p.second);
+            if (hasWaypoints && !hasLabelXY) {
+                for (auto& eid : sc.edgeIds()) {
+                    gv::EdgeCursor ec(g, &draft, eid);
+                    syncEdgeLabelAfterWaypoints(ec);
+                }
+            }
         }
         else {
             return textContent("provide 'node', 'edge', or 'selector'", true);
@@ -2231,6 +2363,184 @@ class ToolRunner {
         Json out = Json::obj();
         out.set("status", "updated");
         out.set("elementsAffected", (double)updated);
+        out.set("draftOperations", (double)draft.operationCount());
+        return textContent(out.dump());
+    }
+
+    // loadDraftGraph: 加载图并物化当前草稿（供几何编辑工具复用）
+    bool loadDraftGraph(const std::string& id, Graph& g, gv::Draft& draft,
+                        std::string* err)
+    {
+        g = vm_.materializeDraftWithDraft(id, draft);
+        if (!g.id.empty())
+            return true;
+        if (!store_.load(id, g, 0, err))
+            return false;
+        draft = vm_.loadDraft(id);
+        return true;
+    }
+
+    // waypointsArgToString: 把 waypoints 参数（字符串或数组）规范为 JSON 字符串
+    static std::string waypointsArgToString(const Json& a, std::string* err)
+    {
+        const Json* wp = a.find("waypoints");
+        if (!wp) {
+            if (err)
+                *err = "waypoints required";
+            return "";
+        }
+        if (wp->isStr())
+            return wp->s;
+        if (wp->isArr())
+            return wp->dump();
+        if (err)
+            *err = "waypoints must be JSON array or string";
+        return "";
+    }
+
+    // setEdgeRoute: 专用写折点工具
+    Json setEdgeRoute(const Json& a)
+    {
+        std::string id = a.str("id"), edgeId = a.str("edge");
+        if (id.empty() || edgeId.empty())
+            return textContent("id and edge required", true);
+        std::string werr;
+        std::string wpStr = waypointsArgToString(a, &werr);
+        if (wpStr.empty())
+            return textContent(werr, true);
+        std::vector<std::pair<double, double>> tmp;
+        std::string                            perr;
+        if (!gv::parseWaypointsJson(wpStr, tmp, &perr))
+            return textContent("invalid waypoints: " + perr, true);
+
+        gv::Draft   draft;
+        Graph       g;
+        std::string err;
+        if (!loadDraftGraph(id, g, draft, &err))
+            return textContent(err, true);
+
+        gv::EdgeCursor ec(g, &draft, edgeId);
+        if (!ec.valid())
+            return textContent("edge not found: " + edgeId, true);
+        if (!ec.set("waypoints", wpStr))
+            return textContent("failed to set waypoints", true);
+
+        bool recompute = a.boolean("recompute_label", true);
+        if (recompute) {
+            Edge* e = ec.get();
+            if (e && !e->label.empty()) {
+                double ox = e->labelX, oy = e->labelY;
+                gl::recomputeEdgeLabelPos(g, *e);
+                double nx = e->labelX, ny = e->labelY;
+                e->labelX = ox;
+                e->labelY = oy;
+                ec.set("labelX", std::to_string(nx));
+                ec.set("labelY", std::to_string(ny));
+            }
+        }
+
+        vm_.saveDraft(id, draft);
+        Json out = Json::obj();
+        out.set("status", "route set");
+        out.set("edge", edgeId);
+        out.set("waypointCount", (double)tmp.size());
+        out.set("draftOperations", (double)draft.operationCount());
+        return textContent(out.dump());
+    }
+
+    // clearEdgeRoute: 清空折点
+    Json clearEdgeRoute(const Json& a)
+    {
+        std::string id = a.str("id"), edgeId = a.str("edge");
+        if (id.empty() || edgeId.empty())
+            return textContent("id and edge required", true);
+        gv::Draft   draft;
+        Graph       g;
+        std::string err;
+        if (!loadDraftGraph(id, g, draft, &err))
+            return textContent(err, true);
+        gv::EdgeCursor ec(g, &draft, edgeId);
+        if (!ec.valid())
+            return textContent("edge not found: " + edgeId, true);
+        if (!ec.set("waypoints", "[]"))
+            return textContent("failed to clear waypoints", true);
+        vm_.saveDraft(id, draft);
+        Json out = Json::obj();
+        out.set("status", "route cleared");
+        out.set("edge", edgeId);
+        out.set("draftOperations", (double)draft.operationCount());
+        return textContent(out.dump());
+    }
+
+    // nudgeNode: 相对平移节点
+    Json nudgeNode(const Json& a)
+    {
+        std::string id = a.str("id"), nodeId = a.str("node");
+        if (id.empty() || nodeId.empty())
+            return textContent("id and node required", true);
+        double dx = 0, dy = 0;
+        if (const Json* jdx = a.find("dx"))
+            dx = jdx->isNum() ? jdx->n : std::strtod(jdx->isStr() ? jdx->s.c_str() : "0", nullptr);
+        if (const Json* jdy = a.find("dy"))
+            dy = jdy->isNum() ? jdy->n : std::strtod(jdy->isStr() ? jdy->s.c_str() : "0", nullptr);
+
+        gv::Draft   draft;
+        Graph       g;
+        std::string err;
+        if (!loadDraftGraph(id, g, draft, &err))
+            return textContent(err, true);
+        gv::NodeCursor nc(g, &draft, nodeId);
+        if (!nc.valid())
+            return textContent("node not found: " + nodeId, true);
+        Node* n = nc.get();
+        if (!n)
+            return textContent("node not found: " + nodeId, true);
+        nc.set("x", std::to_string(n->x + dx));
+        nc.set("y", std::to_string(n->y + dy));
+        vm_.saveDraft(id, draft);
+        Json out = Json::obj();
+        out.set("status", "nudged");
+        out.set("node", nodeId);
+        out.set("x", n->x);
+        out.set("y", n->y);
+        out.set("draftOperations", (double)draft.operationCount());
+        return textContent(out.dump());
+    }
+
+    // setEdgeHeads: 设置两端箭头装饰
+    Json setEdgeHeads(const Json& a)
+    {
+        std::string id = a.str("id"), edgeId = a.str("edge");
+        if (id.empty() || edgeId.empty())
+            return textContent("id and edge required", true);
+        gv::Draft   draft;
+        Graph       g;
+        std::string err;
+        if (!loadDraftGraph(id, g, draft, &err))
+            return textContent(err, true);
+        gv::EdgeCursor ec(g, &draft, edgeId);
+        if (!ec.valid())
+            return textContent("edge not found: " + edgeId, true);
+        if (const Json* hs = a.find("headStart")) {
+            std::string v = hs->isStr() ? hs->s : "";
+            if (!v.empty() && !ec.set("headStart", v))
+                return textContent("failed to set headStart", true);
+        }
+        if (const Json* he = a.find("headEnd")) {
+            std::string v = he->isStr() ? he->s : "";
+            if (!v.empty() && !ec.set("headEnd", v))
+                return textContent("failed to set headEnd", true);
+        }
+        vm_.saveDraft(id, draft);
+        Edge* e = ec.get();
+        Json  out = Json::obj();
+        out.set("status", "heads set");
+        out.set("edge", edgeId);
+        if (e) {
+            out.set("headStart", e->headStart);
+            out.set("headEnd", e->headEnd);
+            out.set("arrow", e->arrow);
+        }
         out.set("draftOperations", (double)draft.operationCount());
         return textContent(out.dump());
     }

@@ -377,7 +377,7 @@ paths:
     post:
       operationId: graph_update
       summary: graph_update
-      description: "Update node/edge attributes in the draft (in-memory selector; do NOT use graph_cursor_* for ordinary edits). Provide node, edge, or selector plus set as 'field=value' (array allowed). Then graph_commit with all=true, or prefer graph_apply to batch+commit."
+      description: "Update node/edge attributes in the draft (in-memory selector; do NOT use graph_cursor_* for ordinary edits). Provide node, edge, or selector plus set as 'field=value' (array allowed). Edge waypoints/labelX/labelY/headStart/headEnd are supported. Then graph_commit with all=true, or prefer graph_apply to batch+commit."
       requestBody:
         required: true
         content:
@@ -399,10 +399,125 @@ paths:
                   description: "batch selector: shape=rect|label~=Step|parent=g1"
                 set:
                   type: string
-                  description: field=value pairs (can be specified multiple times); node fields include label/shape/parent/style/fillColor/strokeColor/x/y/w/h; edge fields include from/to/label/style/arrow/strokeColor
+                  description: "field=value pairs (can be specified multiple times); node fields include label/shape/parent/style/fillColor/strokeColor/x/y/w/h; edge fields include from/to/label/style/arrow/strokeColor/headStart/headEnd/labelX/labelY/waypoints (JSON array string e.g. [{\"x\":1,\"y\":2}])"
               required:
                 - id
                 - set
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_set_edge_route:
+    post:
+      operationId: graph_set_edge_route
+      summary: graph_set_edge_route
+      description: Set polyline waypoints for one edge in the draft (preferred over exporting model JSON). Commit with graph_commit all=true or graph_apply.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                edge:
+                  type: string
+                  description: target edge id
+                waypoints:
+                  type: string
+                  description: "JSON array of {x,y} points, or empty [] to clear; may also be a JSON array value"
+                recompute_label:
+                  type: boolean
+                  description: recompute labelX/labelY from route when edge has label (default true)
+              required:
+                - id
+                - edge
+                - waypoints
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_clear_edge_route:
+    post:
+      operationId: graph_clear_edge_route
+      summary: graph_clear_edge_route
+      description: Clear edge waypoints so exporters fall back to default routing. Writes draft; commit with all=true.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                edge:
+                  type: string
+                  description: target edge id
+              required:
+                - id
+                - edge
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_nudge_node:
+    post:
+      operationId: graph_nudge_node
+      summary: graph_nudge_node
+      description: Translate one node by relative dx/dy in the draft (for fine layout tweaks). Commit with all=true.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                node:
+                  type: string
+                  description: target node id
+                dx:
+                  type: number
+                  description: delta x to add to node.x
+                dy:
+                  type: number
+                  description: delta y to add to node.y
+              required:
+                - id
+                - node
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_set_edge_heads:
+    post:
+      operationId: graph_set_edge_heads
+      summary: graph_set_edge_heads
+      description: Set edge arrow head decorations (headStart/headEnd) in the draft and sync legacy arrow field. Commit with all=true.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                edge:
+                  type: string
+                  description: target edge id
+                headStart:
+                  type: string
+                  description: "start decoration: none|arrow|open|cross"
+                headEnd:
+                  type: string
+                  description: "end decoration: none|arrow|open|cross"
+              required:
+                - id
+                - edge
       responses:
         "200":
           description: MCP tools/call 成功返回（content 文本或结构化结果）
@@ -653,7 +768,7 @@ paths:
     post:
       operationId: graph_apply
       summary: graph_apply
-      description: "Batch-edit a graph then commit in one call (preferred Agent path). Applies ops[] to the draft, commits with all=true semantics when commit=true (default), optional export_to. Do not use graph_cursor_* or empty graph_stage for this workflow."
+      description: "Batch-edit a graph then commit in one call (preferred Agent path). Applies ops[] to the draft, commits with all=true semantics when commit=true (default), optional export_to. Do not use graph_cursor_* or empty graph_stage for this workflow. Edge update ops may set waypoints/labelX/labelY/headStart/headEnd."
       requestBody:
         required: true
         content:

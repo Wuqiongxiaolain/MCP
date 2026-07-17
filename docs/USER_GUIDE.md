@@ -291,7 +291,7 @@ graphmcp layout auto --id g7abc --save
 graphmcp layout layered --id g7abc
 ```
 
-> **说明（v0.2.6）**：`layered` 会尽量减少边交叉并用 waypoint 画折线，但复杂图仍可能观感不佳；可用 `--force` 重排，或导出后在外部编辑器微调。
+> **说明（v0.2.6）**：`layered` 会尽量减少边交叉并用 waypoint 画折线，但复杂图仍可能观感不佳；可用 `--force` 重排，或导出后在外部编辑器微调。也可用 MCP `graph_set_edge_route` / `graph_nudge_node` 等直接改折点与节点位置（无需整图 model 覆盖）；再次 `layout` 并保存仍会覆盖手改。
 
 ---
 

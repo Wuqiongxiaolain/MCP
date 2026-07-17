@@ -228,7 +228,7 @@
 
 ---
 
-## 三、MCP 工具（47 个）
+## 三、MCP 工具（51 个）
 
 参数与 CLI 对应；通过 `tools/call` 调用。完整 schema 以 `toolList()` → OpenAPI 为准，以下为速查。
 
@@ -261,7 +261,11 @@
 
 | 工具名 | 功能 | 必填参数 | 主要可选参数 |
 |--------|------|----------|-------------|
-| `graph_update` | 更新节点/边属性 | `id`, `set` | `node`、`edge`、`selector`（6 种选择方式） |
+| `graph_update` | 更新节点/边属性（边支持 `waypoints`/`labelX`/`labelY`/`headStart`/`headEnd`） | `id`, `set` | `node`、`edge`、`selector`（6 种选择方式） |
+| `graph_set_edge_route` | 写入边折点（推荐，免整图 model 覆盖） | `id`, `edge`, `waypoints` | `recompute_label`（默认 true） |
+| `graph_clear_edge_route` | 清空边折点（导出回退兜底路由） | `id`, `edge` | — |
+| `graph_nudge_node` | 相对平移节点 `dx`/`dy` | `id`, `node` | `dx`、`dy` |
+| `graph_set_edge_heads` | 设置边两端箭头装饰 | `id`, `edge` | `headStart`、`headEnd` |
 | `graph_insert` | 插入节点/边 | `id`, `element` | `node` / `edge`（element=node\|edge）、`label`、`shape`、`from`/`to`、`parent`、`fillColor`/`strokeColor`、`x`/`y`/`w`/`h` |
 | `graph_delete_element` | 删除节点/边 | `id` | `node`、`edge`、`selector` |
 | `graph_layout` | 自动布局（v0.2.6 `layered`：层平衡/减交叉/waypoint，尚不完善） | `id` | `strategy`（auto\|layered\|tree-h\|tree-v\|grid）、`force`、`save` |
@@ -274,6 +278,7 @@
 | `strokeColor` | 节点 / 边 | 描边色，如 `#4a72b8`；空=默认 |
 
 `graph_update` 示例：`--node A --set fillColor=#eef4ff --set strokeColor=#4a72b8`  
+边折点示例：`graph_set_edge_route` 的 `waypoints` 为 `[{"x":100,"y":200},{"x":100,"y":300}]`；或 `graph_update` 的 `set: waypoints=[...]`。再次 `graph_layout` 且 `save=true` 仍会覆盖手改几何。  
 `graph_insert` 示例：节点带 `--fillColor`/`--strokeColor`；边带 `--strokeColor`。  
 `Node.style` 仅保留线型/遗留提示，**颜色以专用字段为准**。
 

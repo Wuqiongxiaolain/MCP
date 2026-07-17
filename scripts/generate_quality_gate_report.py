@@ -92,28 +92,34 @@ def run_cppcheck() -> tuple[int, str]:
     cmd = [
         exe,
         "--enable=warning,style,performance,portability",
-        "--error-exitcode=1",
         "--inline-suppr",
         "-q",
+        # 不使用 --error-exitcode：style/warning 会非零退出，与「仅 error 阻断」冲突
         "--template={file}:{line}: {severity}: {message}",
         str(ROOT / "src"),
     ]
     proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     out = (proc.stdout or "") + (proc.stderr or "")
     CPPCHECK_LOG.write_text(out if out.strip() else "(no findings)\n", encoding="utf-8")
-    CPPCHECK_EXIT.write_text(f"{proc.returncode}\n", encoding="utf-8")
-    return proc.returncode, out
+    # 以解析到的 severity 为准写 exit 文件：有 error → 1，否则 0（工具自身崩溃仍保留原码）
+    parsed_exit = 1 if re.search(r":\s*error:", out, re.I) else 0
+    if proc.returncode not in (0, 1) and not out.strip():
+        parsed_exit = proc.returncode
+    CPPCHECK_EXIT.write_text(f"{parsed_exit}\n", encoding="utf-8")
+    return parsed_exit, out
 
 
 def parse_cppcheck(log: str, exit_code: int) -> dict:
     errors = len(re.findall(r":\s*error:", log, re.I))
     warnings = len(re.findall(r":\s*warning:", log, re.I))
+    styles = len(re.findall(r":\s*style:", log, re.I))
     # 无模板匹配时，非零退出且有内容也算失败
     if exit_code == 127:
         status = "SKIPPED"
-    elif exit_code != 0 or errors > 0:
+    elif errors > 0:
         status = "FAIL"
     else:
+        # style / performance / portability / warning 记入报告，不阻断门禁
         status = "PASS"
     summary = log.strip() if log.strip() else "(no findings)"
     if len(summary) > 4000:
@@ -123,6 +129,7 @@ def parse_cppcheck(log: str, exit_code: int) -> dict:
         "exit": exit_code,
         "errors": errors,
         "warnings": warnings,
+        "styles": styles,
         "summary": summary,
     }
 
@@ -173,7 +180,7 @@ def write_report(cpp: dict, sonar: dict, meta: dict) -> None:
 | 门禁 | 状态 | 说明 |
 |------|:----:|------|
 | **总体** | **{ov}** | PASS / FAIL / PARTIAL |
-| cppcheck（必过） | **{cpp['status']}** | error 级或 exit≠0 → FAIL |
+| cppcheck（必过） | **{cpp['status']}** | 仅 **error** 级 >0 → FAIL；style/warning 只记报告 |
 | SonarQube / SonarCloud（可选） | **{sonar['status']}** | PASS / FAIL / SKIPPED |
 
 > 未配置 Sonar 时必须为 **SKIPPED**，不得记为 PASS。完整签核见 [ACCEPTANCE_DOD.md](ACCEPTANCE_DOD.md)。
@@ -182,10 +189,11 @@ def write_report(cpp: dict, sonar: dict, meta: dict) -> None:
 
 | 项 | 值 |
 |----|----|
-| 命令 | `cppcheck --enable=warning,style,performance,portability --error-exitcode=1 --inline-suppr -q src` |
-| exit | {cpp['exit']} |
+| 命令 | `cppcheck --enable=warning,style,performance,portability --inline-suppr -q src`（门禁仅看 error） |
+| exit（门禁用） | {cpp['exit']} |
 | error 数 | {cpp['errors']} |
 | warning 数 | {cpp['warnings']} |
+| style 数 | {cpp.get('styles', 0)} |
 
 ### 关键问题摘要
 

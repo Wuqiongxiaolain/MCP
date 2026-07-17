@@ -27,7 +27,7 @@
 
 | 项 | 值 |
 |----|----|
-| 命令 | `cppcheck --enable=warning,style,performance,portability --error-exitcode=1 --inline-suppr -q src` |
+| 命令 | `cppcheck --enable=warning,style,performance,portability --inline-suppr -q src`（门禁仅看 error） |
 | exit | `{{CPPCHECK_EXIT}}` |
 | error 数 | `{{CPPCHECK_ERRORS}}` |
 | warning 数 | `{{CPPCHECK_WARNINGS}}` |

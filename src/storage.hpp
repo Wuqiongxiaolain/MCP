@@ -346,8 +346,8 @@ class Store {
                     "edges",
                     (double)(m->find("edges") ? m->find("edges")->size() : 0));
             }
-            // meta 是可重建缓存：首次 history 查询时惰性生成，
-            // 避免每次 save 在热路径额外创建一个文件。
+            // meta 是可重建缓存：save 时已尽量写好；此处缺失则惰性补写，
+            // 兼容旧数据与手工删除 meta 的情形。
             ge::writeFile(metaPath, e.dump());
             list.push(e);
         }

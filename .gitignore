@@ -28,6 +28,13 @@ examples/example_testout/
 scripts/export-example-testout.ps1
 scripts/__pycache__/
 
+# CI / 本地生成的测试报告（由 Actions/Jenkins Artifact 提供）
+docs/ci_results/
+docs/TEST_REPORT.md
+docs/TEST_REPORT.json
+docs/SMOKE_REPORT.md
+docs/images/test-report-summary.svg
+
 # 本地专属，不纳入版本控制
 .mcp.json
 traffic-light-mindmap.svg

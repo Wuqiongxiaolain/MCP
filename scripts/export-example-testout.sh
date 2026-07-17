@@ -65,13 +65,37 @@ for inp in examples/example_input/*; do
     fi
 
     # 通用表 CSV / 表 XML：不做盲目 graph convert（见 scripts/export-table-examples.sh）
-    if [ "$name" = "enemy_sample.csv" ] || [ "$name" = "enemy_sample.xml" ] || \
-       [ "$name" = "skill_relations.csv" ]; then
-        for f in "${FORMATS[@]}"; do
-            record_row "$name" "$f" SKIP "-" "generic-table; use export-table-examples.sh → example_output"
-        done
-        continue
-    fi
+    case "$name" in
+        enemy_sample.csv|enemy_sample.xml|enemy_sample.table-xml.xml|skill_relations.csv|name_slug_demo.csv)
+            for f in "${FORMATS[@]}"; do
+                record_row "$name" "$f" SKIP "-" "generic-table; use export-table-examples.sh → example_output"
+            done
+            continue
+            ;;
+    esac
+
+    # 硬无效坏样例：只做 validate（期望失败），不计入 convert FAIL
+    # 注意：flowchart_syntax_bad / sequence_bad 等为“软坏样例”——当前校验器可接受并正常 convert，走常规导出路径
+    case "$name" in
+        enemy_sample_bad.csv|flowchart_colors_bad.mmd|mermaid_unknown_bad.mmd)
+            fmt_guess=auto
+            case "$name" in
+                *.mmd) fmt_guess=mermaid ;;
+                *.csv) fmt_guess=csv ;;
+                *.xml) fmt_guess=xml ;;
+            esac
+            if vout="$("$BIN" validate input --file "$inp" --input-format "$fmt_guess" 2>&1)"; then
+                # 硬无效样例却通过校验 -> 记 FAIL（语义回归）
+                record_row "$name" validate FAIL "-" "expected invalid but validate passed: $(echo "$vout" | tr '\n' ' ')"
+            else
+                record_row "$name" validate PASS "-" "expected-invalid: $(echo "$vout" | tr '\n' ' ' | cut -c1-80)"
+            fi
+            for f in "${FORMATS[@]}"; do
+                record_row "$name" "$f" SKIP "-" "intentional-bad-sample"
+            done
+            continue
+            ;;
+    esac
 
     for i in "${!FORMATS[@]}"; do
         fmt="${FORMATS[$i]}"

@@ -21,6 +21,8 @@
 | `branch-strategy` | 分支策略示意 |
 | `store-layout` | 存储目录结构 |
 
+> `test-report-summary` 由 CI 汇总脚本临时生成（store 在 `docs/ci_results/`），不纳入本目录版本库；SVG 见 CI Artifact 中的 `docs/images/test-report-summary.svg`。
+
 重导示例：
 
 ```powershell

@@ -29,6 +29,7 @@
 |------|------|
 | [CLI & MCP 指令参考](docs/CLI_MCP_REFERENCE.md) | 15 个命令族与 **51** 个 MCP 工具完整参数速查（以 `toolList()`/OpenAPI 为准） |
 | [OpenAPI 契约](docs/api_reference/openapi.yaml) | 由 `make docs-api` 从 `toolList()` 生成，可供 Swagger 打开 |
+| [测试报告](https://github.com/Wuqiongxiaolain/MCP/actions) | 由 CI 汇总后上传 Artifact（`docs-test-report-*`）；本机不提交 |
 | [项目思维导图](docs/MINDMAP.md) | 能力与 DevOps 全景（Mermaid / 大纲） |
 
 示例输入见 [`examples/example_input/`](examples/example_input/)，导出基准见 [`examples/README.md`](examples/README.md)。MCP 配置模板：[`mcp-config.example.json`](mcp-config.example.json)。Skill 定义：[`skills/graphmcp/SKILL.md`](skills/graphmcp/SKILL.md)。
@@ -59,6 +60,8 @@ make docs-api
 | `make smoke` / `make mcp-smoke` | 冒烟测试 / MCP 协议测试 |
 | `make table-smoke` | 表与图↔表协作冒烟 |
 | `make docs-api` | `dump-tools` → OpenAPI YAML |
+| `make docs-test-report` | 从 `docs/ci_results/` **组装**报告（不重跑；CI 用） |
+| `make docs-test-report-local` | 本地完整重跑后生成报告（调试用） |
 
 ### 版本 / 基线 / 发布（GitHub Actions + Jenkins）
 

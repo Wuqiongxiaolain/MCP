@@ -405,16 +405,21 @@ Draft 基于操作序列（非快照）：存储 `OpType` 11 种操作（含 `ME
 | `make bench` | `tests/bench_main.cpp`（性能基准测试，输出结果） |
 | `make bench-ci` | 运行 bench 并比对基线；失败告警并重试，默认最多 3 次（`BENCH_RETRIES`），连续失败才阻断 |
 | `make bench-baseline` | 更新性能基线文件（仅 main 分支使用） |
-| `make smoke` | `tests/smoke_test.sh`（含 `[fixture-regression]`），写根目录 `SMOKE_REPORT.md` |
+| `make smoke` | `tests/smoke_test.sh`（含 `[fixture-regression]`），写 `docs/SMOKE_REPORT.md` |
 | `make mcp-smoke` | `tests/mcp_smoke.sh` |
-| `make table-smoke` | `tests/table_smoke.sh`（表与图↔表；**默认 CI 未纳入**，本地/按需跑） |
+| `make table-smoke` | `tests/table_smoke.sh`（表与图↔表） |
 | `make export-testout` | `scripts/export-example-testout.sh` → `examples/example_testout/` |
 | `make export-table-examples` | `scripts/export-table-examples.sh` → `examples/example_output/`（表导出示例） |
 | `make export-table-collab-examples` | `scripts/export-table-collab-examples.sh`（图↔表协作示例：rules/fix/derive/slug/sample/propose） |
 | `make docs-api` | `dump-tools` → `docs/api_reference/openapi.yaml` |
+| `make docs-test-report` | `generate_docs_test_report.py --from-ci`（只组装，不重跑） |
+| `make docs-test-report-local` | `--rerun` 本地完整重跑（调试） |
 
-`.github/workflows/ci.yml` 与 Jenkins CI 默认顺序：`make docs-api`（OpenAPI diff）→ `make test-all` → `make smoke` / `make mcp-smoke` → `make bench-ci`（失败最多重试 3 次，见 `scripts/bench_ci_retry.sh`）→ 打包制品。
+`.github/workflows/ci.yml` 与 Jenkins CI 默认顺序：`make docs-api`（OpenAPI diff）→ 单元（`ci_capture`）→ smoke / mcp-smoke / table-smoke / perf-smoke → `bench-ci` → `export-testout` → **`--from-ci` 汇总报告** → 打包；报告以 Artifact 导出（不提交仓库）。
 
+获取报告：
+- GitHub Actions：Artifact `docs-test-report-<run>`，或 run 页 Job Summary
+- Jenkins：Build → Artifacts → `docs/TEST_REPORT.md`
 
 | 组件 | 文件 | 说明 |
 |------|------|------|

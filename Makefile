@@ -23,7 +23,7 @@ HDRS := src/json.hpp src/model.hpp src/parsers.hpp src/layout.hpp \
         src/table_storage.hpp src/table_xml.hpp \
         src/version_types.hpp src/cursor_types.hpp src/version_manager.hpp
 
-.PHONY: all test test-all test-version test-cursor bench bench-ci bench-baseline smoke mcp-smoke table-smoke perf-smoke clean export-testout export-table-examples export-table-collab-examples docs-api
+.PHONY: all test test-all test-version test-cursor bench bench-ci bench-baseline smoke mcp-smoke table-smoke perf-smoke clean export-testout export-table-examples export-table-collab-examples docs-api docs-test-report docs-test-report-local
 
 all: $(BIN)/graphmcp$(EXE) $(BIN)/graphmcp_tests$(EXE) \
      $(BIN)/graphmcp_version_tests$(EXE) $(BIN)/graphmcp_cursor_tests$(EXE)
@@ -103,5 +103,13 @@ export-table-collab-examples: $(BIN)/graphmcp$(EXE)
 docs-api: $(BIN)/graphmcp$(EXE)
 	$(BIN)/graphmcp$(EXE) dump-tools --format openapi -o docs/api_reference/openapi.yaml
 
+# docs-test-report: 从 CI 捕获产物组装（不重跑）；本地调试用 docs-test-report-local
+docs-test-report:
+	python scripts/generate_docs_test_report.py --from-ci
+
+docs-test-report-local: $(BIN)/graphmcp$(EXE) $(BIN)/graphmcp_tests$(EXE) $(BIN)/graphmcp_version_tests$(EXE) $(BIN)/graphmcp_cursor_tests$(EXE) $(BIN)/graphmcp_bench$(EXE)
+	python scripts/generate_docs_test_report.py --rerun --bin $(BIN)/graphmcp$(EXE)
+
 clean:
 	-rm -rf $(BIN) test-store-tmp test-vm-store test-reset-store smoke-test-store-*
+	-rm -rf docs/ci_results docs/TEST_REPORT.md docs/TEST_REPORT.json docs/SMOKE_REPORT.md docs/images/test-report-summary.svg

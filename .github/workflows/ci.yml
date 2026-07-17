@@ -1,4 +1,4 @@
-# graphmcp 持续集成：构建 → 单元测试 → 冒烟测试 → 打包制品
+# graphmcp 持续集成：构建 → 单元测试 → 冒烟 → 导出回归 → 汇总报告 → 打包制品
 name: CI
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
   build-test-package:
     name: 构建与测试
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: 检出代码
@@ -34,53 +34,67 @@ jobs:
           git diff --exit-code -- docs/api_reference/openapi.yaml
 
       - name: 单元测试
-        run: make test-all
+        run: |
+          mkdir -p docs/ci_results
+          bash scripts/ci_capture.sh unit-main bin/graphmcp_tests
+          bash scripts/ci_capture.sh unit-version bin/graphmcp_version_tests
+          bash scripts/ci_capture.sh unit-cursor bin/graphmcp_cursor_tests
 
       - name: CLI 冒烟（新版命令族）
         env:
           SMOKE_REQUIRE_RASTER: "1"
-        run: make smoke
+        run: bash scripts/ci_capture.sh smoke bash tests/smoke_test.sh bin/graphmcp
 
-      - name: MCP 冒烟
+      - name: MCP 协议冒烟
         env:
           GRAPHMCP_LOG: info
-        run: make mcp-smoke
+        run: bash scripts/ci_capture.sh mcp-smoke bash tests/mcp_smoke.sh bin/graphmcp
 
-      - name: 上传冒烟报告
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-report-${{ github.run_number }}
-          path: |
-            SMOKE_REPORT.md
-            mcp-smoke.log
-          retention-days: 30
-          if-no-files-found: ignore
+      - name: 表协作冒烟
+        run: bash scripts/ci_capture.sh table-smoke bash tests/table_smoke.sh bin/graphmcp
+
+      - name: MCP 性能冒烟
+        env:
+          # 共享 runner 抖动下大载荷常 >1s；默认脚本已 2500，CI 再留余量
+          GRAPHMCP_SMOKE_MAX_LARGE_MS: "3000"
+        run: bash scripts/ci_capture.sh perf-smoke python3 scripts/mcp_perf_smoke.py bin/graphmcp
 
       - name: 性能基准测试
         id: bench
-        run: |
-          # 失败告警并重试，最多 3 次；连续 3 次失败才阻断（见 scripts/bench_ci_retry.sh）
-          make bench-ci CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
         env:
           CI: "true"
+        run: |
+          # 失败告警并重试，最多 3 次；连续 3 次失败才阻断（见 scripts/bench_ci_retry.sh）
+          bash scripts/ci_capture.sh bench make bench-ci CXXFLAGS="-std=c++17 -O2 -Wall -Wextra"
 
-      - name: 上传基准测试结果
-        if: always() && steps.bench.outcome != 'skipped'
-        uses: actions/upload-artifact@v4
-        with:
-          name: bench-results-${{ github.run_number }}
-          path: |
-            bin/bench_result.json
-          retention-days: 30
-          if-no-files-found: ignore
+      - name: 样例全量导出回归
+        run: bash scripts/ci_capture.sh export-testout bash scripts/export-example-testout.sh bin/graphmcp
 
-      - name: 上传测试报告
+      - name: 汇总测试报告（不重跑）
+        if: always()
+        run: python3 scripts/generate_docs_test_report.py --from-ci
+
+      - name: 写入 Job Summary
+        if: always()
+        run: |
+          if [ -f docs/TEST_REPORT.md ]; then
+            cat docs/TEST_REPORT.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "docs/TEST_REPORT.md missing" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: 上传汇总测试报告
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-reports-${{ github.run_number }}
+          name: docs-test-report-${{ github.run_number }}
           path: |
+            docs/TEST_REPORT.md
+            docs/TEST_REPORT.json
+            docs/SMOKE_REPORT.md
+            docs/images/test-report-summary.svg
+            docs/ci_results/
+            bin/bench_result.json
             examples/example_testout/TEST_REPORT.md
             examples/example_testout/TEST_REPORT.json
             mcp-smoke.log

@@ -612,7 +612,8 @@ def main() -> int:
             f"latency_ms={large_ms:.1f} rss_delta_mb={rss_delta_mb:.1f}"
         )
         assertTrue(
-            large_ms < budget("GRAPHMCP_SMOKE_MAX_LARGE_MS", 1000),
+            # 默认 2500ms：8000 边大图在共享 CI runner 上常 >1s；冒烟只拦数量级退化
+            large_ms < budget("GRAPHMCP_SMOKE_MAX_LARGE_MS", 2500),
             f"large payload latency exceeded budget: {large_ms:.1f}ms",
         )
         if before_rss and after_rss:

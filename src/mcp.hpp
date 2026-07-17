@@ -125,7 +125,11 @@ inline Json toolList()
         req.push(Json("to"));
         tools.push(toolDef("graph_convert",
                            "One-shot conversion between diagram formats "
-                           "without saving to the store.",
+                           "without saving to the store. Prefer "
+                           "graph_apply / graph_update / graph_set_edge_route "
+                           "to change a stored graph; convert↔model "
+                           "round-trips are a last resort when those tools "
+                           "cannot express the change.",
                            p, req));
     }
 
@@ -144,7 +148,14 @@ inline Json toolList()
         req.push(Json("id"));
         req.push(Json("to"));
         tools.push(toolDef("graph_export",
-                           "Export a stored graph to a file or inline content. "
+                           "Export a stored graph to a file or inline content "
+                           "(drawio/mermaid/svg/png/pdf/url/model). Primary use: "
+                           "publish or inspect. Prefer graph_show for ids and "
+                           "graph_update / graph_set_edge_route / "
+                           "graph_nudge_node / graph_apply for edits. "
+                           "Exporting to=model, hand-editing JSON, then "
+                           "graph_import/graph_create is a last resort only when "
+                           "atomic tools cannot express the change. "
                            "png/pdf use an external converter when available, "
                            "otherwise an SVG fallback is written.",
                            p, req));
@@ -192,9 +203,13 @@ inline Json toolList()
         req.push(Json("id"));
         tools.push(toolDef(
             "graph_import",
-            "Re-import an externally edited diagram after graph_open: reads "
-            "open.<ext> (or provided content), parses, validates, and saves as "
-            "a new version. NOT for first-time import — use graph_create.",
+            "Re-import an externally edited diagram after graph_open (GUI "
+            "round-trip): reads open.<ext> (or provided content), parses, "
+            "validates, and saves as a new version. NOT for first-time import "
+            "(use graph_create). For Agent edits prefer "
+            "graph_set_edge_route / graph_nudge_node / graph_update / "
+            "graph_apply; pasting hand-edited model JSON is a last resort "
+            "only when those tools cannot express the change.",
             p, req));
     }
 
@@ -308,9 +323,11 @@ inline Json toolList()
         tools.push(toolDef(
             "graph_show",
             "Show graph summary with node/edge id lists, or details for one "
-            "node/edge/path. Use this to discover element ids before "
-            "graph_update/graph_insert/graph_apply. Avoid dumping via "
-            "graph_export to=model for ordinary edits.",
+            "node/edge/path. Prefer this to discover element ids before "
+            "atomic edits (graph_update / graph_set_edge_route / "
+            "graph_nudge_node / graph_apply). Dumping via "
+            "graph_export to=model is optional for deep inspection but a last "
+            "resort for ordinary lookups (large payloads).",
             p, req));
     }
 
@@ -364,11 +381,16 @@ inline Json toolList()
         req.push(Json("set"));
         tools.push(toolDef(
             "graph_update",
-            "Update node/edge attributes in the draft (in-memory selector; do "
-            "NOT use graph_cursor_* for ordinary edits). Provide node, edge, "
-            "or selector plus set as 'field=value' (array allowed). Edge "
-            "waypoints/labelX/labelY/headStart/headEnd are supported. Then "
-            "graph_commit with all=true, or prefer graph_apply to batch+commit.",
+            "PREFERRED atomic edit for node/edge fields in the draft (prefer "
+            "over graph_cursor_* and over whole-graph model rewrite). Provide "
+            "node, edge, or selector plus set as 'field=value' (array "
+            "allowed). Nodes: label/shape/parent/style/fillColor/strokeColor/"
+            "x/y/w/h. Edges: from/to/label/style/arrow/strokeColor/headStart/"
+            "headEnd/labelX/labelY/waypoints (JSON array). For polyline-only "
+            "changes prefer graph_set_edge_route; for relative move prefer "
+            "graph_nudge_node. Then graph_commit all=true, or graph_apply. "
+            "Export to=model → hand-edit → import remains possible as a last "
+            "resort when fields/tools cannot express the change.",
             p, req));
     }
 
@@ -391,9 +413,12 @@ inline Json toolList()
         req.push(Json("waypoints"));
         tools.push(toolDef(
             "graph_set_edge_route",
-            "Set polyline waypoints for one edge in the draft (preferred over "
-            "exporting model JSON). Commit with graph_commit all=true or "
-            "graph_apply.",
+            "PREFERRED tool to set or replace one edge's polyline waypoints "
+            "in the draft. Prefer this over graph_export to=model + hand "
+            "edit + graph_import (that path is a last resort only when atomic "
+            "tools cannot express the change). Pass waypoints as [{x,y},...] "
+            "(or [] to clear). Optionally recomputes labelX/labelY. Commit "
+            "with graph_commit all=true or batch via graph_apply update ops.",
             p, req));
     }
 
@@ -407,8 +432,9 @@ inline Json toolList()
         req.push(Json("edge"));
         tools.push(toolDef(
             "graph_clear_edge_route",
-            "Clear edge waypoints so exporters fall back to default routing. "
-            "Writes draft; commit with all=true.",
+            "Clear one edge's waypoints in the draft so exporters use default "
+            "routing. Prefer this over rewriting whole-graph model JSON. "
+            "Commit with graph_commit all=true.",
             p, req));
     }
 
@@ -424,8 +450,10 @@ inline Json toolList()
         req.push(Json("node"));
         tools.push(toolDef(
             "graph_nudge_node",
-            "Translate one node by relative dx/dy in the draft (for fine "
-            "layout tweaks). Commit with all=true.",
+            "PREFERRED fine layout tweak: add relative dx/dy to one node's "
+            "position in the draft. Prefer this over absolute x/y when "
+            "nudging, and over whole-graph model rewrite (last resort). "
+            "Commit with graph_commit all=true.",
             p, req));
     }
 
@@ -443,8 +471,9 @@ inline Json toolList()
         req.push(Json("edge"));
         tools.push(toolDef(
             "graph_set_edge_heads",
-            "Set edge arrow head decorations (headStart/headEnd) in the draft "
-            "and sync legacy arrow field. Commit with all=true.",
+            "Set one edge's headStart/headEnd decorations in the draft "
+            "(syncs legacy arrow). Prefer this over rewriting model JSON "
+            "(last resort). Commit with graph_commit all=true.",
             p, req));
     }
 
@@ -643,11 +672,15 @@ inline Json toolList()
         req.push(Json("ops"));
         tools.push(toolDef(
             "graph_apply",
-            "Batch-edit a graph then commit in one call (preferred Agent "
-            "path). Applies ops[] to the draft, commits with all=true "
-            "semantics when commit=true (default), optional export_to. "
-            "Do not use graph_cursor_* or empty graph_stage for this workflow. "
-            "Edge update ops may set waypoints/labelX/labelY/headStart/headEnd.",
+            "PREFERRED Agent path for multi-edit + commit in one call. "
+            "Applies ops[] (update|insert|delete; same fields as "
+            "graph_update/insert/delete_element, including edge waypoints/"
+            "heads) then commits with all=true when commit=true (default). "
+            "Prefer this for ordinary diagram changes; "
+            "graph_export to=model → edit JSON → graph_import is a last "
+            "resort only when ops cannot express the change. "
+            "Do not use graph_cursor_* or empty graph_stage. Optional "
+            "export_to after commit.",
             p, req));
     }
 

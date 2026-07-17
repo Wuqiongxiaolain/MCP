@@ -264,8 +264,8 @@
 | `graph_update` | 更新节点/边属性（边支持 `waypoints`/`labelX`/`labelY`/`headStart`/`headEnd`） | `id`, `set` | `node`、`edge`、`selector`（6 种选择方式） |
 | `graph_apply` | **Agent 首选**：多改 + 一次提交（含边折点等字段） | `id`, `ops` | `message`、`commit`（默认 true）、`export_to`、`export_path` |
 | `graph_set_edge_route` | 写入边折点（推荐，免整图 model 覆盖） | `id`, `edge`, `waypoints` | `recompute_label`（默认 true） |
-| `graph_clear_edge_route` | 清空边折点（导出回退兜底路由） | `id`, `edge` | — |
-| `graph_nudge_node` | 相对平移节点 `dx`/`dy` | `id`, `node` | `dx`、`dy` |
+| `graph_clear_edge_route` | 清空边折点（导出回退兜底路由） | `id`, `edge` | `recompute_label`（默认 true） |
+| `graph_nudge_node` | 相对平移节点 `dx`/`dy`（不移动绝对折点） | `id`, `node` | `dx`、`dy`、`recompute_connected_labels`（默认 false） |
 | `graph_set_edge_heads` | 设置边两端箭头装饰 | `id`, `edge` | `headStart`、`headEnd` |
 | `graph_insert` | 插入节点/边 | `id`, `element` | `node` / `edge`（element=node\|edge）、`label`、`shape`、`from`/`to`、`parent`、`fillColor`/`strokeColor`、`x`/`y`/`w`/`h` |
 | `graph_delete_element` | 删除节点/边 | `id` | `node`、`edge`、`selector` |
@@ -280,6 +280,8 @@
 
 `graph_update` 示例：`--node A --set fillColor=#eef4ff --set strokeColor=#4a72b8`  
 边折点示例：优先 `graph_set_edge_route`；或 `graph_update` / `graph_apply` 写 `waypoints=[...]`。再次 `graph_layout` 且 `save=true` 仍会覆盖手改几何。  
+CLI 等价：`graphmcp graph update --id <gid> --edge <eid> --set 'waypoints=[{\"x\":1,\"y\":2}]'`（几何专用工具仅 MCP）。  
+`graph_nudge_node` 不移动边的绝对折点；需要时可 `recompute_connected_labels=true` 或另调折点/重布局。  
 **Agent 改图**：优先 `graph_show` 查 id → `graph_apply` / `graph_update` / 几何专用工具。整图 `graph_export to=model` → 手改 JSON → `graph_import` **可以**，但是下下策，仅当原子工具无法表达该修改时再用。  
 `graph_insert` 示例：节点带 `--fillColor`/`--strokeColor`；边带 `--strokeColor`。  
 `Node.style` 仅保留线型/遗留提示，**颜色以专用字段为准**。

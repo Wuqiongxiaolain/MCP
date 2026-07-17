@@ -35,7 +35,10 @@ description: >-
 - 不要用 `graph_cursor_*` 做「改几点」
 - 不要空 stage 后 `graph_commit`（不加 `all=true`）
 - 不要默认 `graph_layout` 却期望落盘（必须 `save=true`）；强制重排会覆盖手改几何
+- `graph_nudge_node` **不移动**边的绝对折点；需要时可设 `recompute_connected_labels=true` 仅重算相连边标签，或另调 `graph_set_edge_route` / 重布局
+- `open`/`cross` 箭头装饰经 legacy `arrow` 字段往返时会保留细粒度 heads（粗粒度 `arrow`/`both` 仅作兼容）
 - 大导出用 `path=` / `export_path=`，勿把整图 model 灌进对话
+- 整图 `export to=model` → 手改 → `import`：**可行但为下下策**，仅当原子工具无法表达时再用
 
 ## 安装说明
 

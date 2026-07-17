@@ -114,12 +114,9 @@
 
 ### 3.4 首日成果与后续演进
 
-在 07-05 单日内已打通：
+在 07-05 单日内已打通（图 id=`day1-pipeline`）：
 
-```
-文本/结构化输入 → 统一 Graph → 校验/布局 → 多格式导出
-               → 文件系统版本存储 → MCP/CLI 可调用
-```
+![首日成果主链](images/day1-pipeline.svg)
 
 这保证项目从第一天起即可编译、运行并被 AI 客户端调用。之后在同一主链上叠加：CLI 命令族与版本游标（07-08～07-10）、**表协作 + Mermaid 深解析 + 颜色链路 + macOS CD + OpenAPI**（07-11～07-14）、**drawio 多图层/多页 + MCP 性能重构 + Jenkins DevOps + Ansible Runner 发布**（07-15～07-16，见 §四）。
 
@@ -127,16 +124,9 @@
 
 ### 4.1 时间线与里程碑
 
-```
-2026-07-05          2026-07-07        2026-07-10           2026-07-11 ~ 07-14        2026-07-15 ~ 07-16
-    │                    │                 │                        │                        │
-    ▼                    ▼                 ▼                        ▼                        ▼
-┌──────────┐  ┌────────────────┐  ┌────────────────┐  ┌──────────────────────────┐  ┌──────────────────────┐
-│ Day 1    │  │ Day 2~4        │  │ Day 5~6        │  │ 扩展期 I                 │  │ 扩展期 II            │
-│ 核心引擎  │─▶│ CI/CD + CLI    │─▶│ 编辑器 + 文档   │─▶│ 表协作 / Mermaid /       │─▶│ drawio / MCP 性能    │
-│ 全部模块  │  │ 版本与白板     │  │ 初步收尾        │  │ macOS CD / 颜色 / OpenAPI│  │ Jenkins/Ansible 发布 │
-└──────────┘  └────────────────┘  └────────────────┘  └──────────────────────────┘  └──────────────────────┘
-```
+开发里程碑（图 id=`dev-milestones`；制图版本见 [`diagrams/doc-figures`](diagrams/doc-figures)）：
+
+![开发里程碑时间线](images/dev-milestones.svg)
 
 | 阶段 | 日期 | 关键产出 |
 |------|------|---------|
@@ -190,24 +180,9 @@
 
 ### 5.1 分支策略
 
-```
-main ────────────────────────────────────────────────────────▶ (主线)
-  │
-  ├── feature/github-actions-cicd    → PR #10, #11       (CI/CD 迁移)
-  ├── feature/excalidraw-export-...  → PR #16            (白板导出)
-  ├── CLI                            → PR #13            (CLI 重构+版本+游标)
-  ├── ah_feng-editor-v2              → PR #25            (编辑器闭环)
-  ├── feature/mcp-three-layer-tests  → PR #26            (MCP 测试)
-  ├── docs/*                         → PR #41, #73~75    (文档分层与同步)
-  ├── feature/ah-feng-log-local      → PR #71            (颜色/BOM/[*])
-  ├── feat/benchmark-ci              → PR #72            (性能基准 CI)
-  ├── chore/ci-baseline-policy       → PR #76            (CI 策略重构)
-  ├── fix/drawio-compatibility       → PR #80            (drawio 多图层/多页)
-  ├── perf/improve-mcp-overall       → PR #79            (MCP 性能重构)
-  ├── feat/local-jenkins-devops      → PR #84            (Jenkins DevOps)
-  ├── feat/replace-semaphore-...     → PR #85            (Ansible Runner)
-  └── feature/layout-crossing-...    → PR #78            (分层布局增强)
-```
+分支策略示意（图 id=`branch-strategy`；代表性 PR，非完整列表）：
+
+![分支策略](images/branch-strategy.svg)
 
 ### 5.2 PR 工作流
 

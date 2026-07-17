@@ -333,20 +333,9 @@ graphmcp store delete --id X --force   # 删除图
 
 #### 工作流总览
 
-```
-                 graph update/insert/delete
-    [HEAD]  ──────────────────────────────>  [Draft 草稿]
-                                               |
-                                        version stage
-                                               |
-                                               v
-                                          [Stage 暂存]
-                                               |
-                                       version commit
-                                               |
-                                               v
-                                          [新版本 Commit]
-```
+图版本工作流（图 id=`version-workflow`；与 [APPLICATION_LOGIC](APPLICATION_LOGIC.md) 共用）：
+
+![图版本 Draft-Stage-Commit](images/version-workflow.svg)
 
 #### 状态查看
 

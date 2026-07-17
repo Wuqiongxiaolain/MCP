@@ -4,6 +4,7 @@
 #
 # 说明：Debian 源提供 docker.io（含客户端，用于连接宿主机 docker.sock）；
 # 不在镜像内启动 dockerd。jenkins_home 使用已有外部卷，重建不丢 Job。
+# entrypoint 启动时按 sock 的 GID 把 jenkins 加入对应组，避免每次重建手改权限。
 
 services:
   jenkins:
@@ -11,6 +12,7 @@ services:
     image: mcp-jenkins:local
     container_name: jenkins
     restart: unless-stopped
+    # 入口脚本需 root 起步再降权；勿在此覆盖 user: jenkins
     networks:
       - devops-net
     ports:

@@ -3066,6 +3066,190 @@ static void testMcpJsonRoundTripDashLabel()
     CHECK(g.edges[1].from == "B" && g.edges[1].to == "C");
 }
 
+// testGeometryEditMcp: 折点/nudge/heads MCP 工具与非法 waypoints
+static void testGeometryEditMcp()
+{
+#ifdef _WIN32
+    _putenv_s("GRAPHMCP_STORE", "test-geom-edit-tmp");
+#else
+    setenv("GRAPHMCP_STORE", "test-geom-edit-tmp", 1);
+#endif
+    ge::removeDirectory("test-geom-edit-tmp");
+    gs::Store store("test-geom-edit-tmp");
+
+    Graph g = gp::parseMermaid(
+        "flowchart TD\nA[Start]-- \"go\" -->B[End]\n");
+    gl::layout(g);
+    CHECK(g.laidOut);
+    CHECK(!g.edges.empty());
+    std::string eid = g.edges[0].id;
+    int         v   = store.save(g, "geom base");
+    CHECK(v >= 1);
+    std::string gid = g.id;
+
+    std::string err;
+    Json        resp;
+    auto textOf = [&]() -> std::string {
+        const Json* r = resp.find("result");
+        if (!r)
+            return "";
+        const Json* c = r->find("content");
+        if (!c || !c->isArr() || c->a->empty())
+            return "";
+        return (*c->a)[0].str("text");
+    };
+    auto isErr = [&]() -> bool {
+        const Json* r = resp.find("result");
+        return r && r->boolean("isError", false);
+    };
+
+    // graph_set_edge_route
+    Json route = Json::parse(
+        R"({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
+            "name":"graph_set_edge_route","arguments":{"id":")" +
+            gid + R"(","edge":")" + eid +
+            R"(","waypoints":[{"x":111,"y":222},{"x":333,"y":444}],
+              "recompute_label":true}}})",
+        &err);
+    CHECK(err.empty());
+    CHECK(mcp::handleMessage(route, store, resp));
+    CHECK(!isErr());
+
+    Json commit = Json::parse(
+        R"({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{
+            "name":"graph_commit","arguments":{"id":")" +
+            gid + R"(","message":"set route","all":true}}})",
+        &err);
+    CHECK(mcp::handleMessage(commit, store, resp));
+    CHECK(!isErr());
+
+    Graph g2;
+    CHECK(store.load(gid, g2));
+    CHECK(!g2.edges.empty());
+    Edge* e2 = nullptr;
+    for (auto& e : g2.edges)
+        if (e.id == eid) {
+            e2 = &e;
+            break;
+        }
+    CHECK(e2 != nullptr);
+    CHECK(e2->waypoints.size() == 2);
+    CHECK(e2->waypoints[0].first == 111.0);
+    CHECK(e2->waypoints[1].second == 444.0);
+    CHECK(e2->labelX != 0.0 || e2->labelY != 0.0);
+
+    // graph_nudge_node
+    const Node* a0 = g2.findNode("A");
+    CHECK(a0 != nullptr);
+    double ax = a0->x, ay = a0->y;
+    Json nudge = Json::parse(
+        R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
+            "name":"graph_nudge_node","arguments":{"id":")" +
+            gid + R"(","node":"A","dx":10,"dy":-5}}})",
+        &err);
+    CHECK(mcp::handleMessage(nudge, store, resp));
+    CHECK(!isErr());
+    Json commit2 = Json::parse(
+        R"({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{
+            "name":"graph_commit","arguments":{"id":")" +
+            gid + R"(","message":"nudge","all":true}}})",
+        &err);
+    CHECK(mcp::handleMessage(commit2, store, resp));
+    Graph g3;
+    CHECK(store.load(gid, g3));
+    const Node* a1 = g3.findNode("A");
+    CHECK(a1 != nullptr);
+    CHECK(std::abs(a1->x - (ax + 10)) < 1e-6);
+    CHECK(std::abs(a1->y - (ay - 5)) < 1e-6);
+
+    // graph_set_edge_heads
+    Json heads = Json::parse(
+        R"({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{
+            "name":"graph_set_edge_heads","arguments":{"id":")" +
+            gid + R"(","edge":")" + eid +
+            R"(","headStart":"arrow","headEnd":"none"}}})",
+        &err);
+    CHECK(mcp::handleMessage(heads, store, resp));
+    CHECK(!isErr());
+    Json commit3 = Json::parse(
+        R"({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{
+            "name":"graph_commit","arguments":{"id":")" +
+            gid + R"(","message":"heads","all":true}}})",
+        &err);
+    CHECK(mcp::handleMessage(commit3, store, resp));
+    Graph g4;
+    CHECK(store.load(gid, g4));
+    for (auto& e : g4.edges) {
+        if (e.id == eid) {
+            CHECK(e.headStart == "arrow");
+            CHECK(e.headEnd == "none");
+            CHECK(e.arrow == "arrow");
+            break;
+        }
+    }
+
+    // graph_clear_edge_route
+    Json clear = Json::parse(
+        R"({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{
+            "name":"graph_clear_edge_route","arguments":{"id":")" +
+            gid + R"(","edge":")" + eid + R"("}}})",
+        &err);
+    CHECK(mcp::handleMessage(clear, store, resp));
+    CHECK(!isErr());
+    Json commit4 = Json::parse(
+        R"({"jsonrpc":"2.0","id":8,"method":"tools/call","params":{
+            "name":"graph_commit","arguments":{"id":")" +
+            gid + R"(","message":"clear route","all":true}}})",
+        &err);
+    CHECK(mcp::handleMessage(commit4, store, resp));
+    Graph g5;
+    CHECK(store.load(gid, g5));
+    for (auto& e : g5.edges) {
+        if (e.id == eid) {
+            CHECK(e.waypoints.empty());
+            break;
+        }
+    }
+
+    // 非法 waypoints
+    Json bad = Json::parse(
+        R"({"jsonrpc":"2.0","id":9,"method":"tools/call","params":{
+            "name":"graph_set_edge_route","arguments":{"id":")" +
+            gid + R"(","edge":")" + eid +
+            R"(","waypoints":"not-an-array"}}})",
+        &err);
+    CHECK(mcp::handleMessage(bad, store, resp));
+    CHECK(isErr() || textOf().find("invalid waypoints") != std::string::npos);
+
+    // graph_update 写 waypoints
+    Json upd = Json::parse(
+        R"({"jsonrpc":"2.0","id":10,"method":"tools/call","params":{
+            "name":"graph_update","arguments":{"id":")" +
+            gid + R"(","edge":")" + eid +
+            R"(","set":"waypoints=[{\"x\":1,\"y\":2}]"}}})",
+        &err);
+    CHECK(mcp::handleMessage(upd, store, resp));
+    CHECK(!isErr());
+    Json commit5 = Json::parse(
+        R"({"jsonrpc":"2.0","id":11,"method":"tools/call","params":{
+            "name":"graph_commit","arguments":{"id":")" +
+            gid + R"(","message":"update wp","all":true}}})",
+        &err);
+    CHECK(mcp::handleMessage(commit5, store, resp));
+    Graph g6;
+    CHECK(store.load(gid, g6));
+    for (auto& e : g6.edges) {
+        if (e.id == eid) {
+            CHECK(e.waypoints.size() == 1);
+            CHECK(e.waypoints[0].first == 1.0);
+            CHECK(e.waypoints[0].second == 2.0);
+            break;
+        }
+    }
+
+    ge::removeDirectory("test-geom-edit-tmp");
+}
+
 int runAll()
 {
     // 防止 graph_open / export 等路径意外拉起浏览器或外部编辑器
@@ -3118,6 +3302,7 @@ int runAll()
     testEdgeLabelPosition();
     testDrawioEdgeLabelRoundTrip();
     testMcpJsonRoundTripDashLabel();
+    testGeometryEditMcp();
     std::cout << "tests: " << g_passed << " passed, " << g_failed
               << " failed\n";
     return g_failed == 0 ? 0 : 1;

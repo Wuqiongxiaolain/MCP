@@ -469,6 +469,27 @@ static void testEdgeFieldAccess()
 
     gv::setEdgeField(e, "style", "solid");
     CHECK(e.style == "solid");
+
+    // waypoints / heads / label 坐标
+    CHECK(gv::setEdgeField(e, "waypoints",
+                           R"([{"x":10,"y":20},{"x":30,"y":40}])"));
+    CHECK(e.waypoints.size() == 2);
+    CHECK(e.waypoints[0].first == 10.0);
+    CHECK(e.waypoints[1].second == 40.0);
+    CHECK(gv::getEdgeField(e, "waypoints").find("\"x\":10") !=
+          std::string::npos);
+
+    CHECK(!gv::setEdgeField(e, "waypoints", "not-json"));
+    CHECK(e.waypoints.size() == 2);  // 非法输入不改写
+
+    CHECK(gv::setEdgeField(e, "waypoints", "[]"));
+    CHECK(e.waypoints.empty());
+
+    CHECK(gv::setEdgeField(e, "headStart", "arrow"));
+    CHECK(gv::setEdgeField(e, "headEnd", "arrow"));
+    CHECK(e.arrow == "both");
+    CHECK(gv::setEdgeField(e, "labelX", "12.5"));
+    CHECK(e.labelX == 12.5);
 }
 
 int main()

@@ -16,8 +16,8 @@
 
 | 门禁 | 状态 | 说明 |
 |------|:----:|------|
-| **总体** | `{{OVERALL}}` | PASS / FAIL / PARTIAL |
-| cppcheck（必过） | `{{CPPCHECK_STATUS}}` | error 级 >0 → FAIL |
+| **总体** | `{{OVERALL}}` | PASS / WARN / FAIL / PARTIAL |
+| cppcheck（必过） | `{{CPPCHECK_STATUS}}` | error→FAIL；warning→**WARN（不阻断）**；style 只记报告 |
 | SonarQube / SonarCloud（可选） | `{{SONAR_STATUS}}` | PASS / FAIL / **SKIPPED** |
 
 > **规则**：未配置 Sonar（`SONAR_ENABLED` 未开或缺少 Token/URL）必须写 **SKIPPED**，不得记为 PASS。  
@@ -27,7 +27,7 @@
 
 | 项 | 值 |
 |----|----|
-| 命令 | `cppcheck --enable=warning,style,performance,portability --inline-suppr -q src`（门禁仅看 error） |
+| 命令 | `cppcheck --enable=warning,style,performance,portability --inline-suppr -q src` |
 | exit | `{{CPPCHECK_EXIT}}` |
 | error 数 | `{{CPPCHECK_ERRORS}}` |
 | warning 数 | `{{CPPCHECK_WARNINGS}}` |
@@ -51,9 +51,10 @@
 
 ## 阻断规则（本项目）
 
-1. cppcheck **error** 级问题 → 阻断合并/发版。
-2. Sonar 已启用且 Quality Gate 失败 → 阻断（仅 push main/dev 且配置完整时）。
-3. Sonar SKIPPED → 不阻断，但须在 [ACCEPTANCE_DOD](../ACCEPTANCE_DOD.md) 中明示。
+1. cppcheck **error** 级 → 阻断合并/发版。
+2. cppcheck **warning** 级 → 报告 **WARN**，**不阻断** CI，签核时须审阅。
+3. Sonar 已启用且 Quality Gate 失败 → 阻断（仅 push main/dev 且配置完整时）。
+4. Sonar SKIPPED → 不阻断，但须在 [ACCEPTANCE_DOD](../ACCEPTANCE_DOD.md) 中明示。
 
 ## 相关
 

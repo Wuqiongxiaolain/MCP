@@ -1,6 +1,7 @@
 # 性能报告模板
 
-> 数据源：`bin/bench_result.json`（相对 `tests/bench_baseline.json`）。CI 通过 `make bench-ci` 比对；本页给人看结论。
+> 数据源：`bin/bench_result.json`（相对 `tests/bench_baseline.json`）。  
+> CI 通过 `make bench-ci` 比对后，由 `scripts/generate_perf_report.py` **组装**为 Artifact 中的 `docs/PERF_REPORT.md`（不入库）。本地可 `make docs-perf-report`。
 
 ## 元信息
 

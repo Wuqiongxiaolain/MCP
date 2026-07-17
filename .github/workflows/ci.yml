@@ -86,6 +86,10 @@ jobs:
           fi
           python3 scripts/generate_quality_gate_report.py
 
+      - name: 性能报告（组装 bench 结果，不重跑）
+        if: always()
+        run: python3 scripts/generate_perf_report.py || true
+
       - name: 写入 Job Summary
         if: always()
         run: |
@@ -99,6 +103,12 @@ jobs:
             echo "---" >> "$GITHUB_STEP_SUMMARY"
             cat docs/QUALITY_GATE_REPORT.md >> "$GITHUB_STEP_SUMMARY"
           fi
+          if [ -f docs/PERF_REPORT.md ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "---" >> "$GITHUB_STEP_SUMMARY"
+            # 摘要过长时只贴结论段（前 80 行）
+            head -n 80 docs/PERF_REPORT.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: 上传汇总测试报告
         if: always()
@@ -110,6 +120,8 @@ jobs:
             docs/TEST_REPORT.json
             docs/QUALITY_GATE_REPORT.md
             docs/QUALITY_GATE_REPORT.json
+            docs/PERF_REPORT.md
+            docs/PERF_REPORT.json
             docs/SMOKE_REPORT.md
             docs/images/test-report-summary.svg
             docs/ci_results/

@@ -1044,6 +1044,7 @@ def write_markdown(
         "- 性能结果：`bin/bench_result.json`（相对 `tests/bench_baseline.json`）",
         "- 样例导出明细：`examples/example_testout/TEST_REPORT.md`（非本文件替代品）",
         "- 质量门：`docs/QUALITY_GATE_REPORT.md`",
+        "- 性能报告：`docs/PERF_REPORT.md`",
         "- 验收清单：`docs/ACCEPTANCE_DOD.md`",
         "- 捕获日志：`docs/ci_results/`",
         "",

@@ -11,6 +11,7 @@
 | `docs/TEST_REPORT.md`（**仅 CI Artifact，不入库**） | **验收用**汇总：单元 / 冒烟 / bench / 导出回归 + **GO/NO-GO** | [GitHub Actions](https://github.com/Wuqiongxiaolain/MCP/actions) Artifact `docs-test-report-*` 或 Jenkins Artifacts |
 | [`examples/example_testout/TEST_REPORT.md`](../examples/example_testout/TEST_REPORT.md) | **样例导出明细**（单文件×格式 PASS/SKIP；本地/CI 可生成） | 同上 Artifact 内嵌，或本地 `scripts/export-example-testout.sh` |
 | [`docs/templates/QUALITY_GATE_REPORT.md`](templates/QUALITY_GATE_REPORT.md) → Artifact `QUALITY_GATE_REPORT.md` | 静态质量门（cppcheck 必过；Sonar 可选） | CI Artifact |
+| [`docs/templates/PERF_REPORT.md`](templates/PERF_REPORT.md) → Artifact `PERF_REPORT.md` | 性能结论（bench vs 基线） | CI Artifact（与 `bin/bench_result.json` 同包） |
 | [`docs/templates/DEPLOY_RELEASE_REPORT.md`](templates/DEPLOY_RELEASE_REPORT.md) → Artifact | 发布/部署结果 | CD / Jenkins Deploy |
 | [`docs/api_reference/openapi.yaml`](api_reference/openapi.yaml) | MCP 契约（**生成物**；真源为 `toolList()`） | 仓库内；CI `git diff` 校验 |
 
@@ -24,7 +25,7 @@
 | 2 | CLI 冒烟 + MCP 冒烟 + table 冒烟通过 | | 同上；`docs/SMOKE_REPORT.md` |
 | 3 | 样例全量导出回归无意外 FAIL | | `examples/example_testout/TEST_REPORT.*` |
 | 4 | OpenAPI 与 `toolList()` 无漂移（`make docs-api` 后无 diff） | | CI step「校验 OpenAPI」 |
-| 5 | 性能 bench 相对基线未破门禁（WARN 可接受并需说明） | | `bin/bench_result.json`；模板见 [PERF_REPORT](templates/PERF_REPORT.md) |
+| 5 | 性能 bench 相对基线未破门禁（WARN 可接受并需说明） | | `docs/PERF_REPORT.md` + `bin/bench_result.json` |
 | 6 | 质量门：cppcheck 无 error；若有 warning 则报告为 WARN（可合入，须审阅） | | `docs/QUALITY_GATE_REPORT.md` |
 | 7 | 质量门：SonarQube/SonarCloud（有配置则 PASS；未配置则 SKIPPED） | | 同上；勿将 SKIPPED 记为 PASS |
 | 8 | `VERSION` 与 README / 关键文档页眉版本一致 | | 根目录 `VERSION` |

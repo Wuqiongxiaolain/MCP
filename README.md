@@ -42,7 +42,7 @@
 | [运维 Runbook](docs/RUNBOOK.md) | Jenkins / Ansible / nginx 启停、发版、排查、回滚 |
 | [质量门报告模板](docs/templates/QUALITY_GATE_REPORT.md) | cppcheck 必过；Sonar 可选（SKIPPED 须明示） |
 | [发布/部署报告模板](docs/templates/DEPLOY_RELEASE_REPORT.md) | 版本、制品哈希、健康检查、回滚 |
-| [性能报告模板](docs/templates/PERF_REPORT.md) | bench 18 指标 vs 基线 |
+| [性能报告模板](docs/templates/PERF_REPORT.md) | bench 18+ 指标 vs 基线；CI 产出 `PERF_REPORT.md` Artifact |
 | [代码审查归档](docs/reviews/README.md) | 重大改造审查结论入库约定 |
 
 ### 技术选型分析
@@ -93,6 +93,7 @@ make docs-api
 | `make docs-test-report` | 从 `docs/ci_results/` **组装**报告（不重跑；CI 用） |
 | `make docs-test-report-local` | 本地完整重跑后生成报告（调试用） |
 | `make docs-quality-gate` | cppcheck + Sonar 状态 → 质量门报告 |
+| `make docs-perf-report` | 组装 bench vs 基线 → 性能报告 |
 | `make docs-deploy-report` | 本地组装发布/部署报告骨架 |
 
 ### 版本 / 基线 / 发布（GitHub Actions + Jenkins）

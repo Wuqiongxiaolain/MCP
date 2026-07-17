@@ -35,6 +35,8 @@ docs/TEST_REPORT.json
 docs/SMOKE_REPORT.md
 docs/QUALITY_GATE_REPORT.md
 docs/QUALITY_GATE_REPORT.json
+docs/PERF_REPORT.md
+docs/PERF_REPORT.json
 docs/DEPLOY_RELEASE_REPORT.md
 docs/DEPLOY_RELEASE_REPORT.json
 docs/images/test-report-summary.svg

@@ -247,6 +247,12 @@ pipeline {
           }
         }
 
+        stage('Perf report') {
+          steps {
+            sh 'python3 scripts/generate_perf_report.py || true'
+          }
+        }
+
         stage('Package') {
           steps {
             sh '''
@@ -273,9 +279,11 @@ pipeline {
               printf '%s\n' 'SONAR_STATUS=SKIPPED' 'SONAR_SKIP_REASON=Jenkins 管线不含 SonarQube' > docs/ci_results/sonar_status.env
             fi
             python3 scripts/generate_quality_gate_report.py || true
+            python3 scripts/generate_perf_report.py || true
           '''
           archiveArtifacts artifacts: 'docs/TEST_REPORT.md,docs/TEST_REPORT.json,docs/SMOKE_REPORT.md,docs/images/test-report-summary.svg', allowEmptyArchive: true
           archiveArtifacts artifacts: 'docs/QUALITY_GATE_REPORT.md,docs/QUALITY_GATE_REPORT.json', allowEmptyArchive: true
+          archiveArtifacts artifacts: 'docs/PERF_REPORT.md,docs/PERF_REPORT.json', allowEmptyArchive: true
           archiveArtifacts artifacts: 'docs/ci_results/**', allowEmptyArchive: true
           archiveArtifacts artifacts: 'bin/bench_result.json', allowEmptyArchive: true, fingerprint: true
           archiveArtifacts artifacts: 'mcp-smoke.log', allowEmptyArchive: true

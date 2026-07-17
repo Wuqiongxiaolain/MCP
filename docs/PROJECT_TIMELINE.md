@@ -44,7 +44,7 @@
 
 ## 版本演进
 
-S 形演进图（由 graphmcp 导出；制图版本库见 [`diagrams/timeline-s`](diagrams/timeline-s)，图 id=`timeline-s`）：
+S 形演进图（由 graphmcp 导出；制图说明见 [`diagrams/README.md`](diagrams/README.md)，图 id=`timeline-s`）：
 
 ![版本演进 S 形图](images/version-evolution-s.svg)
 

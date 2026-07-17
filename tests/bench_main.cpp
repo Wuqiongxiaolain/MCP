@@ -416,7 +416,8 @@ static void benchTableModel()
 
 static void benchTableXml()
 {
-    // ── XML 往返规模测试 ──
+    // SpreadsheetML 2003 往返（默认 toXml/fromXml）。
+    // 相对旧 <table> 方言：写出更轻，读入因 Cell/Data 节点更多而更重——属格式成本。
     for (int n : {50, 200, 500}) {
         std::string csv    = makeCsv(n, 5);
         gt::Table   t      = gt::Table::fromCsv(csv);

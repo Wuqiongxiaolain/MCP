@@ -54,6 +54,9 @@ jobs:
         run: bash scripts/ci_capture.sh table-smoke bash tests/table_smoke.sh bin/graphmcp
 
       - name: MCP 性能冒烟
+        env:
+          # 共享 runner 抖动下大载荷常 >1s；默认脚本已 2500，CI 再留余量
+          GRAPHMCP_SMOKE_MAX_LARGE_MS: "3000"
         run: bash scripts/ci_capture.sh perf-smoke python3 scripts/mcp_perf_smoke.py bin/graphmcp
 
       - name: 性能基准测试

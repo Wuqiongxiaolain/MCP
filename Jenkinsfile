@@ -165,7 +165,10 @@ pipeline {
             sh 'bash scripts/ci_capture.sh smoke bash tests/smoke_test.sh bin/graphmcp'
             sh 'bash scripts/ci_capture.sh mcp-smoke bash tests/mcp_smoke.sh bin/graphmcp'
             sh 'bash scripts/ci_capture.sh table-smoke bash tests/table_smoke.sh bin/graphmcp'
-            sh 'bash scripts/ci_capture.sh perf-smoke python3 scripts/mcp_perf_smoke.py bin/graphmcp'
+            sh '''
+              export GRAPHMCP_SMOKE_MAX_LARGE_MS="${GRAPHMCP_SMOKE_MAX_LARGE_MS:-3000}"
+              bash scripts/ci_capture.sh perf-smoke python3 scripts/mcp_perf_smoke.py bin/graphmcp
+            '''
           }
         }
 

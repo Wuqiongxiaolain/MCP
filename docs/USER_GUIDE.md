@@ -667,7 +667,7 @@ graphmcp table export <table-id> --to xml -o enemies.xml   # SpreadsheetML
 graphmcp table export <table-id> --to csv -o enemies.csv   # Excel / 人侧首选
 ```
 
-`format=xml` 自动识别：SpreadsheetML 或旧版命名字段行（根 `<table>`）。显式旧格式用 `format=table-xml` / `--to table-xml`。样例 `enemy_sample.table-xml.xml` 为旧方言参考。未知 `format`/`to` 会报错（不静默回退）。
+`format=xml` 自动识别：SpreadsheetML 或旧版命名字段行（根 `<table>`）。显式旧格式用 `format=table-xml` / `--to table-xml`。SpreadsheetML **只读/写出首个 Worksheet**。样例 `enemy_sample.table-xml.xml` 为旧方言参考。未知 `format`/`to` 会报错（不静默回退）。单元格含裸换行时请优先用 `model`（CSV 导入按行拆分，引号内换行无法完整往返）。
 
 维护说明：表 XML 与 CSV 并行解析后进入同一 `Table`；实现上有意少改 `fromCsv`。若两侧装表行为漂移、再增第三种表格式、或需表侧脱离图解析头，应单独做 `xml_util`/`buildTable` 抽离重构（见 `APPLICATION_LOGIC.md`）。
 

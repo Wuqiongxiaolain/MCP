@@ -1856,6 +1856,25 @@ static void testTableModel()
     gt::Table bom = gt::Table::fromCsv("\xEF\xBB\xBF编号,名称\n1,爬虫\n");
     CHECK(bom.colIndex("编号") == 0);
     CHECK(bom.cell(0, 1) == "爬虫");
+    // exportTableText：no_bom 与 lf/crlf 独立（对齐 CLI）
+    {
+        gt::Table t;
+        t.columns = {"a"};
+        t.rows    = {{"1"}};
+        std::string both =
+            gtx::exportTableText(t, "csv", gt::CsvWriteOpts{true, true});
+        CHECK(both.size() >= 3 && (unsigned char)both[0] == 0xEF);
+        CHECK(both.find("\r\n") != std::string::npos);
+        std::string no_bom_crlf =
+            gtx::exportTableText(t, "csv", gt::CsvWriteOpts{false, true});
+        CHECK(!(no_bom_crlf.size() >= 3 &&
+                (unsigned char)no_bom_crlf[0] == 0xEF));
+        CHECK(no_bom_crlf.find("\r\n") != std::string::npos);
+        std::string raw =
+            gtx::exportTableText(t, "csv", gt::CsvWriteOpts{false, false});
+        CHECK(raw.find("\r\n") == std::string::npos);
+    }
+
     // 无 BOM 旧文件仍可导入
     gt::Table legacy = gt::Table::fromCsv("编号,名称\n1,爬虫\n");
     CHECK(legacy.colIndex("编号") == 0);
@@ -2508,7 +2527,7 @@ static void testTableXml()
         CHECK(t.cell(0, 2) == "3");
     }
 
-    // SpreadsheetML 空表头单元格 → col_N；重复列名 warning
+    // SpreadsheetML 空表头 → col_N；重复列名占位为 a__2，数据列不丢
     {
         const char* hdr =
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
@@ -2527,10 +2546,17 @@ static void testTableXml()
             "</Table></Worksheet></Workbook>";
         std::vector<std::string> warns;
         gt::Table                t = gtx::fromXml(hdr, &warns);
-        CHECK(t.columns.size() == 2);
+        CHECK(t.columns.size() == 3);
         CHECK(t.columns[0] == "col_0");
         CHECK(t.columns[1] == "a");
+        CHECK(t.columns[2] == "a__2");
+        CHECK(t.cell(0, 0) == "1");
+        CHECK(t.cell(0, 1) == "2");
+        CHECK(t.cell(0, 2) == "3");
         CHECK(!warns.empty());
+        if (!warns.empty())
+            CHECK(warns[0].find("duplicate column renamed") !=
+                  std::string::npos);
     }
 
     // UTF-8 工作表名按码点截断（长名往返不崩）

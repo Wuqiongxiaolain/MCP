@@ -857,7 +857,7 @@ paths:
     post:
       operationId: table_export
       summary: table_export
-      description: Export a stored table. Default csv is Excel-friendly (UTF-8 BOM+CRLF). xml=SpreadsheetML 2003; table-xml=legacy dialect; model=JSON.
+      description: Export a stored table. Default csv is Excel-friendly (UTF-8 BOM+CRLF). no_bom/lf control csv independently. xml=SpreadsheetML 2003; table-xml=legacy; model=JSON.
       requestBody:
         required: true
         content:
@@ -879,7 +879,10 @@ paths:
                   description: version to export (default latest)
                 no_bom:
                   type: boolean
-                  description: "if true, csv uses raw UTF-8 LF without BOM (default false)"
+                  description: "if true, csv omits UTF-8 BOM (default false; independent of lf)"
+                lf:
+                  type: boolean
+                  description: "if true, csv uses LF line endings; default false = CRLF (Excel-friendly)"
               required:
                 - id
       responses:

@@ -686,13 +686,18 @@ inline Json toolList()
         p.set("version", prop("number", "version to export (default latest)"));
         p.set("no_bom",
               prop("boolean",
-                   "if true, csv uses raw UTF-8 LF without BOM (default false)"));
+                   "if true, csv omits UTF-8 BOM (default false; independent "
+                   "of lf)"));
+        p.set("lf",
+              prop("boolean",
+                   "if true, csv uses LF line endings; default false = CRLF "
+                   "(Excel-friendly)"));
         Json req = Json::arr();
         req.push(Json("id"));
         tools.push(toolDef("table_export",
                            "Export a stored table. Default csv is Excel-friendly "
-                           "(UTF-8 BOM+CRLF). xml=SpreadsheetML 2003; "
-                           "table-xml=legacy dialect; model=JSON.",
+                           "(UTF-8 BOM+CRLF). no_bom/lf control csv independently. "
+                           "xml=SpreadsheetML 2003; table-xml=legacy; model=JSON.",
                            p, req));
     }
     {

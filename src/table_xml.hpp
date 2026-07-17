@@ -163,6 +163,34 @@ namespace detail {
         t.columns.push_back(name);
     }
 
+    // columnNameTaken: 列名是否已存在（精确匹配）
+    inline bool columnNameTaken(const Table& t, const std::string& name)
+    {
+        for (auto& c : t.columns)
+            if (c == name)
+                return true;
+        return false;
+    }
+
+    // appendColumnSlot: 始终占一列；重名时改为 name__2、name__3… 并 warning
+    // 用于 SpreadsheetML 表头，保证列宽与 ss:Index 物理宽度一致
+    inline void appendColumnSlot(Table&                    t,
+                                 const std::string&        name,
+                                 std::vector<std::string>* warnings)
+    {
+        std::string slot = name;
+        if (columnNameTaken(t, slot)) {
+            size_t n = 2;
+            while (columnNameTaken(t, name + "__" + std::to_string(n)))
+                n++;
+            slot = name + "__" + std::to_string(n);
+            if (warnings)
+                warnings->push_back("duplicate column renamed: " + name +
+                                    " -> " + slot);
+        }
+        t.columns.push_back(slot);
+    }
+
     // utf8PrefixByCodepoints: 按 UTF-8 码点截断（不切开多字节字符）
     inline std::string utf8PrefixByCodepoints(const std::string& s,
                                               size_t             max_cp)
@@ -371,7 +399,7 @@ namespace detail {
             std::string h = headers[i];
             if (h.empty())
                 h = "col_" + std::to_string(i);
-            appendColumnUnique(t, h, warnings);
+            appendColumnSlot(t, h, warnings);
         }
     }
 
@@ -697,15 +725,16 @@ inline Table parseTableContent(const std::string&        content,
 }
 
 // exportTableText: 按 to 导出
-// xml → SpreadsheetML；table-xml → 旧方言；excelCsv 仅影响 csv
-inline std::string exportTableText(const Table& t, const std::string& to,
-                                   bool excelCsv = true)
+// xml → SpreadsheetML；table-xml → 旧方言；csv_opts 仅影响 csv
+inline std::string exportTableText(const Table&          t,
+                                   const std::string&    to,
+                                   gt::CsvWriteOpts      csv_opts = {})
 {
     std::string fmt = gm::toLower(to);
     if (fmt.empty())
         fmt = "csv";
     if (fmt == "csv")
-        return excelCsv ? t.toCsv() : t.toCsvRaw();
+        return t.toCsv(csv_opts);
     if (fmt == "model" || fmt == "json")
         return t.toJson().dump();
     if (fmt == "xml")

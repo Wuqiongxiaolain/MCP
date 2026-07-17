@@ -952,7 +952,7 @@ int cmdTable(Args& a, gs::Store& store)
                 // 写文件用 BOM+CRLF；写 stdout 用 BOM+LF（由 Windows 文本模式补 \r）
                 text = t.toCsv(csvOptsFromArgs(a, !a.has("output")));
             else
-                text = gtx::exportTableText(t, to, true);
+                text = gtx::exportTableText(t, to);
         }
         catch (const gt::TableError& e) {
             std::cerr << "error: " << e.what() << "\n";
@@ -963,6 +963,12 @@ int cmdTable(Args& a, gs::Store& store)
                 << "note: table XML is SpreadsheetML 2003 (Excel-openable). "
                    "Legacy named-field dialect: --to table-xml. Prefer "
                    "--to csv for day-to-day Excel use.\n";
+        }
+        if (gm::toLower(to) == "table-xml" ||
+            gm::toLower(to) == "graphmcp-table-xml") {
+            std::cerr
+                << "note: table-xml is the legacy named-field dialect (not "
+                   "Excel SpreadsheetML). Prefer --to csv or --to xml.\n";
         }
         if (a.has("output")) {
             if (!ge::writeFile(a.get("output"), text)) {

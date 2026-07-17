@@ -2440,7 +2440,7 @@ static void testTableMcpTools()
 
 static void testTableXml()
 {
-    // SpreadsheetML 默认写出 / 往返
+    // SpreadsheetML 默认写出 / 往返（含 hasHintRow=false 显式写出）
     {
         gt::Table sml;
         sml.id         = "t1";
@@ -2452,6 +2452,7 @@ static void testTableXml()
         CHECK(xml.find("Workbook") != std::string::npos);
         CHECK(xml.find("mso-application") != std::string::npos);
         CHECK(xml.find("<table") == std::string::npos);
+        CHECK(xml.find("graphmcp-hasHintRow=true") != std::string::npos);
         gt::Table back = gtx::fromXml(xml);
         CHECK(back.id == "t1");
         CHECK(back.name == "demo");
@@ -2460,6 +2461,90 @@ static void testTableXml()
         CHECK(back.rows.size() == 2);
         CHECK(back.cell(0, 1) == "爬虫");
         CHECK(back.cell(1, 2) == "");
+
+        sml.hasHintRow = false;
+        std::string xml_f = gtx::toXml(sml);
+        CHECK(xml_f.find("graphmcp-hasHintRow=false") != std::string::npos);
+        CHECK(!gtx::fromXml(xml_f).hasHintRow);
+    }
+
+    // Keywords：id 含 ; = 等特殊字符仍可往返
+    {
+        gt::Table t;
+        t.id      = "a;b=c%";
+        t.name    = "kw";
+        t.columns = {"x"};
+        t.rows    = {{"1"}};
+        gt::Table back = gtx::fromXml(gtx::toXml(t));
+        CHECK(back.id == "a;b=c%");
+        CHECK(back.cell(0, 0) == "1");
+    }
+
+    // ss:Index 稀疏单元格（模拟 Excel 另存）
+    {
+        const char* sparse =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+            "<Workbook xmlns=\"urn:schemas-microsoft-com:office:spreadsheet\" "
+            "xmlns:ss=\"urn:schemas-microsoft-com:office:spreadsheet\">"
+            "<Worksheet ss:Name=\"S\">"
+            "<Table>"
+            "<Row>"
+            "<Cell><Data ss:Type=\"String\">A</Data></Cell>"
+            "<Cell ss:Index=\"3\"><Data ss:Type=\"String\">C</Data></Cell>"
+            "</Row>"
+            "<Row>"
+            "<Cell><Data ss:Type=\"String\">1</Data></Cell>"
+            "<Cell ss:Index=\"3\"><Data ss:Type=\"String\">3</Data></Cell>"
+            "</Row>"
+            "</Table></Worksheet></Workbook>";
+        gt::Table t = gtx::fromXml(sparse);
+        CHECK(t.columns.size() == 3);
+        CHECK(t.columns[0] == "A");
+        CHECK(t.columns[1] == "col_1");
+        CHECK(t.columns[2] == "C");
+        CHECK(t.rows.size() == 1);
+        CHECK(t.cell(0, 0) == "1");
+        CHECK(t.cell(0, 1) == "");
+        CHECK(t.cell(0, 2) == "3");
+    }
+
+    // SpreadsheetML 空表头单元格 → col_N；重复列名 warning
+    {
+        const char* hdr =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+            "<Workbook xmlns=\"urn:schemas-microsoft-com:office:spreadsheet\" "
+            "xmlns:ss=\"urn:schemas-microsoft-com:office:spreadsheet\">"
+            "<Worksheet ss:Name=\"S\"><Table><Row>"
+            "<Cell><Data ss:Type=\"String\"></Data></Cell>"
+            "<Cell><Data ss:Type=\"String\">a</Data></Cell>"
+            "<Cell><Data ss:Type=\"String\">a</Data></Cell>"
+            "</Row>"
+            "<Row>"
+            "<Cell><Data ss:Type=\"String\">1</Data></Cell>"
+            "<Cell><Data ss:Type=\"String\">2</Data></Cell>"
+            "<Cell><Data ss:Type=\"String\">3</Data></Cell>"
+            "</Row>"
+            "</Table></Worksheet></Workbook>";
+        std::vector<std::string> warns;
+        gt::Table                t = gtx::fromXml(hdr, &warns);
+        CHECK(t.columns.size() == 2);
+        CHECK(t.columns[0] == "col_0");
+        CHECK(t.columns[1] == "a");
+        CHECK(!warns.empty());
+    }
+
+    // UTF-8 工作表名按码点截断（长名往返不崩）
+    {
+        gt::Table t;
+        t.name = "超长工作表名称用于测试码点截断一二三四五六七八九十";
+        t.columns = {"c"};
+        t.rows    = {{"v"}};
+        std::string xml  = gtx::toXml(t);
+        gt::Table   back = gtx::fromXml(xml);
+        CHECK(back.columns[0] == "c");
+        CHECK(back.cell(0, 0) == "v");
+        // sanitize 后 sheet 名 ≤31 码点，且不应含非法续字节导致解析失败
+        CHECK(xml.find("Worksheet") != std::string::npos);
     }
 
     // 旧方言兼容读入（命名字段行）
@@ -2625,33 +2710,70 @@ static void testTableXml()
     }
     CHECK(threw);
 
-    // format=table-xml 仅旧方言；与 enemy_sample.csv 对齐
-    std::string enemy_csv = readExampleInput("enemy_sample.csv");
-    std::string enemy_xml = readExampleInput("enemy_sample.xml");
-    std::string enemy_legacy =
-        readExampleInput("enemy_sample.table-xml.xml");
-    CHECK(!enemy_csv.empty());
-    CHECK(!enemy_xml.empty());
-    CHECK(!enemy_legacy.empty());
-    if (!enemy_csv.empty() && !enemy_xml.empty()) {
-        gt::Table fromCsv = gt::Table::fromCsv(enemy_csv);
-        gt::Table fromXml = gtx::fromXml(enemy_xml);
-        CHECK(enemy_xml.find("Workbook") != std::string::npos);
-        CHECK(fromCsv.columns.size() == fromXml.columns.size());
-        CHECK(fromCsv.rows.size() == fromXml.rows.size());
-        for (size_t c = 0; c < fromCsv.columns.size(); c++)
-            CHECK(fromCsv.columns[c] == fromXml.columns[c]);
-        for (size_t r = 0; r < fromCsv.rows.size(); r++)
-            for (size_t c = 0; c < fromCsv.columns.size(); c++)
-                CHECK(fromCsv.cell(r, c) == fromXml.cell(r, c));
-        CHECK(fromXml.id == "ex-enemy-sample");
-    }
-    if (!enemy_legacy.empty() && !enemy_csv.empty()) {
+    // 内嵌最小样例：不依赖 example_input 文件即可自检（bisect 友好）
+    {
+        const char* sml_mini =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+            "<?mso-application progid=\"Excel.Sheet\"?>"
+            "<Workbook xmlns=\"urn:schemas-microsoft-com:office:spreadsheet\" "
+            "xmlns:ss=\"urn:schemas-microsoft-com:office:spreadsheet\">"
+            "<DocumentProperties "
+            "xmlns=\"urn:schemas-microsoft-com:office:office\">"
+            "<Title>enemies</Title>"
+            "<Keywords>graphmcp-id=ex-mini;graphmcp-hasHintRow=false</Keywords>"
+            "</DocumentProperties>"
+            "<Worksheet ss:Name=\"enemies\"><Table>"
+            "<Row>"
+            "<Cell><Data ss:Type=\"String\">编号</Data></Cell>"
+            "<Cell><Data ss:Type=\"String\">名称</Data></Cell>"
+            "</Row>"
+            "<Row>"
+            "<Cell><Data ss:Type=\"String\">1</Data></Cell>"
+            "<Cell><Data ss:Type=\"String\">爬虫</Data></Cell>"
+            "</Row>"
+            "</Table></Worksheet></Workbook>";
+        gt::Table fromSml = gtx::fromXml(sml_mini);
+        CHECK(fromSml.id == "ex-mini");
+        CHECK(fromSml.columns.size() == 2);
+        CHECK(fromSml.cell(0, 1) == "爬虫");
+
+        const char* legacy_mini =
+            "<table id=\"ex-mini\" name=\"enemies\" hasHintRow=\"false\">"
+            "<columns><col>编号</col><col>名称</col></columns>"
+            "<rows><row><编号>1</编号><名称>爬虫</名称></row></rows></table>";
         gt::Table fromLegacy =
-            gtx::parseTableContent(enemy_legacy, "table-xml");
-        gt::Table fromCsv = gt::Table::fromCsv(enemy_csv);
-        CHECK(fromLegacy.columns.size() == fromCsv.columns.size());
-        CHECK(fromLegacy.rows.size() == fromCsv.rows.size());
+            gtx::parseTableContent(legacy_mini, "table-xml");
+        CHECK(fromLegacy.id == "ex-mini");
+        CHECK(fromLegacy.columns.size() == fromSml.columns.size());
+        CHECK(fromLegacy.cell(0, 0) == fromSml.cell(0, 0));
+    }
+
+    // 若仓库样例存在，再与 enemy_sample.csv 对齐（补充，非硬依赖）
+    {
+        std::string enemy_csv = readExampleInput("enemy_sample.csv");
+        std::string enemy_xml = readExampleInput("enemy_sample.xml");
+        std::string enemy_legacy =
+            readExampleInput("enemy_sample.table-xml.xml");
+        if (!enemy_csv.empty() && !enemy_xml.empty() &&
+            enemy_xml.find("Workbook") != std::string::npos) {
+            gt::Table fromCsv = gt::Table::fromCsv(enemy_csv);
+            gt::Table fromXml = gtx::fromXml(enemy_xml);
+            CHECK(fromCsv.columns.size() == fromXml.columns.size());
+            CHECK(fromCsv.rows.size() == fromXml.rows.size());
+            for (size_t c = 0; c < fromCsv.columns.size(); c++)
+                CHECK(fromCsv.columns[c] == fromXml.columns[c]);
+            for (size_t r = 0; r < fromCsv.rows.size(); r++)
+                for (size_t c = 0; c < fromCsv.columns.size(); c++)
+                    CHECK(fromCsv.cell(r, c) == fromXml.cell(r, c));
+            CHECK(fromXml.id == "ex-enemy-sample");
+        }
+        if (!enemy_legacy.empty() && !enemy_csv.empty()) {
+            gt::Table fromLegacy =
+                gtx::parseTableContent(enemy_legacy, "table-xml");
+            gt::Table fromCsv = gt::Table::fromCsv(enemy_csv);
+            CHECK(fromLegacy.columns.size() == fromCsv.columns.size());
+            CHECK(fromLegacy.rows.size() == fromCsv.rows.size());
+        }
     }
 
     // parseTableContent + MCP format=xml

@@ -2788,25 +2788,14 @@ inline std::string toSVG(Graph g)
         std::vector<std::pair<double,double>> pts;
 
         if (la >= 0 && lb >= 0 && la != lb) {
-            // ---- 端口分配：不同层始终 bottom→top，同层 side→side ----
-            double dx = b_cx - a_cx;
-            double aBot = a->y + a->h, aLft = a->x, aRgt = a->x + a->w;
-            double bTop = b->y, bLft = b->x, bRgt = b->x + b->w;
+            // ---- 端口分配：本分支仅处理不同层（外层 la != lb）----
+            double aBot = a->y + a->h, aRgt = a->x + a->w;
+            double bTop = b->y, bRgt = b->x + b->w;
 
             if (!feedback) {
-                // 正向边：A 在上层 → B 在下层
-                double sx, sy;  // source port (on A)
-                double tx, ty;  // target port (on B)
-                if (la == lb) {
-                    // 同层节点：从侧边进出
-                    if (dx > 0) { sx = aRgt; tx = bLft; }
-                    else        { sx = aLft; tx = bRgt; }
-                    sy = a_cy; ty = b_cy;
-                } else {
-                    // 不同层节点：始终从 A 底部出，B 顶部入
-                    sx = a_cx; sy = aBot;
-                    tx = b_cx; ty = bTop;
-                }
+                // 正向边：始终从 A 底部出，B 顶部入
+                double sx = a_cx, sy = aBot;
+                double tx = b_cx, ty = bTop;
                 pts.push_back({sx, sy});
 
                 if (!e.waypoints.empty()) {

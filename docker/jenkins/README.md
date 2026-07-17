@@ -20,17 +20,18 @@ docker compose -f docker/jenkins/docker-compose.yml up -d --build
 | 问题 | 方案 |
 |------|------|
 | `docker.sock` permission denied | 按 sock GID 把 `jenkins` 加入对应组 |
-| `fatal: detected dubious ownership`（挂载 `/workspace/MCP-`） | 写入 `/var/jenkins_home/.gitconfig` 的 `safe.directory`（含 `*` 与仓库路径） |
+| `fatal: detected dubious ownership`（挂载 `/workspace/MCP-`） | ① `/etc/gitconfig` + `~/.gitconfig` 写 `safe.directory`；② compose 注入 `GIT_CONFIG_*`（Git 插件子进程必读） |
 
 验证（重建后）：
 
 ```powershell
 docker logs jenkins 2>&1 | Select-String "docker.sock gid|safe.directory"
 docker exec -u jenkins jenkins docker ps
-docker exec -u jenkins jenkins git config --global --get-all safe.directory
+docker exec -u jenkins jenkins git config --system --get-all safe.directory
+docker exec -u jenkins jenkins git config --show-origin --get-all safe.directory
 ```
 
-`docker ps` 应能列出容器；`safe.directory` 应含 `*` 与 `/workspace/MCP-`。
+应能看到 `file:/etc/gitconfig` 与 `*` / `/workspace/MCP-/.git`。然后重跑 Pipeline。
 
 ## 预装内容
 

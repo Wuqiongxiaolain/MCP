@@ -40,26 +40,28 @@ fix_docker_sock_group() {
 }
 
 # fix_git_safe_directory: 允许 Pipeline 读取挂载仓库（Windows/宿主机 UID 不一致）
+# 同时写 system + jenkins 用户配置：Git 插件子进程有时不读 ~/.gitconfig
 fix_git_safe_directory() {
-  local home="/var/jenkins_home"
-  local cfg="${home}/.gitconfig"
-  mkdir -p "${home}"
-  touch "${cfg}"
-  chown -R jenkins:jenkins "${home}" 2>/dev/null || true
-
-  ensure_safe() {
-    local dir="$1"
+  ensure_safe_file() {
+    local cfg="$1"
+    local dir="$2"
+    mkdir -p "$(dirname "${cfg}")"
+    touch "${cfg}"
     if ! git config --file "${cfg}" --get-all safe.directory 2>/dev/null | grep -Fxq "${dir}"; then
       git config --file "${cfg}" --add safe.directory "${dir}"
     fi
   }
 
-  # *：本地 DevOps 栈常见多路径挂载；另显式写出 Job 使用的路径
-  ensure_safe '*'
-  ensure_safe '/workspace/MCP-'
-  ensure_safe '/workspace/MCP-/.git'
-  chown jenkins:jenkins "${cfg}"
-  echo "entrypoint: git safe.directory 已配置（* 与 /workspace/MCP-）"
+  local dirs=('*' '/workspace/MCP-' '/workspace/MCP-/.git')
+  local d
+  for d in "${dirs[@]}"; do
+    ensure_safe_file /etc/gitconfig "${d}"
+    ensure_safe_file /var/jenkins_home/.gitconfig "${d}"
+  done
+
+  mkdir -p /var/jenkins_home
+  chown jenkins:jenkins /var/jenkins_home/.gitconfig 2>/dev/null || true
+  echo "entrypoint: git safe.directory 已写入 /etc/gitconfig 与 jenkins home（含 *）"
 }
 
 if [[ "$(id -u)" -eq 0 ]]; then

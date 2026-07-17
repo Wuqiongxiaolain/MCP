@@ -1,7 +1,7 @@
 openapi: "3.0.3"
 info:
   title: graphmcp MCP API
-  version: v0.2.7-beta
+  version: v0.2.8-beta
   description: graphmcp MCP tools/call 契约（非 HTTP REST）。实际传输：JSON-RPC 2.0 over stdio（graphmcp serve）。本文档由 graphmcp dump-tools 从 toolList() 自动生成。
 servers:
   - url: "mcp://graphmcp"
@@ -790,7 +790,7 @@ paths:
     post:
       operationId: table_create
       summary: table_create
-      description: Create a first-class data table from CSV / table XML / model JSON (separate from graph edge-list CSV or graph XML import).
+      description: Create a first-class data table from CSV / SpreadsheetML XML / legacy table-xml / model JSON (not graph edge-list CSV or graph XML).
       requestBody:
         required: true
         content:
@@ -800,10 +800,10 @@ paths:
               properties:
                 content:
                   type: string
-                  description: "table source: CSV, table XML (<table>), or model JSON"
+                  description: "table source: CSV, SpreadsheetML/legacy table XML, or model JSON"
                 format:
                   type: string
-                  description: csv|xml|model (default csv; not auto)
+                  description: csv|xml|table-xml|model (default csv; xml auto-detects SpreadsheetML or legacy <table>)
                 name:
                   type: string
                   description: table display name
@@ -825,7 +825,7 @@ paths:
     post:
       operationId: table_import
       summary: table_import
-      description: Import CSV / table XML / model JSON into a new or existing table id.
+      description: Import CSV / SpreadsheetML or legacy table XML / model JSON into a new or existing table id.
       requestBody:
         required: true
         content:
@@ -838,10 +838,10 @@ paths:
                   description: existing table id to overwrite (optional)
                 content:
                   type: string
-                  description: "table source: CSV, table XML (<table>), or model JSON"
+                  description: "table source: CSV, SpreadsheetML/legacy table XML, or model JSON"
                 format:
                   type: string
-                  description: csv|xml|model (default csv)
+                  description: csv|xml|table-xml|model (default csv; xml auto-detects)
                 name:
                   type: string
                   description: table name
@@ -857,7 +857,7 @@ paths:
     post:
       operationId: table_export
       summary: table_export
-      description: Export a stored table. Default csv is Excel-friendly (UTF-8 BOM+CRLF). Use model/xml for machine exchange; table XML is not SpreadsheetML.
+      description: Export a stored table. Default csv is Excel-friendly (UTF-8 BOM+CRLF). no_bom/lf control csv independently. xml=SpreadsheetML 2003; table-xml=legacy; model=JSON.
       requestBody:
         required: true
         content:
@@ -870,7 +870,7 @@ paths:
                   description: table id
                 to:
                   type: string
-                  description: csv|model|xml (default csv). csv is Excel-friendly UTF-8 BOM+CRLF; xml is graphmcp dialect (not for Excel)
+                  description: csv|model|xml|table-xml (default csv). csv is Excel-friendly UTF-8 BOM+CRLF; xml is SpreadsheetML 2003; table-xml is legacy named-field dialect
                 path:
                   type: string
                   description: optional output file path
@@ -879,7 +879,10 @@ paths:
                   description: version to export (default latest)
                 no_bom:
                   type: boolean
-                  description: "if true, csv uses raw UTF-8 LF without BOM (default false)"
+                  description: "if true, csv omits UTF-8 BOM (default false; independent of lf)"
+                lf:
+                  type: boolean
+                  description: "if true, csv uses LF line endings; default false = CRLF (Excel-friendly)"
               required:
                 - id
       responses:

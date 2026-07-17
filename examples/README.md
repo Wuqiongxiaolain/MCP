@@ -66,14 +66,14 @@ graphmcp convert to-model --file examples/example_input/flowchart_colors_bad.mmd
 
 `enemy_sample.csv`、`enemy_sample.xml`、`skill_relations.csv` 是一等公民 **Table**，不是盲目 `convert to-*` 的图源。
 
-表交换格式（与表 XML 互通）：`csv` / `model`（JSON）/ `xml`。宽表另可导出 `check_report.csv`。
+表交换格式（与表 XML 互通）：`csv` / `model`（JSON）/ `xml`（SpreadsheetML）/ `table-xml`（旧方言）。宽表另可导出 `check_report.csv`。
 
-**格式用途**：`csv` 默认 UTF-8 BOM+CRLF（Excel 可双击）；`xml` 为 graphmcp 方言（勿用 Excel/浏览器打开）；`model` 为机器快照。人侧请用 csv。
+**格式用途**：`csv` 默认 UTF-8 BOM+CRLF（Excel 可双击，人侧首选）；`xml` 为 SpreadsheetML 2003（Excel 可打开）；`enemy_sample.table-xml.xml` 为旧命名字段行参考；`model` 为机器快照。
 
 | 输入 | 输出目录 | 产物 |
 |------|----------|------|
 | `enemy_sample.csv` | `example_output/enemy_sample.csv_out/` | `*.csv`、`*.model.json`、`*.xml`、`*.check_report.csv`；协同增强另有 `*.anim_checklist.csv`、`*.with_slug.csv` |
-| `enemy_sample.xml` | `example_output/enemy_sample.xml_out/` | 同上（`format=xml` 导入后导出，验证与 CSV 路径互通） |
+| `enemy_sample.xml` | `example_output/enemy_sample.xml_out/` | 同上（SpreadsheetML `format=xml` 导入后导出，验证与 CSV 路径互通） |
 | `enemy_sample_bad.csv` | `example_output/enemy_sample_bad.csv_out/` | 非法枚举样例：`*.check_report.csv`、`*.fixed.csv`、`*.fix_enums.log` |
 | `enemy_spec.md` | `example_output/enemy_spec.md_out/` | 思维导图规范 → `*.rules.csv`、`*.mmd` |
 | `name_slug_demo.csv` | （见 pipeline） | slug 稳定键演示输入 |

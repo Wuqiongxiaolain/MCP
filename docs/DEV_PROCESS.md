@@ -230,7 +230,7 @@
 
 - `feat(table): 新增通用 Table 模型与 TableStore`  
 - `feat(table): 图与表有损投影及对齐校验`；`feat(mcp): 暴露 table 工具族与 CLI`  
-- 表 XML（模式 A）、原子写、兼容环境变量、`table_smoke` / 样例导出脚本  
+- 表 XML（SpreadsheetML + 旧方言兼容）、原子写、兼容环境变量、`table_smoke` / 样例导出脚本  
 - 文档同步表协作语义与维护/抽离约定  
 
 ### 线 C：Mermaid 深解析 + graph_property

@@ -1,54 +1,63 @@
-<table id="ex-enemy-sample-xml" name="enemies" hasHintRow="false">
-  <columns>
-    <col>编号</col>
-    <col>名称</col>
-    <col>预设生态位</col>
-    <col>生成动画？</col>
-    <col>受击动画？</col>
-    <col>死亡动画？</col>
-    <col>碰撞伤害</col>
-    <col>层级</col>
-  </columns>
-  <rows>
-    <row>
-      <编号>1</编号>
-      <名称>爬虫</名称>
-      <预设生态位>爬虫（让玩家移动跳跃）</预设生态位>
-      <生成动画？>x</生成动画？>
-      <受击动画？>√</受击动画？>
-      <死亡动画？>√</死亡动画？>
-      <碰撞伤害>√</碰撞伤害>
-      <层级>小怪</层级>
-    </row>
-    <row>
-      <编号>2</编号>
-      <名称>游荡者</名称>
-      <预设生态位>近战小兵（让玩家熟悉攻击怪物）</预设生态位>
-      <生成动画？>x</生成动画？>
-      <受击动画？>√</受击动画？>
-      <死亡动画？>√</死亡动画？>
-      <碰撞伤害>x</碰撞伤害>
-      <层级>小怪</层级>
-    </row>
-    <row>
-      <编号>3</编号>
-      <名称>废弃机兵</名称>
-      <预设生态位>有一定战斗欲望的守卫兵</预设生态位>
-      <生成动画？>x</生成动画？>
-      <受击动画？>x</受击动画？>
-      <死亡动画？>√</死亡动画？>
-      <碰撞伤害>x</碰撞伤害>
-      <层级>小怪</层级>
-    </row>
-    <row>
-      <编号>4</编号>
-      <名称>肿瘤</名称>
-      <预设生态位>弓箭手（考察玩家移动跳跃）</预设生态位>
-      <生成动画？>x</生成动画？>
-      <受击动画？>√</受击动画？>
-      <死亡动画？>√</死亡动画？>
-      <碰撞伤害>√</碰撞伤害>
-      <层级>小怪</层级>
-    </row>
-  </rows>
-</table>
+<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
+  <Title>enemies</Title>
+  <Keywords>graphmcp-id=ex-enemy-sample-xml</Keywords>
+ </DocumentProperties>
+ <Worksheet ss:Name="enemies">
+  <Table>
+   <Row>
+    <Cell><Data ss:Type="String">编号</Data></Cell>
+    <Cell><Data ss:Type="String">名称</Data></Cell>
+    <Cell><Data ss:Type="String">预设生态位</Data></Cell>
+    <Cell><Data ss:Type="String">生成动画？</Data></Cell>
+    <Cell><Data ss:Type="String">受击动画？</Data></Cell>
+    <Cell><Data ss:Type="String">死亡动画？</Data></Cell>
+    <Cell><Data ss:Type="String">碰撞伤害</Data></Cell>
+    <Cell><Data ss:Type="String">层级</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">1</Data></Cell>
+    <Cell><Data ss:Type="String">爬虫</Data></Cell>
+    <Cell><Data ss:Type="String">爬虫（让玩家移动跳跃）</Data></Cell>
+    <Cell><Data ss:Type="String">x</Data></Cell>
+    <Cell><Data ss:Type="String">√</Data></Cell>
+    <Cell><Data ss:Type="String">√</Data></Cell>
+    <Cell><Data ss:Type="String">√</Data></Cell>
+    <Cell><Data ss:Type="String">小怪</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">2</Data></Cell>
+    <Cell><Data ss:Type="String">游荡者</Data></Cell>
+    <Cell><Data ss:Type="String">近战小兵（让玩家熟悉攻击怪物）</Data></Cell>
+    <Cell><Data ss:Type="String">x</Data></Cell>
+    <Cell><Data ss:Type="String">√</Data></Cell>
+    <Cell><Data ss:Type="String">√</Data></Cell>
+    <Cell><Data ss:Type="String">x</Data></Cell>
+    <Cell><Data ss:Type="String">小怪</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">3</Data></Cell>
+    <Cell><Data ss:Type="String">废弃机兵</Data></Cell>
+    <Cell><Data ss:Type="String">有一定战斗欲望的守卫兵</Data></Cell>
+    <Cell><Data ss:Type="String">x</Data></Cell>
+    <Cell><Data ss:Type="String">x</Data></Cell>
+    <Cell><Data ss:Type="String">√</Data></Cell>
+    <Cell><Data ss:Type="String">x</Data></Cell>
+    <Cell><Data ss:Type="String">小怪</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">4</Data></Cell>
+    <Cell><Data ss:Type="String">肿瘤</Data></Cell>
+    <Cell><Data ss:Type="String">弓箭手（考察玩家移动跳跃）</Data></Cell>
+    <Cell><Data ss:Type="String">x</Data></Cell>
+    <Cell><Data ss:Type="String">√</Data></Cell>
+    <Cell><Data ss:Type="String">√</Data></Cell>
+    <Cell><Data ss:Type="String">√</Data></Cell>
+    <Cell><Data ss:Type="String">小怪</Data></Cell>
+   </Row>
+  </Table>
+ </Worksheet>
+</Workbook>

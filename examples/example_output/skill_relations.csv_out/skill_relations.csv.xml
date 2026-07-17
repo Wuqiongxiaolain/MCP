@@ -1,24 +1,33 @@
-<table id="ex-skill-relations" name="skills" hasHintRow="false">
-  <columns>
-    <col>from</col>
-    <col>to</col>
-    <col>label</col>
-  </columns>
-  <rows>
-    <row>
-      <from>slash</from>
-      <to>thrust</to>
-      <label>前置</label>
-    </row>
-    <row>
-      <from>thrust</from>
-      <to>combo</to>
-      <label>派生</label>
-    </row>
-    <row>
-      <from>slash</from>
-      <to>guard</to>
-      <label>互斥</label>
-    </row>
-  </rows>
-</table>
+<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
+  <Title>skills</Title>
+  <Keywords>graphmcp-id=ex-skill-relations</Keywords>
+ </DocumentProperties>
+ <Worksheet ss:Name="skills">
+  <Table>
+   <Row>
+    <Cell><Data ss:Type="String">from</Data></Cell>
+    <Cell><Data ss:Type="String">to</Data></Cell>
+    <Cell><Data ss:Type="String">label</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">slash</Data></Cell>
+    <Cell><Data ss:Type="String">thrust</Data></Cell>
+    <Cell><Data ss:Type="String">前置</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">thrust</Data></Cell>
+    <Cell><Data ss:Type="String">combo</Data></Cell>
+    <Cell><Data ss:Type="String">派生</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">slash</Data></Cell>
+    <Cell><Data ss:Type="String">guard</Data></Cell>
+    <Cell><Data ss:Type="String">互斥</Data></Cell>
+   </Row>
+  </Table>
+ </Worksheet>
+</Workbook>

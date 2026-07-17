@@ -143,11 +143,13 @@ inline Json tableExport(gts::TableStore& tables, const Json& a)
     if (!tables.load(a.str("id"), t, (int)a.num("version", 0), &err))
         return textContent(err, true);
     std::string to = a.str("to", "csv");
-    // csv 默认 Excel 友好（BOM+CRLF）；no_bom=true 时用原始 LF
-    bool excelCsv = !a.boolean("no_bom", false);
+    // csv：no_bom / lf 独立控制，与 CLI --no-bom / --lf 对齐（默认 BOM+CRLF）
+    gt::CsvWriteOpts csv_opts;
+    csv_opts.bom  = !a.boolean("no_bom", false);
+    csv_opts.crlf = !a.boolean("lf", false);
     std::string text;
     try {
-        text = gtx::exportTableText(t, to, excelCsv);
+        text = gtx::exportTableText(t, to, csv_opts);
     }
     catch (const gt::TableError& e) {
         return textContent(e.what(), true);
@@ -158,8 +160,8 @@ inline Json tableExport(gts::TableStore& tables, const Json& a)
             return textContent("failed to write " + path, true);
         std::string msg = "wrote " + path;
         if (gm::toLower(to) == "xml")
-            msg += " (note: table XML is a graphmcp dialect, not for "
-                   "Excel/browser; use to=csv for Excel)";
+            msg += " (note: xml=SpreadsheetML 2003; use to=csv for day-to-day "
+                   "Excel, to=table-xml for legacy dialect)";
         return textContent(msg);
     }
     if (text.size() > ge::inlineExportMaxBytes())

@@ -194,15 +194,15 @@ CSV / 表XML / model  ──▶  Table  ──▶  CSV / 表XML / model JSON
 ### 4.4 表输入 / 输出
 
 ```
-                  CSV ──fromCsv──┐
-表 XML ─fromXml（table_xml.hpp）─┼──▶ gt::Table ──JSON──▶ TableStore
-              model JSON─fromJson┘
+                         CSV ──fromCsv──┐
+SpreadsheetML / 旧 <table> ─fromXml──┼──▶ gt::Table ──JSON──▶ TableStore
+                   model JSON─fromJson┘
 ```
 
 | 方向 | 实现 | 说明 |
 |------|------|------|
-| 入 | `Table::fromCsv` / `table_xml` / `fromJson` | CLI/MCP 用 `format`（默认 `csv`）选择；**不做 auto 探测** |
-| 出 | `toCsv` / 表 XML / `toJson` | `table_export` 的 `to=csv|model|xml` |
+| 入 | `Table::fromCsv` / `table_xml` / `fromJson` | CLI/MCP 用 `format`（默认 `csv`）选择；`format=xml` 在 SpreadsheetML 与旧 `<table>` 间自动识别，**不做** csv/xml/model 跨格式探测 |
+| 出 | `toCsv` / SpreadsheetML（`to=xml`）/ 旧方言（`to=table-xml`）/ `toJson` | `table_export` 的 `to=csv|model|xml|table-xml` |
 
 实现约束（避免误用）：
 
@@ -214,7 +214,7 @@ CSV / 表XML / model  ──▶  Table  ──▶  CSV / 表XML / model JSON
 
 #### 表 XML 与后续抽离约定
 
-本阶段表 XML 采用「多新增少修改」：逻辑在 `src/table_xml.hpp`，复用 `gp::detail::parseXmlDoc` 与现有 `Table` API，**不**改写 `Table::fromCsv`，**不**搬迁 `parsers.hpp` 中的迷你 XML 解析器。
+默认表 XML 为 **SpreadsheetML 2003** 子集（零第三方依赖手写编解码）；旧命名字段行方言仅兼容读入/显式 `table-xml`。逻辑在 `src/table_xml.hpp`，复用 `gp::detail::parseXmlDoc` 与现有 `Table` API，**不**改写 `Table::fromCsv`，**不**搬迁 `parsers.hpp` 中的迷你 XML 解析器，**不做**完整 `.xlsx`。
 
 出现下列**任一**情况时，应单独开重构 PR：
 

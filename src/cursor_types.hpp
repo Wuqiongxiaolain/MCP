@@ -350,24 +350,35 @@ class EdgeCursor {
         return e->label;
     }
 
-    EdgeCursor& set(const std::string& fieldName, const std::string& val)
+    // set: 写入边字段；waypoints 等解析失败时不记草稿并返回 false
+    bool set(const std::string& fieldName, const std::string& val)
     {
         Edge* e = get();
         if (!e)
-            return *this;
+            return false;
         std::string oldVal = getEdgeField(*e, fieldName);
-        setEdgeField(*e, fieldName, val);
+        if (!setEdgeField(*e, fieldName, val))
+            return false;
         if (draft_)
             recordChange(fieldName, oldVal, val);
-        return *this;
+        return true;
     }
 
     EdgeCursor& updateLabel(const std::string& label)
-    { return set("label", label); }
+    {
+        set("label", label);
+        return *this;
+    }
     EdgeCursor& updateStyle(const std::string& style)
-    { return set("style", style); }
+    {
+        set("style", style);
+        return *this;
+    }
     EdgeCursor& updateArrow(const std::string& arrow)
-    { return set("arrow", arrow); }
+    {
+        set("arrow", arrow);
+        return *this;
+    }
     EdgeCursor& reconnect(const std::string& from, const std::string& to)
     {
         set("from", from);

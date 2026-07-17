@@ -1,6 +1,7 @@
 // layout.hpp - 基础自动布局 + 图结构校验
 #pragma once
 #include "model.hpp"
+#include <cmath>
 #include <queue>
 
 namespace gl {
@@ -8,6 +9,54 @@ namespace gl {
 using gm::Edge;
 using gm::Graph;
 using gm::Node;
+
+// recomputeEdgeLabelPos: 按路径最长直段中点 + 法向偏移重算边标签位置
+// 参数 g：图（用于查找端点节点）；e：待更新的边（需已有 from/to/waypoints）
+// 声明/实现：本头文件 inline
+inline void recomputeEdgeLabelPos(const Graph& g, Edge& e)
+{
+    if (e.label.empty())
+        return;
+    const Node* src = g.findNode(e.from);
+    const Node* dst = g.findNode(e.to);
+    if (!src || !dst)
+        return;
+
+    // 步骤1：构造完整路径 source → waypoints → target
+    std::vector<std::pair<double, double>> path;
+    path.push_back({src->x + src->w / 2.0, src->y + src->h / 2.0});
+    for (auto& wp : e.waypoints)
+        path.push_back(wp);
+    path.push_back({dst->x + dst->w / 2.0, dst->y + dst->h / 2.0});
+    if (path.size() < 2)
+        return;
+
+    // 步骤2：找最长直段
+    size_t bestSeg = 0;
+    double bestLen = 0;
+    for (size_t i = 1; i < path.size(); i++) {
+        double dx  = path[i].first - path[i - 1].first;
+        double dy  = path[i].second - path[i - 1].second;
+        double len = std::sqrt(dx * dx + dy * dy);
+        if (len > bestLen) {
+            bestLen = len;
+            bestSeg = i;
+        }
+    }
+    // 步骤3：中点 + 逆时针法向 12px 偏移
+    double mx  = (path[bestSeg].first + path[bestSeg - 1].first) / 2.0;
+    double my  = (path[bestSeg].second + path[bestSeg - 1].second) / 2.0;
+    double dx  = path[bestSeg].first - path[bestSeg - 1].first;
+    double dy  = path[bestSeg].second - path[bestSeg - 1].second;
+    double len = std::sqrt(dx * dx + dy * dy);
+    if (len < 1e-6) {
+        dx  = 1.0;
+        dy  = 0.0;
+        len = 1.0;
+    }
+    e.labelX = mx + (-dy / len * 12.0);
+    e.labelY = my + (dx / len * 12.0);
+}
 
 // ------------------------------------------------------------- 校验 --
 
@@ -619,42 +668,9 @@ inline void layoutLayered(Graph& g)
         }
     }
 
-    // ---- 边标签位置：从路由路径中选最长直段，中点 + 垂直偏移 ----
-    for (auto& e : g.edges) {
-        if (e.label.empty()) continue;
-        const Node* src = g.findNode(e.from);
-        const Node* dst = g.findNode(e.to);
-        if (!src || !dst) continue;
-
-        // 构建完整路径：source 中心 → waypoints... → target 中心
-        std::vector<std::pair<double, double>> path;
-        path.push_back({src->x + src->w / 2.0, src->y + src->h / 2.0});
-        for (auto& wp : e.waypoints)
-            path.push_back(wp);
-        path.push_back({dst->x + dst->w / 2.0, dst->y + dst->h / 2.0});
-
-        // 找最长直段
-        size_t bestSeg = 0;
-        double bestLen = 0;
-        for (size_t i = 1; i < path.size(); i++) {
-            double dx = path[i].first - path[i - 1].first;
-            double dy = path[i].second - path[i - 1].second;
-            double len = std::sqrt(dx * dx + dy * dy);
-            if (len > bestLen) { bestLen = len; bestSeg = i; }
-        }
-        // 最长段中点
-        double mx = (path[bestSeg].first + path[bestSeg - 1].first) / 2.0;
-        double my = (path[bestSeg].second + path[bestSeg - 1].second) / 2.0;
-        // 垂直偏移（优先上方，若水平段则偏左）
-        double dx = path[bestSeg].first - path[bestSeg - 1].first;
-        double dy = path[bestSeg].second - path[bestSeg - 1].second;
-        double len = std::sqrt(dx * dx + dy * dy);
-        if (len < 1e-6) { dx = 1.0; dy = 0.0; len = 1.0; }
-        double perpX = -dy / len * 12.0;  // 逆时针旋转 90° × 12px
-        double perpY =  dx / len * 12.0;
-        e.labelX = mx + perpX;
-        e.labelY = my + perpY;
-    }
+    // ---- 边标签位置：最长直段中点 + 法向偏移 ----
+    for (auto& e : g.edges)
+        recomputeEdgeLabelPos(g, e);
 
     // 清理：从 byRank 中踢掉虚拟节点（group 回填等步骤不应该看到它们）
     for (int r = 0; r <= maxRank; r++) {

@@ -1,10 +1,12 @@
 # graphmcp — 图形设计与绘图 MCP 工具
 
-> latest update: v0.2.5-beta, 2026-07-16
+> latest update: v0.2.9-beta, 2026-07-17
 
 > Gitlab 为镜像备份仓，活跃项目管理见 GitHub：https://github.com/Wuqiongxiaolain/MCP
 
 用 **C++17** 编写的图形设计与绘图工具：零第三方依赖、单可执行文件。既可作 **CLI**，也可作 **MCP** 服务器接入 Claude Code / Claude Desktop 等客户端。
+
+当前能力摘要：15 个 CLI 命令族、**51** 个 MCP 工具；分层布局（层平衡 / 减交叉 / waypoint）；Agent 宜优先 `graph_apply` / `graph_set_edge_route` / `graph_nudge_node` 等**原子改图**。整图 `export model` → 手改 → `import` **可以**，但是下下策，仅当原子工具无法表达该修改时再用。
 
 ---
 
@@ -15,8 +17,8 @@
 | 层级 | 文档 | 说明 |
 |------|------|------|
 | **项目信息** | [项目全景](docs/PROJECT_OVERVIEW.md) | 来源、目标、启动与开发流程、代码管理、下一阶段目标 |
-| **流程详情** | [时间线](docs/PROJECT_TIMELINE.md) · [开发过程](docs/DEV_PROCESS.md) | P1–P12 里程碑列表（07-05→07-16）；按提交还原的逐日演进与变更摘要 |
-| **功能概览** | [功能介绍](docs/FEATURES.md) | 六种图、19 种 Mermaid、格式进出、颜色/图层/多页、版本/编辑闭环、MCP 与 Table 能力 |
+| **流程详情** | [时间线](docs/PROJECT_TIMELINE.md) · [开发过程](docs/DEV_PROCESS.md) | P1–P13 里程碑与扩展期；按提交还原的逐日演进与变更摘要 |
+| **功能概览** | [功能介绍](docs/FEATURES.md) | 六种图、19 种 Mermaid、格式进出、颜色/图层/多页、布局/几何编辑、版本/编辑闭环、MCP 与 Table 能力 |
 | **快速开始** | [Quick Start](docs/QUICK_START.md) | 下载 exe、配置 Claude Code / Desktop、验证 MCP、调试 |
 | **用户手册** | [用户手册](docs/USER_GUIDE.md) | 场景化教程、完整命令示例、输入输出格式速查、FAQ |
 | **原理说明** | [应用运作逻辑](docs/APPLICATION_LOGIC.md) | 总架构、双一等模型、存储、IO 管道、版本管理、桥接协作 |
@@ -25,7 +27,7 @@
 
 | 文档 | 说明 |
 |------|------|
-| [CLI & MCP 指令参考](docs/CLI_MCP_REFERENCE.md) | 15 个命令族与 46 个 MCP 工具完整参数速查（以 `toolList()`/OpenAPI 为准） |
+| [CLI & MCP 指令参考](docs/CLI_MCP_REFERENCE.md) | 15 个命令族与 **51** 个 MCP 工具完整参数速查（以 `toolList()`/OpenAPI 为准） |
 | [OpenAPI 契约](docs/api_reference/openapi.yaml) | 由 `make docs-api` 从 `toolList()` 生成，可供 Swagger 打开 |
 | [项目思维导图](docs/MINDMAP.md) | 能力与 DevOps 全景（Mermaid / 大纲） |
 
@@ -60,7 +62,7 @@ make docs-api
 
 ### 版本 / 基线 / 发布（GitHub Actions + Jenkins）
 
-- **日常 CI**：借助GitHub服务器的Github Acitons用于快速验证、快捷落地、敏捷迭代；部署于本地Docker镜像的Jenkins+Ansible用于最终验证、独立部署。
+- **日常 CI**：借助 GitHub Actions 用于快速验证、快捷落地、敏捷迭代；部署于本地 Docker 镜像的 Jenkins+Ansible 用于最终验证、独立部署。
 - **刷新性能基线**：Actions → `Update bench baseline`（`workflow_dispatch`，须勾选确认）。
 - **写回 VERSION + OpenAPI**：Actions → `Bump version`（传入完整版本号并确认；**不**自动打 tag）。
 - **发布制品**：推送 `v*` tag 触发多平台 CD Release（Windows/Linux/macOS）。

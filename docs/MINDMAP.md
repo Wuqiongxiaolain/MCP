@@ -1,6 +1,6 @@
 # graphmcp 项目思维导图
 
-> latest update: v0.2.6-beta, 2026-07-16
+> latest update: v0.2.9-beta, 2026-07-17
 
 > 本文件同时是本工具的合法输入：
 > `graphmcp create --input docs/MINDMAP.md --name 项目思维导图`
@@ -57,7 +57,7 @@ mindmap
       接口层
         CLI 九个子命令
         MCP JSON-RPC stdio
-        八个 MCP 工具
+        51 个 MCP 工具
         外部编辑器调起
     质量保障
       121 断言单元测试

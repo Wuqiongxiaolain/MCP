@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="764" height="492" viewBox="0 0 764 492">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="554.102,80 456.314,120 358.526,160" marker-end="url(#arrow)"/>
+  <text class="elabel" x="407.42" y="136" text-anchor="middle">parse</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="358.526,204 359.93,244 361.334,284" marker-end="url(#arrow)"/>
+  <text class="elabel" x="360.632" y="260" text-anchor="middle">export</text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="182.102,64 197.593,160 213.084,284" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="213.084,328 205.042,368 197,408" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="358.526,204 285.805,244 213.084,284" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text class="elabel" text-anchor="middle">
+    <tspan x="249.445" y="253">table_bridge</tspan>
+    <tspan x="249.445" y="267">from_graph / from_table</tspan>
+  </text>
+  <rect x="384.102" y="20" width="340" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="554.102" y="47">任意图输入</tspan>
+    <tspan x="554.102" y="63">Mermaid/MD/CSV/Drawio…</tspan>
+  </text>
+  <rect x="321.276" y="160" width="74.5" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="358.526" y="187" text-anchor="middle">Graph</text>
+  <rect x="310.334" y="284" width="102" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="361.334" y="311" text-anchor="middle">任意图输出</text>
+  <rect x="40.1019" y="20" width="284" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="182.102" y="47" text-anchor="middle">CSV / 表XML / model</text>
+  <rect x="175.834" y="284" width="74.5" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="213.084" y="311" text-anchor="middle">Table</text>
+  <rect x="20" y="408" width="354" height="44" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" x="197" y="435" text-anchor="middle">CSV / 表XML / model JSON</text>
+</svg>

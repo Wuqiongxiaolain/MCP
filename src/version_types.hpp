@@ -4,7 +4,9 @@
 #include "model.hpp"
 #include <ctime>
 #include <functional>
+#include <iomanip>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -442,6 +444,16 @@ struct Selector
 };
 
 // ─── 辅助: 读取 Node 字段值 / 设置 Node 字段值 ──────────────────────
+
+// formatCoord: 坐标/尺寸草稿序列化（最多 6 位有效小数，避免 to_string 噪声）
+// 参数 v：数值；声明/实现均在本头文件
+inline std::string formatCoord(double v)
+{
+    std::ostringstream oss;
+    oss << std::setprecision(6) << std::defaultfloat << v;
+    return oss.str();
+}
+
 inline std::string getNodeField(const Node& n, const std::string& field)
 {
     if (field == "id")
@@ -459,18 +471,18 @@ inline std::string getNodeField(const Node& n, const std::string& field)
     if (field == "strokeColor")
         return n.strokeColor;
     if (field == "x")
-        return std::to_string(n.x);
+        return formatCoord(n.x);
     if (field == "y")
-        return std::to_string(n.y);
+        return formatCoord(n.y);
     if (field == "w")
-        return std::to_string(n.w);
+        return formatCoord(n.w);
     if (field == "h")
-        return std::to_string(n.h);
+        return formatCoord(n.h);
     return "";
 }
 
-inline void
-setNodeField(Node& n, const std::string& field, const std::string& val)
+// setNodeField: 设置节点字段；未知字段返回 false（不修改）
+inline bool setNodeField(Node& n, const std::string& field, const std::string& val)
 {
     if (field == "label")
         n.label = val;
@@ -492,6 +504,99 @@ setNodeField(Node& n, const std::string& field, const std::string& val)
         n.w = std::strtod(val.c_str(), nullptr);
     else if (field == "h")
         n.h = std::strtod(val.c_str(), nullptr);
+    else
+        return false;
+    return true;
+}
+
+// waypointsToJsonString: 将边折点序列化为 JSON 数组字符串（草稿 FieldChange 用）
+inline std::string waypointsToJsonString(
+    const std::vector<std::pair<double, double>>& wps)
+{
+    Json arr = Json::arr();
+    for (auto& wp : wps) {
+        Json o = Json::obj();
+        o.set("x", wp.first);
+        o.set("y", wp.second);
+        arr.push(o);
+    }
+    return arr.dump();
+}
+
+// parseWaypointsJson: 解析折点 JSON；成功返回 true 并写入 out
+// 参数 err：可选错误信息输出（声明/实现均在本头文件）
+inline bool parseWaypointsJson(const std::string& val,
+                               std::vector<std::pair<double, double>>& out,
+                               std::string* err = nullptr)
+{
+    out.clear();
+    std::string perr;
+    Json         j = Json::parse(val, &perr);
+    if (!perr.empty() || !j.isArr()) {
+        if (err)
+            *err = perr.empty() ? "waypoints must be a JSON array" : perr;
+        return false;
+    }
+    for (auto& item : *j.a) {
+        if (item.isObj()) {
+            out.push_back({item.num("x", 0.0), item.num("y", 0.0)});
+        }
+        else if (item.isArr() && item.a && item.a->size() >= 2) {
+            const Json& jx = (*item.a)[0];
+            const Json& jy = (*item.a)[1];
+            double      x  = jx.isNum() ? jx.n : 0.0;
+            double      y  = jy.isNum() ? jy.n : 0.0;
+            out.push_back({x, y});
+        }
+        else {
+            if (err)
+                *err = "each waypoint must be {x,y} or [x,y]";
+            out.clear();
+            return false;
+        }
+    }
+    return true;
+}
+
+// syncArrowFromHeads: 根据 headStart/headEnd 回填粗粒度兼容字段 arrow
+// 说明：open/cross 等细粒度装饰映射为 arrow/both，仅供旧导出器；不反向抹掉 heads
+inline void syncArrowFromHeads(Edge& e)
+{
+    if (e.headStart == "none" && e.headEnd == "none")
+        e.arrow = "none";
+    else if (e.headStart != "none" && e.headEnd != "none")
+        e.arrow = "both";
+    else
+        e.arrow = "arrow";
+}
+
+// isDecoratedHead: 端点是否有非 none 装饰（含 open/cross/arrow）
+inline bool isDecoratedHead(const std::string& h)
+{
+    return !h.empty() && h != "none";
+}
+
+// syncHeadsFromArrow: 由 legacy arrow 同步 heads；保留已有 open/cross，避免有损往返
+inline void syncHeadsFromArrow(Edge& e)
+{
+    if (e.arrow == "none") {
+        e.headStart = "none";
+        e.headEnd   = "none";
+        return;
+    }
+    if (e.arrow == "both") {
+        // 仅补齐缺失端，不把 open/cross 降级为 arrow
+        if (!isDecoratedHead(e.headStart))
+            e.headStart = "arrow";
+        if (!isDecoratedHead(e.headEnd))
+            e.headEnd = "arrow";
+        return;
+    }
+    // 单向箭头：末端有装饰、起点默认 none；保留已有 open/cross
+    if (!isDecoratedHead(e.headEnd))
+        e.headEnd = "arrow";
+    if (e.headStart == "arrow" || e.headStart.empty())
+        e.headStart = "none";
 }
 
 inline std::string getEdgeField(const Edge& e, const std::string& field)
@@ -510,11 +615,22 @@ inline std::string getEdgeField(const Edge& e, const std::string& field)
         return e.arrow;
     if (field == "strokeColor")
         return e.strokeColor;
+    if (field == "headStart")
+        return e.headStart;
+    if (field == "headEnd")
+        return e.headEnd;
+    if (field == "labelX")
+        return formatCoord(e.labelX);
+    if (field == "labelY")
+        return formatCoord(e.labelY);
+    if (field == "waypoints")
+        return waypointsToJsonString(e.waypoints);
     return "";
 }
 
-inline void
-setEdgeField(Edge& e, const std::string& field, const std::string& val)
+// setEdgeField: 设置边字段；未知字段或非法 waypoints 返回 false（不修改该字段）
+// 参数 field/val：字段名与字符串值
+inline bool setEdgeField(Edge& e, const std::string& field, const std::string& val)
 {
     if (field == "from")
         e.from = val;
@@ -524,10 +640,33 @@ setEdgeField(Edge& e, const std::string& field, const std::string& val)
         e.label = val;
     else if (field == "style")
         e.style = val;
-    else if (field == "arrow")
+    else if (field == "arrow") {
         e.arrow = val;
+        syncHeadsFromArrow(e);
+    }
     else if (field == "strokeColor")
         e.strokeColor = val;
+    else if (field == "headStart") {
+        e.headStart = val;
+        syncArrowFromHeads(e);
+    }
+    else if (field == "headEnd") {
+        e.headEnd = val;
+        syncArrowFromHeads(e);
+    }
+    else if (field == "labelX")
+        e.labelX = std::strtod(val.c_str(), nullptr);
+    else if (field == "labelY")
+        e.labelY = std::strtod(val.c_str(), nullptr);
+    else if (field == "waypoints") {
+        std::vector<std::pair<double, double>> wps;
+        if (!parseWaypointsJson(val, wps))
+            return false;
+        e.waypoints = std::move(wps);
+    }
+    else
+        return false;
+    return true;
 }
 
 // ─── Selector 匹配逻辑 ───────────────────────────────────────────

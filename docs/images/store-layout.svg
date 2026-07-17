@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="981" height="880" viewBox="0 0 981 880">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <polyline fill="none" stroke="#b0714b" stroke-width="1.5" stroke-linejoin="round" points="254,440 302.5,440 302.5,62 572,62" stroke-dasharray="6,4"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="147,547 285,398.5 423,250"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="423,294 551.625,209 680.25,124"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="423,294 530.375,293 637.75,292"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="637.75,336 722.125,272 806.5,208"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="683.5,314 773.5,314"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="637.75,336 747.625,356 857.5,376"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="147,547 292,587.5 437,628"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="437,672 574.75,566 712.5,460"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="437,672 585.375,608 733.75,544"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="530,650 620,650"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="437,672 551.375,692 665.75,712"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="437,672 570.5,734 704,796"/>
+  <ellipse cx="147" cy="440" rx="107" ry="107" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="147" y="445" text-anchor="middle">graph-store 根</text>
+  <ellipse cx="458" cy="62" rx="114" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="458" y="67" text-anchor="middle">index.json 图索引</text>
+  <ellipse cx="423" cy="272" rx="79" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="423" y="277" text-anchor="middle">tables 表根</text>
+  <ellipse cx="680.25" cy="146" rx="88.25" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="680.25" y="151" text-anchor="middle">tables/index.json</text>
+  <ellipse cx="637.75" cy="314" rx="45.75" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="637.75" y="319" text-anchor="middle">tableId</text>
+  <ellipse cx="806.5" cy="230" rx="33" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="806.5" y="235" text-anchor="middle">HEAD</text>
+  <ellipse cx="836.25" cy="314" rx="62.75" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="836.25" y="319" text-anchor="middle">latest.json</text>
+  <ellipse cx="857.5" cy="398" rx="84" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="857.5" y="403" text-anchor="middle">versions/vN.json</text>
+  <ellipse cx="437" cy="650" rx="93" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="437" y="655" text-anchor="middle">graphId 图目录</text>
+  <ellipse cx="712.5" cy="482" rx="92.5" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="712.5" y="487" text-anchor="middle">HEAD / latest.json</text>
+  <ellipse cx="733.75" cy="566" rx="113.75" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="733.75" y="571" text-anchor="middle">draft.json / stage.json</text>
+  <ellipse cx="713" cy="650" rx="93" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="713" y="655" text-anchor="middle">open.* 临时编辑</text>
+  <ellipse cx="665.75" cy="734" rx="45.75" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="665.75" y="739" text-anchor="middle">cursors</text>
+  <ellipse cx="704" cy="818" rx="84" ry="22" fill="#e8f7ec" stroke="#3d9155"/>
+  <text class="lbl" x="704" y="823" text-anchor="middle">versions/vN.json</text>
+</svg>

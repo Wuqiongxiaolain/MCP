@@ -1,6 +1,6 @@
 # CLI & MCP 指令参考
 
-> latest update: v0.2.6-beta, 2026-07-16
+> latest update: v0.2.9-beta, 2026-07-17
 
 > 命令行与 MCP 工具速查（版本以根目录 VERSION 为准）  
 > 操作教程与场景说明见 [USER_GUIDE.md](USER_GUIDE.md)。  
@@ -228,7 +228,7 @@
 
 ---
 
-## 三、MCP 工具（47 个）
+## 三、MCP 工具（51 个）
 
 参数与 CLI 对应；通过 `tools/call` 调用。完整 schema 以 `toolList()` → OpenAPI 为准，以下为速查。
 
@@ -238,9 +238,9 @@
 |--------|------|----------|-------------|
 | `graph_create` | 解析 → 校验 → 布局 → 存储 | `content` | `format`（默认 auto）、`name`、`id`、`type`、`note`、`no_validate`、`no_layout` |
 | `graph_convert` | 格式直转（不存储） | `content`, `to` | `format`（默认 auto）、`name`、`type` |
-| `graph_export` | 导出已存储图 | `id`, `to` | `path`、`version`（默认最新）、`stdout` |
+| `graph_export` | 导出已存储图（发布/阅读为主；`to=model` 手改再回导**可以**，但是下下策） | `id`, `to` | `path`、`version`（默认最新）、`stdout` |
 | `graph_open` | 外部编辑器打开 | `id` | `editor`（browser\|drawio\|excalidraw\|svg）、`launch`（默认 true；false 仅生成目标）、`version` |
-| `graph_import` | 编辑回导（校验 + 版本） | `id` | `format`（默认 auto）、`note` |
+| `graph_import` | 优先用于 **GUI** `graph_open` 后回导；粘贴手改 model 作 Agent 编辑可行但是下下策 | `id` | `format`（默认 auto）、`note`、`content` |
 | `graph_validate` | 结构校验 | `id` 或 `content` | `format`、`strict` |
 | `graph_list` | 列出所有图 | （无） | `format`（json\|table） |
 | `graph_delete` | 删除图及所有版本 | `id`, `force` | — |
@@ -261,7 +261,12 @@
 
 | 工具名 | 功能 | 必填参数 | 主要可选参数 |
 |--------|------|----------|-------------|
-| `graph_update` | 更新节点/边属性 | `id`, `set` | `node`、`edge`、`selector`（6 种选择方式） |
+| `graph_update` | 更新节点/边属性（边支持 `waypoints`/`labelX`/`labelY`/`headStart`/`headEnd`） | `id`, `set` | `node`、`edge`、`selector`（6 种选择方式） |
+| `graph_apply` | **Agent 首选**：多改 + 一次提交（含边折点等字段） | `id`, `ops` | `message`、`commit`（默认 true）、`export_to`、`export_path` |
+| `graph_set_edge_route` | 写入边折点（推荐，免整图 model 覆盖） | `id`, `edge`, `waypoints` | `recompute_label`（默认 true） |
+| `graph_clear_edge_route` | 清空边折点（导出回退兜底路由） | `id`, `edge` | `recompute_label`（默认 true） |
+| `graph_nudge_node` | 相对平移节点 `dx`/`dy`（不移动绝对折点） | `id`, `node` | `dx`、`dy`、`recompute_connected_labels`（默认 false） |
+| `graph_set_edge_heads` | 设置边两端箭头装饰 | `id`, `edge` | `headStart`、`headEnd` |
 | `graph_insert` | 插入节点/边 | `id`, `element` | `node` / `edge`（element=node\|edge）、`label`、`shape`、`from`/`to`、`parent`、`fillColor`/`strokeColor`、`x`/`y`/`w`/`h` |
 | `graph_delete_element` | 删除节点/边 | `id` | `node`、`edge`、`selector` |
 | `graph_layout` | 自动布局（v0.2.6 `layered`：层平衡/减交叉/waypoint，尚不完善） | `id` | `strategy`（auto\|layered\|tree-h\|tree-v\|grid）、`force`、`save` |
@@ -274,6 +279,10 @@
 | `strokeColor` | 节点 / 边 | 描边色，如 `#4a72b8`；空=默认 |
 
 `graph_update` 示例：`--node A --set fillColor=#eef4ff --set strokeColor=#4a72b8`  
+边折点示例：优先 `graph_set_edge_route`；或 `graph_update` / `graph_apply` 写 `waypoints=[...]`。再次 `graph_layout` 且 `save=true` 仍会覆盖手改几何。  
+CLI 等价：`graphmcp graph update --id <gid> --edge <eid> --set 'waypoints=[{\"x\":1,\"y\":2}]'`（几何专用工具仅 MCP）。  
+`graph_nudge_node` 不移动边的绝对折点；需要时可 `recompute_connected_labels=true` 或另调折点/重布局。  
+**Agent 改图**：优先 `graph_show` 查 id → `graph_apply` / `graph_update` / 几何专用工具。整图 `graph_export to=model` → 手改 JSON → `graph_import` **可以**，但是下下策，仅当原子工具无法表达该修改时再用。  
 `graph_insert` 示例：节点带 `--fillColor`/`--strokeColor`；边带 `--strokeColor`。  
 `Node.style` 仅保留线型/遗留提示，**颜色以专用字段为准**。
 

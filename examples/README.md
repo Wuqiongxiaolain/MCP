@@ -1,6 +1,6 @@
 # examples 目录说明
 
-> latest update: v0.2.0, 2026-07-14
+> latest update: v0.2.9-beta, 2026-07-17
 
 本目录按“输入样例 / 导出结果”拆分：
 

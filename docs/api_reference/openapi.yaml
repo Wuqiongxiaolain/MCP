@@ -1,7 +1,7 @@
 openapi: "3.0.3"
 info:
   title: graphmcp MCP API
-  version: v0.2.8-beta
+  version: v0.2.9-beta
   description: graphmcp MCP tools/call 契约（非 HTTP REST）。实际传输：JSON-RPC 2.0 over stdio（graphmcp serve）。本文档由 graphmcp dump-tools 从 toolList() 自动生成。
 servers:
   - url: "mcp://graphmcp"
@@ -49,7 +49,7 @@ paths:
     post:
       operationId: graph_convert
       summary: graph_convert
-      description: One-shot conversion between diagram formats without saving to the store.
+      description: One-shot conversion between diagram formats without saving. For stored-graph edits prefer graph_apply / graph_update / geometry tools (model round-trip is last resort).
       requestBody:
         required: true
         content:
@@ -76,7 +76,7 @@ paths:
     post:
       operationId: graph_export
       summary: graph_export
-      description: "Export a stored graph to a file or inline content. png/pdf use an external converter when available, otherwise an SVG fallback is written."
+      description: "Export a stored graph (publish/inspect). Prefer graph_show for ids and atomic edit tools for changes; model export→hand-edit→import is last resort. png/pdf use external converter when available, else SVG fallback."
       requestBody:
         required: true
         content:
@@ -138,7 +138,7 @@ paths:
     post:
       operationId: graph_import
       summary: graph_import
-      description: "Re-import an externally edited diagram after graph_open: reads open.<ext> (or provided content), parses, validates, and saves as a new version. NOT for first-time import — use graph_create."
+      description: "Re-import after graph_open (GUI round-trip). Not for first-time import (use graph_create). Agent edits: prefer geometry tools / graph_update / graph_apply; hand-edited model JSON is last resort."
       requestBody:
         required: true
         content:
@@ -314,7 +314,7 @@ paths:
     post:
       operationId: graph_show
       summary: graph_show
-      description: "Show graph summary with node/edge id lists, or details for one node/edge/path. Use this to discover element ids before graph_update/graph_insert/graph_apply. Avoid dumping via graph_export to=model for ordinary edits."
+      description: Show summary or one node/edge/path. Prefer for discovering ids before atomic edits; avoid export to=model for ordinary lookups.
       requestBody:
         required: true
         content:
@@ -377,7 +377,7 @@ paths:
     post:
       operationId: graph_update
       summary: graph_update
-      description: "Update node/edge attributes in the draft (in-memory selector; do NOT use graph_cursor_* for ordinary edits). Provide node, edge, or selector plus set as 'field=value' (array allowed). Then graph_commit with all=true, or prefer graph_apply to batch+commit."
+      description: "Atomic draft edit of node/edge fields via node|edge|selector + set field=value. Edges support waypoints/heads/labelX/Y. Prefer graph_set_edge_route for polylines, graph_nudge_node for relative moves; then graph_commit all=true or graph_apply."
       requestBody:
         required: true
         content:
@@ -399,10 +399,131 @@ paths:
                   description: "batch selector: shape=rect|label~=Step|parent=g1"
                 set:
                   type: string
-                  description: field=value pairs (can be specified multiple times); node fields include label/shape/parent/style/fillColor/strokeColor/x/y/w/h; edge fields include from/to/label/style/arrow/strokeColor
+                  description: "field=value pairs (can be specified multiple times); node fields include label/shape/parent/style/fillColor/strokeColor/x/y/w/h; edge fields include from/to/label/style/arrow/strokeColor/headStart/headEnd/labelX/labelY/waypoints (JSON array string e.g. [{\"x\":1,\"y\":2}])"
               required:
                 - id
                 - set
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_set_edge_route:
+    post:
+      operationId: graph_set_edge_route
+      summary: graph_set_edge_route
+      description: "Set or replace one edge's polyline waypoints in the draft (optional label recompute). Commit with graph_commit all=true."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                edge:
+                  type: string
+                  description: target edge id
+                waypoints:
+                  type: string
+                  description: "JSON array of {x,y} points, or empty [] to clear; may also be a JSON array value"
+                recompute_label:
+                  type: boolean
+                  description: recompute labelX/labelY from route when edge has label (default true)
+              required:
+                - id
+                - edge
+                - waypoints
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_clear_edge_route:
+    post:
+      operationId: graph_clear_edge_route
+      summary: graph_clear_edge_route
+      description: "Clear one edge's waypoints (default routing). Optionally recomputes label position. Commit with graph_commit all=true."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                edge:
+                  type: string
+                  description: target edge id
+                recompute_label:
+                  type: boolean
+                  description: recompute labelX/labelY after clear when edge has label (default true)
+              required:
+                - id
+                - edge
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_nudge_node:
+    post:
+      operationId: graph_nudge_node
+      summary: graph_nudge_node
+      description: Add relative dx/dy to one node. Does not move edge waypoints (absolute); optional recompute_connected_labels for edge labels. Commit with graph_commit all=true.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                node:
+                  type: string
+                  description: target node id
+                dx:
+                  type: number
+                  description: delta x to add to node.x
+                dy:
+                  type: number
+                  description: delta y to add to node.y
+                recompute_connected_labels:
+                  type: boolean
+                  description: recompute labelX/Y on edges connected to this node (default false). Does not move absolute waypoints.
+              required:
+                - id
+                - node
+      responses:
+        "200":
+          description: MCP tools/call 成功返回（content 文本或结构化结果）
+  /graph_set_edge_heads:
+    post:
+      operationId: graph_set_edge_heads
+      summary: graph_set_edge_heads
+      description: Set headStart/headEnd (syncs coarse legacy arrow; open/cross preserved on arrow round-trip). Commit with graph_commit all=true.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: graph id
+                edge:
+                  type: string
+                  description: target edge id
+                headStart:
+                  type: string
+                  description: "start decoration: none|arrow|open|cross"
+                headEnd:
+                  type: string
+                  description: "end decoration: none|arrow|open|cross"
+              required:
+                - id
+                - edge
       responses:
         "200":
           description: MCP tools/call 成功返回（content 文本或结构化结果）
@@ -653,7 +774,7 @@ paths:
     post:
       operationId: graph_apply
       summary: graph_apply
-      description: "Batch-edit a graph then commit in one call (preferred Agent path). Applies ops[] to the draft, commits with all=true semantics when commit=true (default), optional export_to. Do not use graph_cursor_* or empty graph_stage for this workflow."
+      description: "Batch-edit then commit (preferred multi-edit path). ops[] use update|insert|delete fields including waypoints/heads. Model rewrite is last resort. Optional export_to after commit."
       requestBody:
         required: true
         content:

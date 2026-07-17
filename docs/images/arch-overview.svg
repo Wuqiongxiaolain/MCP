@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="583" height="820" viewBox="0 0 583 820">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+  <style>text{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;}.lbl{fill:#222;}.elabel{fill:#555;font-size:11px;}</style>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="162.946,80 159.726,120 156.505,160" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="156.505,220 148.5,260 140.495,300" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="140.495,360 232.163,400 323.831,440" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="140.495,360 137.247,470 134,580" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="323.831,500 228.916,540 134,580" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text class="elabel" text-anchor="middle">
+    <tspan x="181.458" y="549">table_bridge</tspan>
+    <tspan x="181.458" y="563">有损投影</tspan>
+  </text>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="323.831,500 402.291,540 480.75,580" marker-end="url(#arrow)"/>
+  <polyline fill="none" stroke="#333" stroke-width="1.5" stroke-linejoin="round" points="134,640 132.885,680 131.771,720" marker-end="url(#arrow)"/>
+  <rect x="112.946" y="20" width="100" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="162.946" y="47">用户</tspan>
+    <tspan x="162.946" y="63">自然语言</tspan>
+  </text>
+  <rect x="84.5052" y="160" width="144" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="156.505" y="187">AI 客户端</tspan>
+    <tspan x="156.505" y="203">Claude 等</tspan>
+  </text>
+  <rect x="86.2448" y="300" width="108.5" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="140.495" y="327">graphmcp</tspan>
+    <tspan x="140.495" y="343">MCP / CLI</tspan>
+  </text>
+  <rect x="230.831" y="440" width="186" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="323.831" y="467">Graph 一等模型</tspan>
+    <tspan x="323.831" y="483">解析→校验→布局→导出</tspan>
+  </text>
+  <rect x="20" y="580" width="228" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="134" y="607">Table 一等模型</tspan>
+    <tspan x="134" y="623">CSV/XML↔表→JSON</tspan>
+  </text>
+  <rect x="418" y="580" width="125.5" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="480.75" y="607">gs::Store</tspan>
+    <tspan x="480.75" y="623">Draft/Stage</tspan>
+  </text>
+  <rect x="52.0208" y="720" width="159.5" height="60" rx="4" fill="#eef4ff" stroke="#4a72b8"/>
+  <text class="lbl" text-anchor="middle">
+    <tspan x="131.771" y="747">gts::TableStore</tspan>
+    <tspan x="131.771" y="763">版本快照</tspan>
+  </text>
+</svg>

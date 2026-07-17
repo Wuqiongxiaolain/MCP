@@ -1,18 +1,19 @@
 # graphmcp 项目全景总结
 
-> latest update: v0.2.6-beta, 2026-07-16
+> latest update: v0.2.9-beta, 2026-07-17
 
 > 说明：本文包含大量”立项/阶段过程”信息（历史视角）。涉及当前能力的口径，请以 `src/main.cpp`、`src/mcp.hpp::toolList()` 与 `docs/api_reference/openapi.yaml` 为准。
 
 ## 当前状态快照（截至本次更新）
 
 - CLI 命令族 **15** 个（含 `table`、`dump-tools`、`import`）。
-- MCP 工具总数 **46**（图 + 表协作 + 规则/修复/派生链路）。
+- MCP 工具总数 **51**（图 + 表协作 + 规则/修复/派生链路；以 `toolList()` / OpenAPI 为准）。
 - Mermaid 已支持 **19 种子类型**深解析（含 sankey/kanban/gitGraph/journey 等）。
 - 通用表（CSV / 表 XML）与图↔表协同链路（rules/check/fix/derive/transform/sample/propose）已落地。
 - 颜色全链路：`fillColor`/`strokeColor` 一等字段 + `classDef`/`linkStyle` + 多格式往返。
 - Drawio 多图层（layers）/ 多页（pages）/ 形状扩展 / 边标签定位已合入。
-- 布局（v0.2.6）：分层布局含层平衡、barycenter 减交叉、waypoint 折线路由（尚不完善，复杂图观感仍待打磨）。
+- 布局（v0.2.6+）：分层布局含层平衡、barycenter 减交叉、waypoint 折线路由（复杂图观感仍待打磨）。
+- **MCP 几何编辑（v0.2.9）**：`graph_set_edge_route` / `graph_nudge_node` / `graph_set_edge_heads` / `graph_apply` 等原子改图优先；整图 model 导出改写可行但是下下策。
 - 性能：微基准套件（18 指标）+ CI 性能回归检测 + MCP 热路径优化（写放大削减/存储一致性）。
 - CI/CD：GitHub Actions（构建/测试/冒烟/bench/OpenAPI 校验）+ 本地 Jenkins DevOps（Docker/Ansible Runner/nginx 发布）。
 - OpenAPI 由 `dump-tools` / `make docs-api` 从 `toolList()` 自动生成并由 CI 校验漂移。
@@ -52,13 +53,14 @@
 | 导出 draw.io / Mermaid / Excalidraw / PNG / SVG / PDF / URL / model | ✅ | `exporters.hpp` 统一分发；PNG/PDF 走外部转换链，失败回退 SVG |
 | 图版本保存 / 草稿暂存提交 / 回溯 | ✅ | Draft→Stage→Commit；`checkout` 移 HEAD；`rollback` 另存新版本 |
 | 游标遍历与细粒度改图 | ✅ | `cursor_*` + `graph_update`/`insert`/`delete_element`/`graph_property` |
-| MCP 接口（创建 / 转换 / 打开 / 导出及扩展） | ✅ | **47** 个工具（`toolList()` / OpenAPI）；另有 CLI **15** 命令族 + `dump-tools` |
+| MCP 接口（创建 / 转换 / 打开 / 导出及扩展） | ✅ | **51** 个工具（`toolList()` / OpenAPI）；另有 CLI **15** 命令族 + `dump-tools` |
 | **通用表格 + 图↔表协作**（07-10 后扩展） | ✅ | `table_*` / `graph_from_table`：CSV 与表 XML、规则校验修复、派生与样例提案行 |
 | **Drawio 多图层/多页/形状扩展**（v0.2.3） | ✅ | `parseDrawio`/`toDrawio`：layers/pages/形状/边标签定位往返 |
 | **MCP 性能优化**（v0.2.4） | ✅ | 存储一致性/写放大削减/超时语义/跨平台性能回归验证 |
 | **Jenkins DevOps + Ansible 发布**（v0.2.4/5） | ✅ | Docker 镜像/Jenkins Pipeline/Ansible Runner/nginx 下载站 |
 | **性能基准与回归检测**（v0.2.2+） | ✅ | 微基准套件 18 指标 + CI 仅比对（不自动写回）+ workflow_dispatch 按需刷新 |
 | **分层布局增强**（v0.2.6） | ✅（尚不完善） | 层平衡、barycenter 交叉最小化、waypoint 折线路由、边标签按最长段定位；与节点坐标归一化同步（PR #78） |
+| **MCP 几何原子编辑**（v0.2.9） | ✅ | `graph_set_edge_route` / `clear_edge_route` / `nudge_node` / `set_edge_heads`；`graph_update`/`graph_apply` 支持 waypoints；整图 model 往返可行但是下下策 |
 | 可选：实时画布预览 | ❎ | 列为后续目标 |
 
 能力与目标的思维导图总览见 [MINDMAP.md](MINDMAP.md)。
@@ -93,7 +95,7 @@
 | 导出 | `exporters.hpp` | 多格式导出、栅格化回退、编辑器发现与调起 |
 | 图存储 / 版本 / 游标 | `storage.hpp`、`version_*.hpp`、`cursor_types.hpp` | 图库快照、Draft/Stage/Commit、游标持久化 |
 | 通用表 | `table_model.hpp`、`table_storage.hpp`、`table_bridge.hpp`、`table_xml.hpp`、`csv_util.hpp` | 表模型、版本存储、图↔表投影、表 XML |
-| MCP | `mcp.hpp`、`mcp_table_tools.hpp` | **47** 工具；OpenAPI 由 `dump-tools` 导出 |
+| MCP | `mcp.hpp`、`mcp_table_tools.hpp` | **51** 工具；OpenAPI 由 `dump-tools` 导出 |
 | CLI | `main.cpp` | **15** 命令族：`create`/`convert`/`export`/`edit`/`import`/`layout`/`validate`/`store`/`table`/`version`/`graph`/`cursor`/`draft`/`serve`/`dump-tools` |
 | 性能 | `tests/bench_main.cpp`、`tests/bench_baseline.json`、`scripts/bench_compare.py` | 微基准套件（18 指标）+ CI 基线比对 + 按需刷新 |
 | DevOps | `Jenkinsfile`、`ansible/`、`docker/` | 本地 Jenkins Pipeline + Docker 镜像 + Ansible Runner 发布 |
@@ -112,12 +114,9 @@
 
 ### 3.4 首日成果与后续演进
 
-在 07-05 单日内已打通：
+在 07-05 单日内已打通（图 id=`day1-pipeline`）：
 
-```
-文本/结构化输入 → 统一 Graph → 校验/布局 → 多格式导出
-               → 文件系统版本存储 → MCP/CLI 可调用
-```
+![首日成果主链](images/day1-pipeline.svg)
 
 这保证项目从第一天起即可编译、运行并被 AI 客户端调用。之后在同一主链上叠加：CLI 命令族与版本游标（07-08～07-10）、**表协作 + Mermaid 深解析 + 颜色链路 + macOS CD + OpenAPI**（07-11～07-14）、**drawio 多图层/多页 + MCP 性能重构 + Jenkins DevOps + Ansible Runner 发布**（07-15～07-16，见 §四）。
 
@@ -125,16 +124,9 @@
 
 ### 4.1 时间线与里程碑
 
-```
-2026-07-05          2026-07-07        2026-07-10           2026-07-11 ~ 07-14        2026-07-15 ~ 07-16
-    │                    │                 │                        │                        │
-    ▼                    ▼                 ▼                        ▼                        ▼
-┌──────────┐  ┌────────────────┐  ┌────────────────┐  ┌──────────────────────────┐  ┌──────────────────────┐
-│ Day 1    │  │ Day 2~4        │  │ Day 5~6        │  │ 扩展期 I                 │  │ 扩展期 II            │
-│ 核心引擎  │─▶│ CI/CD + CLI    │─▶│ 编辑器 + 文档   │─▶│ 表协作 / Mermaid /       │─▶│ drawio / MCP 性能    │
-│ 全部模块  │  │ 版本与白板     │  │ 初步收尾        │  │ macOS CD / 颜色 / OpenAPI│  │ Jenkins/Ansible 发布 │
-└──────────┘  └────────────────┘  └────────────────┘  └──────────────────────────┘  └──────────────────────┘
-```
+开发里程碑（图 id=`dev-milestones`；制图版本见 [`diagrams/doc-figures`](diagrams/doc-figures)）：
+
+![开发里程碑时间线](images/dev-milestones.svg)
 
 | 阶段 | 日期 | 关键产出 |
 |------|------|---------|
@@ -157,11 +149,11 @@
 | 指标 | 数值（约） |
 |------|------|
 | 总提交数 | 280+（含扩展期） |
-| 开发跨度 | 07-05 启动；07-10 初步收尾；07-16 扩展至 v0.2.6-beta（布局增强） |
+| 开发跨度 | 07-05 启动；07-10 初步收尾；07-16 布局增强（v0.2.6）；07-17 几何 MCP（v0.2.9） |
 | 核心模块 | 图核心 + 表协作模块（`table_*.hpp` / `mcp_table_tools.hpp` 等）+ 性能基准 + DevOps 工具链 |
-| MCP 工具 | 46（以 `toolList()` 为准） |
+| MCP 工具 | **51**（以 `toolList()` / OpenAPI 为准） |
 | CLI 命令族 | 15（含 `table` / `dump-tools` / `import`） |
-| 版本演进 | v0.1.0 → v0.2.0 → v0.2.2 → v0.2.3-beta → v0.2.4-beta → v0.2.5-beta → v0.2.6-beta |
+| 版本演进 | v0.1.0 → v0.2.0 → v0.2.2 → v0.2.3-beta → v0.2.4-beta → v0.2.5-beta → v0.2.6-beta → v0.2.8-beta → **v0.2.9-beta** |
 
 ### 4.3 07-10 以来的需求落地（已解决）
 
@@ -180,6 +172,7 @@
 | **Jenkins DevOps** | v0.2.4-beta | Docker 镜像（Jenkins/Ansible）+ Jenkins Pipeline + 本地 Bench |
 | **Ansible Runner 发布** | v0.2.5-beta | ansible-runner 容器替代 Semaphore；Jenkins → Ansible → nginx 下载站全自动 |
 | **分层布局增强** | v0.2.6-beta | 层平衡 + barycenter 减交叉 + waypoint 折线路由与边标签定位（尚不完善，复杂图仍待打磨） |
+| **MCP 几何原子编辑** | v0.2.9-beta | 折点/微移/箭头专用工具 + `graph_apply`；整图 model 覆盖可行但是下下策，优先原子改 |
 
 ---
 
@@ -187,24 +180,9 @@
 
 ### 5.1 分支策略
 
-```
-main ────────────────────────────────────────────────────────▶ (主线)
-  │
-  ├── feature/github-actions-cicd    → PR #10, #11       (CI/CD 迁移)
-  ├── feature/excalidraw-export-...  → PR #16            (白板导出)
-  ├── CLI                            → PR #13            (CLI 重构+版本+游标)
-  ├── ah_feng-editor-v2              → PR #25            (编辑器闭环)
-  ├── feature/mcp-three-layer-tests  → PR #26            (MCP 测试)
-  ├── docs/*                         → PR #41, #73~75    (文档分层与同步)
-  ├── feature/ah-feng-log-local      → PR #71            (颜色/BOM/[*])
-  ├── feat/benchmark-ci              → PR #72            (性能基准 CI)
-  ├── chore/ci-baseline-policy       → PR #76            (CI 策略重构)
-  ├── fix/drawio-compatibility       → PR #80            (drawio 多图层/多页)
-  ├── perf/improve-mcp-overall       → PR #79            (MCP 性能重构)
-  ├── feat/local-jenkins-devops      → PR #84            (Jenkins DevOps)
-  ├── feat/replace-semaphore-...     → PR #85            (Ansible Runner)
-  └── feature/layout-crossing-...    → PR #78            (分层布局增强)
-```
+分支策略示意（图 id=`branch-strategy`；代表性 PR，非完整列表）：
+
+![分支策略](images/branch-strategy.svg)
 
 ### 5.2 PR 工作流
 

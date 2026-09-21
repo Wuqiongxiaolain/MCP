@@ -15,6 +15,7 @@ ci-smoke.*
 .vscode/
 .idea/
 .cursor/
+.VSCodeCounter/
 
 # 课程小作业草稿，不纳入版本控制
 docs/MiniTasks/
@@ -44,6 +45,7 @@ docs/images/test-report-summary.svg
 # 本地专属，不纳入版本控制
 .mcp.json
 traffic-light-mindmap.svg
+/generated.png
 
 # 临时测试产物（SVG/DrawIO/Mermaid 导出测试）
 *.test.svg

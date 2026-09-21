@@ -1,0 +1,111 @@
+<mxfile host="graphmcp" agent="graphmcp/1.0" type="device">
+  <diagram name="项目开发演进图（S形·按Commits）" id="dev-evolution-s">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="p1" value="P1 核心引擎&lt;br&gt;07-05&lt;br&gt;JSON/解析/导出/MCP" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef4ff;strokeColor=#4a72b8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="160" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2" value="P2 加固中文化&lt;br&gt;07-06&lt;br&gt;注释翻译/gitignore" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef4ff;strokeColor=#4a72b8;" vertex="1" parent="1">
+          <mxGeometry x="240" y="40" width="160" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p3" value="P3 CI/CD工程化&lt;br&gt;07-07&lt;br&gt;GHA/制品/格式化" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef4ff;strokeColor=#4a72b8;" vertex="1" parent="1">
+          <mxGeometry x="440" y="40" width="160" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p4" value="P4 Excalidraw白板&lt;br&gt;07-08&lt;br&gt;精确SVG/字体/files" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eef4ff;strokeColor=#4a72b8;" vertex="1" parent="1">
+          <mxGeometry x="640" y="40" width="160" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p5" value="P5 架构重构&lt;br&gt;07-09&lt;br&gt;CLI/版本/游标" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f4fc;strokeColor=#2f6f9f;" vertex="1" parent="1">
+          <mxGeometry x="840" y="40" width="160" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p6" value="P6 编辑器闭环&lt;br&gt;07-09~10&lt;br&gt;drawio回导/文档分层" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f4fc;strokeColor=#2f6f9f;" vertex="1" parent="1">
+          <mxGeometry x="840" y="180" width="160" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p7" value="P7 macOS CD&lt;br&gt;07-11&lt;br&gt;三平台矩阵恢复" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f4fc;strokeColor=#2f6f9f;" vertex="1" parent="1">
+          <mxGeometry x="640" y="180" width="160" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p8" value="P8 OpenAPI契约&lt;br&gt;07-13&lt;br&gt;dump-tools/漂移校验" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f4fc;strokeColor=#2f6f9f;" vertex="1" parent="1">
+          <mxGeometry x="440" y="180" width="160" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p9" value="P9 通用表协作&lt;br&gt;07-13~14&lt;br&gt;Table/桥接/协同" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0f7e8;strokeColor=#5a8f3a;" vertex="1" parent="1">
+          <mxGeometry x="240" y="180" width="160" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p10" value="P10 Mermaid+颜色&lt;br&gt;07-11~14&lt;br&gt;19类型深解析" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0f7e8;strokeColor=#5a8f3a;" vertex="1" parent="1">
+          <mxGeometry x="40" y="180" width="160" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p11" value="P11 性能+DevOps&lt;br&gt;07-14~15&lt;br&gt;MCP四维/Jenkins" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0f7e8;strokeColor=#5a8f3a;" vertex="1" parent="1">
+          <mxGeometry x="40" y="320" width="160" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p12" value="P12 发布链收口&lt;br&gt;07-16&lt;br&gt;Ansible Runner" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0f7e8;strokeColor=#5a8f3a;" vertex="1" parent="1">
+          <mxGeometry x="240" y="320" width="160" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p13" value="P13 分层布局增强&lt;br&gt;07-15~16&lt;br&gt;waypoint/减交叉" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff8e8;strokeColor=#b8860b;" vertex="1" parent="1">
+          <mxGeometry x="440" y="320" width="160" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p14" value="P14 几何MCP+表互通&lt;br&gt;07-17&lt;br&gt;原子编辑/SpreadsheetML" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff8e8;strokeColor=#b8860b;" vertex="1" parent="1">
+          <mxGeometry x="640" y="320" width="160" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p15" value="P15 质量门与验收&lt;br&gt;07-17~18&lt;br&gt;DoD/GO-NO-GO/Artifact" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f7ec;strokeColor=#2d8a4e;" vertex="1" parent="1">
+          <mxGeometry x="840" y="320" width="160" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a6a7a;" edge="1" parent="1" source="p1" target="p2">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a6a7a;" edge="1" parent="1" source="p2" target="p3">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a6a7a;" edge="1" parent="1" source="p3" target="p4">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a6a7a;" edge="1" parent="1" source="p4" target="p5">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a6a7a;" edge="1" parent="1" source="p5" target="p6">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a6a7a;" edge="1" parent="1" source="p6" target="p7">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge7" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a6a7a;" edge="1" parent="1" source="p7" target="p8">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a6a7a;" edge="1" parent="1" source="p8" target="p9">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge9" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a6a7a;" edge="1" parent="1" source="p9" target="p10">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a6a7a;" edge="1" parent="1" source="p10" target="p11">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge11" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a6a7a;" edge="1" parent="1" source="p11" target="p12">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a6a7a;" edge="1" parent="1" source="p12" target="p13">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge13" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a6a7a;" edge="1" parent="1" source="p13" target="p14">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge14" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2d8a4e;" edge="1" parent="1" source="p14" target="p15">
+          <mxGeometry relative="1" as="geometry">
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

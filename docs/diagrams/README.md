@@ -5,6 +5,7 @@
 | 子目录 / 图 | 用途 | 导出 SVG |
 |-------------|------|----------|
 | `timeline-s/` | 项目版本演进（S 形） | `images/version-evolution-s.svg` |
+| `dev-evolution-s/` | 项目开发演进（S 形·按 Commits 阶段） | `images/dev-evolution-s.svg` |
 | `doc-figures/` | 架构 / 管道 / 里程碑等文档图 | 见下方 id |
 
 ## doc-figures 图 id

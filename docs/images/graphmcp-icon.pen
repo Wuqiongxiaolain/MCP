@@ -1,0 +1,22 @@
+{
+  "version": "2.6",
+  "children": [
+    {
+      "type": "frame",
+      "id": "graphmcpIcon",
+      "x": 0,
+      "y": 0,
+      "name": "graphmcp Icon",
+      "clip": true,
+      "width": 512,
+      "height": 512,
+      "cornerRadius": 110,
+      "fill": {
+        "type": "image",
+        "enabled": true,
+        "url": "./graphmcp-icon.png",
+        "mode": "fill"
+      }
+    }
+  ]
+}

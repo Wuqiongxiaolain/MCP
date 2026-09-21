@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/graphmcp-icon.png" width="128" alt="graphmcp">
+</p>
+
 # graphmcp — 图形设计与绘图 MCP 工具
 
 > latest update: v0.2.9-beta, 2026-07-17
